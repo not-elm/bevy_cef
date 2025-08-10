@@ -43,8 +43,8 @@ bevy = { version = "0.16", default-features = false, features = [
 bevy_remote = "0.16"
 cef = { version = "139" }
 cef-dll-sys = { version = "139.0", features = ["sandbox"] }
-bevy_cef = { path = "." }
-bevy_cef_core = { path = "crates/bevy_cef_core" }
+bevy_cef = { path = "." , version = "0.1"}
+bevy_cef_core = { path = "crates/bevy_cef_core", version = "0.1" }
 async-channel = { version = "2.5" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1" }
