@@ -1,10 +1,12 @@
 mod browser_process;
+#[cfg(target_os = "macos")]
 mod debug;
 mod render_process;
 mod util;
 
 pub mod prelude {
     pub use crate::browser_process::*;
+    #[cfg(target_os = "macos")]
     pub use crate::debug::*;
     pub use crate::render_process::app::*;
     pub use crate::render_process::brp::*;

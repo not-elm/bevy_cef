@@ -2,7 +2,7 @@ use crate::RunOnMainThread;
 use bevy::prelude::*;
 use bevy_cef_core::prelude::*;
 use cef::args::Args;
-use cef::{Settings, api_hash, do_message_loop_work, execute_process, initialize, shutdown, sys};
+use cef::{Settings, api_hash, execute_process, initialize, shutdown, sys};
 
 /// Controls the CEF message loop.
 ///
@@ -28,6 +28,7 @@ impl Plugin for MessageLoopPlugin {
 
 impl Default for MessageLoopPlugin {
     fn default() -> Self {
+        #[cfg(target_os = "macos")]
         let _loader = {
             macos::install_cef_app_protocol();
             #[cfg(all(target_os = "macos", feature = "debug"))]
@@ -84,8 +85,9 @@ impl Default for MessageLoopPlugin {
     }
 }
 
+#[cfg(target_os = "macos")]
 fn cef_do_message_loop_work(_: NonSend<RunOnMainThread>) {
-    do_message_loop_work();
+    cef::do_message_loop_work();
 }
 
 fn cef_shutdown(_: NonSend<RunOnMainThread>) {
