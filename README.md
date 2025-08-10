@@ -43,6 +43,14 @@ When enabled, it installs a debug renderer process and the CEF framework locally
 > Use this feature only during development; for releases, bundle the renderer process and the CEF framework inside the
 > app.
 
+### Manual Installation(macOS)
+
+```shell
+> cargo install export-cef-dir
+> export-cef-dir --force $HOME/.local/share/cef
+> cargo install bevy_cef_debug_render_process
+```
+
 ## Examples
 
 See [`examples/`](./examples).
