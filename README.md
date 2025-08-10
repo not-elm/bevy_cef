@@ -55,6 +55,11 @@ When enabled, it installs a debug renderer process and the CEF framework locally
 
 See [`examples/`](./examples).
 
+On macOS, you need to enable `debug` feature enabled:
+```shell
+cargo run --example simple --features debug
+```
+
 ## 🌍 Platform Support
 
 | Platform | Status     | Notes                             |

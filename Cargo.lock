@@ -552,7 +552,6 @@ version = "0.1.0"
 dependencies = [
  "async-channel",
  "bevy",
- "bevy_cef",
  "bevy_cef_core",
  "bevy_remote",
  "cef",
