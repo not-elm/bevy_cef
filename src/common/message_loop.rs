@@ -28,6 +28,7 @@ impl Plugin for MessageLoopPlugin {
 
 impl Default for MessageLoopPlugin {
     fn default() -> Self {
+        #[cfg(target_os = "macos")]
         let _loader = {
             macos::install_cef_app_protocol();
             #[cfg(all(target_os = "macos", feature = "debug"))]
