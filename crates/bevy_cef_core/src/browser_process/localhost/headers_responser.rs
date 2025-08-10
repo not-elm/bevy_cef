@@ -42,14 +42,14 @@ fn content_range_header_value(
     Some(format!(
         "bytes {}-{}/{}",
         start,
-        end.unwrap_or(data.len() - 1),
+        end.unwrap_or(data.len()),
         data.len()
     ))
 }
 
 fn obtain_response_length(data: &[u8], range: &Option<(usize, Option<usize>)>) -> usize {
     match range {
-        Some((start, end)) => end.unwrap_or(data.len() - 1) - start + 1,
+        Some((start, end)) => end.unwrap_or(data.len()) - start,
         None => data.len(),
     }
 }
@@ -147,77 +147,77 @@ mod tests {
     fn test_content_range_header_value_range_with_end() {
         let data = b"Hello, World!";
         let result = content_range_header_value(data, &Some((0, Some(5))));
-        assert_eq!(result, Some("bytes 0-4/13".to_string()));
+        assert_eq!(result, Some("bytes 0-5/13".to_string()));
     }
 
     #[test]
     fn test_content_range_header_value_range_without_end() {
         let data = b"Hello, World!";
         let result = content_range_header_value(data, &Some((7, None)));
-        assert_eq!(result, Some("bytes 7-12/13".to_string()));
+        assert_eq!(result, Some("bytes 7-13/13".to_string()));
     }
 
     #[test]
     fn test_content_range_header_value_range_from_start() {
         let data = b"Hello, World!";
         let result = content_range_header_value(data, &Some((0, None)));
-        assert_eq!(result, Some("bytes 0-12/13".to_string()));
+        assert_eq!(result, Some("bytes 0-13/13".to_string()));
     }
 
     #[test]
     fn test_content_range_header_value_range_partial() {
         let data = b"Hello, World!";
         let result = content_range_header_value(data, &Some((7, Some(12))));
-        assert_eq!(result, Some("bytes 7-11/13".to_string()));
+        assert_eq!(result, Some("bytes 7-12/13".to_string()));
     }
 
     #[test]
     fn test_content_range_header_value_range_single_byte() {
         let data = b"Hello, World!";
         let result = content_range_header_value(data, &Some((5, Some(6))));
-        assert_eq!(result, Some("bytes 5-5/13".to_string()));
+        assert_eq!(result, Some("bytes 5-6/13".to_string()));
     }
 
     #[test]
     fn test_content_range_header_value_range_last_byte() {
         let data = b"Hello, World!";
         let result = content_range_header_value(data, &Some((12, Some(13))));
-        assert_eq!(result, Some("bytes 12-12/13".to_string()));
+        assert_eq!(result, Some("bytes 12-13/13".to_string()));
     }
 
     #[test]
     fn test_content_range_header_value_single_byte_data() {
         let data = b"a";
         let result = content_range_header_value(data, &Some((0, None)));
-        assert_eq!(result, Some("bytes 0-0/1".to_string()));
+        assert_eq!(result, Some("bytes 0-1/1".to_string()));
     }
 
     #[test]
     fn test_content_range_header_value_large_data() {
         let data = vec![0u8; 1024];
         let result = content_range_header_value(&data, &Some((100, Some(200))));
-        assert_eq!(result, Some("bytes 100-199/1024".to_string()));
+        assert_eq!(result, Some("bytes 100-200/1024".to_string()));
     }
 
     #[test]
     fn test_content_range_header_value_large_data_no_end() {
         let data = vec![0u8; 1024];
         let result = content_range_header_value(&data, &Some((500, None)));
-        assert_eq!(result, Some("bytes 500-1023/1024".to_string()));
+        assert_eq!(result, Some("bytes 500-1024/1024".to_string()));
     }
 
     #[test]
     fn test_content_range_header_value_zero_start() {
         let data = b"test";
         let result = content_range_header_value(data, &Some((0, Some(2))));
-        assert_eq!(result, Some("bytes 0-1/4".to_string()));
+        assert_eq!(result, Some("bytes 0-2/4".to_string()));
     }
 
     #[test]
     fn test_content_range_header_value_range_end_equals_data_len() {
         let data = b"Hello, World!";
         let result = content_range_header_value(data, &Some((0, Some(13))));
-        assert_eq!(result, Some("bytes 0-12/13".to_string()));
+        assert_eq!(result, Some("bytes 0-13/13".to_string()));
     }
 
     #[test]
