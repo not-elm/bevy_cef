@@ -146,20 +146,6 @@ impl ImplRenderHandler for RenderHandlerBuilder {
         let _ = self.texture_sender.send_blocking(texture);
     }
 
-    /// MEMO: This method only supports on Windows
-    ///
-    /// In Windows, this method is more performant than `on_paint`?
-    #[cfg(target_os = "windows")]
-    fn on_accelerated_paint(
-        &self,
-        _browser: Option<&mut Browser>,
-        _type_: PaintElementType,
-        _dirty_rects_count: usize,
-        _dirty_rects: Option<&Rect>,
-        _: Option<&AcceleratedPaintInfo>,
-    ) {
-    }
-
     #[inline]
     fn get_raw(&self) -> *mut sys::_cef_render_handler_t {
         self.object.cast()

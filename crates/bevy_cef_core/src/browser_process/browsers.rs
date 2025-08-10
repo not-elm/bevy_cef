@@ -70,7 +70,7 @@ impl Browsers {
             Some(&WindowInfo {
                 windowless_rendering_enabled: true as _,
                 external_begin_frame_enabled: true as _,
-                #[cfg(not(target_os = "linux"))]
+                #[cfg(target_os = "macos")]
                 parent_view: match _window_handle {
                     Some(RawWindowHandle::AppKit(handle)) => handle.ns_view.as_ptr(),
                     Some(RawWindowHandle::Win32(handle)) => handle.hwnd.get() as _,
