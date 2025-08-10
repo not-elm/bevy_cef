@@ -8,6 +8,10 @@ and bidirectional communication between JavaScript and Bevy.
 [![Documentation](https://docs.rs/bevy_cef/badge.svg)](https://docs.rs/bevy_cef)
 [![License](https://img.shields.io/badge/license-Apache%202.0%20OR%20MIT-blue.svg)](https://github.com/not-elm/bevy_cef#license)
 
+
+https://github.com/user-attachments/assets/54f476d0-8eda-4030-a3f6-dc4f2f54209f
+
+
 ## ✨ Features
 
 - **🌐 Full Web Browser Integration** - Embed complete web pages with CSS, JavaScript, and modern web APIs
