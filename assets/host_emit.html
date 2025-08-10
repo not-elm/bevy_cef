@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Host Emit</title>
+</head>
+<body style="color: white">
+<h1>HTML Path: assets/host_emit.html</h1>
+<p>
+    This example demonstrates how to receive events from the application.
+</p>
+<p>
+    The application emits a count value every second, which is then displayed in the HTML.
+</p>
+<h1 id="count" style="color: aqua">0</h1>
+<script>
+    const count = document.getElementById("count");
+    window.cef.listen("count", (payload) => {
+        count.innerText = payload;
+    })
+</script>
+</body>
+</html>

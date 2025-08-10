@@ -1,0 +1,14 @@
+[package]
+name = "demo"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+bevy = { workspace = true, features = ["file_watcher"]}
+bevy_remote = { workspace = true }
+bevy_cef = { workspace = true, features = ["debug"] }
+

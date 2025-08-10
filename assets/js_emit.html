@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>JS Emit</title>
+</head>
+<body style=" color: white">
+<h1>HTML Path: assets/js_emit.html</h1>
+
+<p>The example sends events from JavaScript to the application.</p>
+<p>
+    It emits a count value every second, which is then sent to the application and logged in the console.
+</p>
+<h1 id="count" style="color: aqua">0</h1>
+<script>
+    const countElement = document.getElementById("count");
+    let count = 0;
+    window.setInterval(() => {
+        console.log("Emitting count:", count);
+        window.cef.emit({
+            count,
+        });
+        countElement.innerText = count;
+        count += 1;
+    }, 1000)
+</script>
+</body>
+</html>

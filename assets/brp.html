@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+</head>
+<body style="color: white">
+    <h1>HTML Path: assets/brp.html</h1>
+    <p></p>
+    <input id="name" type="text" placeholder="Enter your name" />
+    <button id="greet" >Greet</button>
+    <p id="reply"></p>
+<script>
+    const nameInput = document.getElementById("name");
+    const greetButton = document.getElementById("greet");
+    const reply = document.getElementById("reply");
+
+    greetButton.addEventListener("click", async () => {
+        const name = nameInput.value;
+        if (name) {
+            try{
+                reply.innerText = await window.cef.brp({
+                    jsonrpc: "2.0",
+                    method: "greet",
+                    params: name,
+                });
+            }catch (e){
+                console.error("Error calling greet method:", e);
+                reply.innerText = "Error: " + e.message;
+            }
+        }
+    });
+</script>
+</body>
+</html>
