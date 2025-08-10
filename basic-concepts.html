@@ -1,0 +1,469 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Basic Concepts - bevy_cef</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">bevy_cef</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="basic-concepts"><a class="header" href="#basic-concepts">Basic Concepts</a></h1>
+<p>Understanding these fundamental concepts will help you make the most of bevy_cef in your projects.</p>
+<h2 id="multi-process-architecture"><a class="header" href="#multi-process-architecture">Multi-Process Architecture</a></h2>
+<p>bevy_cef follows a multi-process architecture similar to modern web browsers:</p>
+<h3 id="browser-process"><a class="header" href="#browser-process">Browser Process</a></h3>
+<ul>
+<li><strong>Main Application</strong>: Your Bevy game/app runs here</li>
+<li><strong>CEF Management</strong>: Handles browser creation and management</li>
+<li><strong>IPC Coordination</strong>: Manages communication with render processes</li>
+</ul>
+<h3 id="render-process"><a class="header" href="#render-process">Render Process</a></h3>
+<ul>
+<li><strong>Web Content</strong>: Each webview runs in a separate process</li>
+<li><strong>Isolation</strong>: Crashes in web content don't affect your main application</li>
+<li><strong>Sandboxing</strong>: Enhanced security through process separation</li>
+</ul>
+<h3 id="benefits"><a class="header" href="#benefits">Benefits</a></h3>
+<ul>
+<li><strong>Stability</strong>: Web content crashes won't crash your game</li>
+<li><strong>Performance</strong>: CPU-intensive web content won't block your game loop</li>
+<li><strong>Security</strong>: Sandboxed execution of untrusted web content</li>
+</ul>
+<h2 id="core-components"><a class="header" href="#core-components">Core Components</a></h2>
+<p>bevy_cef provides several key components that work together:</p>
+<h3 id="cefwebviewuri"><a class="header" href="#cefwebviewuri">CefWebviewUri</a></h3>
+<p>The primary component that defines what web content to display:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Remote web page
+CefWebviewUri::new("https://example.com")
+
+// Local HTML file from assets/
+CefWebviewUri::local("ui/menu.html")
+
+// Equivalent to above
+CefWebviewUri::new("cef://localhost/ui/menu.html")
+<span class="boring">}</span></code></pre></pre>
+<h3 id="webviewsize"><a class="header" href="#webviewsize">WebviewSize</a></h3>
+<p>Controls the rendering resolution of the webview (not the 3D object size):</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>WebviewSize(Vec2::new(1920.0, 1080.0))  // High resolution
+WebviewSize(Vec2::new(800.0, 600.0))    // Standard resolution
+WebviewSize::default()                   // 800x800 pixels
+<span class="boring">}</span></code></pre></pre>
+<h3 id="material-integration"><a class="header" href="#material-integration">Material Integration</a></h3>
+<p>Webviews integrate with Bevy's material system:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Standard material with webview texture
+WebviewExtendStandardMaterial::default()
+
+// Custom material properties
+WebviewExtendStandardMaterial {
+    base: StandardMaterial {
+        unlit: true,
+        emissive: Color::WHITE.into(),
+        ..default()
+    },
+    ..default()
+}
+<span class="boring">}</span></code></pre></pre>
+<h2 id="component-requirements"><a class="header" href="#component-requirements">Component Requirements</a></h2>
+<p>When you add a <code>CefWebviewUri</code> component, bevy_cef automatically requires several other components:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[require(WebviewSize, ZoomLevel, AudioMuted)]
+pub struct CefWebviewUri(pub String);
+<span class="boring">}</span></code></pre></pre>
+<p>This means every webview entity automatically gets:</p>
+<ul>
+<li><strong>WebviewSize</strong>: Default 800x800 resolution</li>
+<li><strong>ZoomLevel</strong>: Default zoom (0.0 = browser default)</li>
+<li><strong>AudioMuted</strong>: Default unmuted (false)</li>
+</ul>
+<h2 id="rendering-modes"><a class="header" href="#rendering-modes">Rendering Modes</a></h2>
+<p>bevy_cef supports different rendering approaches:</p>
+<h3 id="3d-mesh-rendering"><a class="header" href="#3d-mesh-rendering">3D Mesh Rendering</a></h3>
+<p>Render web content on 3D objects in your world:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>commands.spawn((
+    CefWebviewUri::local("interface.html"),
+    Mesh3d(meshes.add(Plane3d::new(Vec3::Z, Vec2::ONE))),
+    MeshMaterial3d(materials.add(WebviewExtendStandardMaterial::default())),
+));
+<span class="boring">}</span></code></pre></pre>
+<h3 id="2d-sprite-rendering"><a class="header" href="#2d-sprite-rendering">2D Sprite Rendering</a></h3>
+<p>Render web content as UI overlays:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>commands.spawn((
+    CefWebviewUri::local("hud.html"),
+    Sprite::default(),
+    WebviewSpriteMaterial::default(),
+));
+<span class="boring">}</span></code></pre></pre>
+<h2 id="local-asset-serving"><a class="header" href="#local-asset-serving">Local Asset Serving</a></h2>
+<p>bevy_cef includes a built-in web server that serves files from your <code>assets/</code> directory:</p>
+<h3 id="custom-scheme"><a class="header" href="#custom-scheme">Custom Scheme</a></h3>
+<ul>
+<li><strong>Scheme</strong>: <code>cef://localhost/</code></li>
+<li><strong>Path Mapping</strong>: <code>assets/</code> directory maps to the root</li>
+<li><strong>Example</strong>: <code>assets/ui/menu.html</code> → <code>cef://localhost/ui/menu.html</code></li>
+</ul>
+<h3 id="supported-file-types"><a class="header" href="#supported-file-types">Supported File Types</a></h3>
+<ul>
+<li>HTML, CSS, JavaScript</li>
+<li>Images (PNG, JPG, SVG, etc.)</li>
+<li>Fonts (WOFF, TTF, etc.)</li>
+<li>JSON, XML, and other data files</li>
+</ul>
+<h3 id="asset-organization"><a class="header" href="#asset-organization">Asset Organization</a></h3>
+<pre><code>assets/
+├── ui/
+│   ├── menu.html
+│   ├── styles.css
+│   └── script.js
+├── images/
+│   └── logo.png
+└── data/
+    └── config.json
+</code></pre>
+<h2 id="inter-process-communication-ipc"><a class="header" href="#inter-process-communication-ipc">Inter-Process Communication (IPC)</a></h2>
+<p>bevy_cef provides three communication patterns:</p>
+<h3 id="1-javascript-to-bevy-js-emit"><a class="header" href="#1-javascript-to-bevy-js-emit">1. JavaScript to Bevy (JS Emit)</a></h3>
+<p>Send events from web content to Bevy systems:</p>
+<pre><code class="language-javascript">// In your HTML/JavaScript
+window.cef.emit('player_action', { action: 'jump', power: 10 });
+</code></pre>
+<pre><pre class="playground"><code class="language-rust">fn main(){
+    App::new()
+        .add_plugins(JsEmitEventPlugin::&lt;PlayerAction&gt;::default())
+    // ...
+}
+
+// In your Bevy system
+#[derive(Event, Deserialize)]
+struct PlayerAction {
+    action: String,
+    power: i32,
+}
+
+fn handle_player_action(trigger: Trigger&lt;PlayerAction&gt;) {
+    let action = trigger.event();
+    info!("Player action: {} with power {}", action.action, action.power);
+}</code></pre></pre>
+<h3 id="2-bevy-to-javascript-host-emit"><a class="header" href="#2-bevy-to-javascript-host-emit">2. Bevy to JavaScript (Host Emit)</a></h3>
+<p>Send events from Bevy to web content:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// In your Bevy system
+commands.entity(webview_entity).trigger(HostEmitEvent {
+    event_name: "score_update".to_string(),
+    data: json!({ "score": 1000, "level": 3 }),
+});
+<span class="boring">}</span></code></pre></pre>
+<pre><code class="language-javascript">// In your HTML/JavaScript
+window.cef.listen('score_update', (data) =&gt; {
+    document.getElementById('score').textContent = data.score;
+    document.getElementById('level').textContent = data.level;
+});
+</code></pre>
+<h3 id="3-bevy-remote-protocol-brp"><a class="header" href="#3-bevy-remote-protocol-brp">3. Bevy Remote Protocol (BRP)</a></h3>
+<p>Please see <a href="https://gist.github.com/coreh/1baf6f255d7e86e4be29874d00137d1d">here</a> for about the Bevy Remote Protocol (BRP).</p>
+<p>Bidirectional RPC calls for complex interactions:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Register BRP method in Bevy
+app.add_plugins(RemotePlugin::default().with_method("get_player_stats", get_stats));
+<span class="boring">}</span></code></pre></pre>
+<pre><code class="language-javascript">// Call from JavaScript
+const stats = await window.cef.brp({ 
+    method: 'get_player_stats',
+    params: { playerId: 42 }
+});
+</code></pre>
+<h2 id="user-interaction"><a class="header" href="#user-interaction">User Interaction</a></h2>
+<h3 id="input-handling"><a class="header" href="#input-handling">Input Handling</a></h3>
+<p>Webviews automatically receive keyboard and mouse input when focused:</p>
+<ul>
+<li><strong>Keyboard</strong>: All keyboard events are forwarded</li>
+<li><strong>Mouse</strong>: Click, scroll, and hover events work naturally</li>
+<li><strong>Focus</strong>: Multiple webviews can coexist; input goes to the focused one</li>
+</ul>
+<h3 id="navigation"><a class="header" href="#navigation">Navigation</a></h3>
+<p>Control web navigation programmatically:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>commands.entity(webview).trigger(RequestGoBack);
+commands.entity(webview).trigger(ReqeustGoForward);
+<span class="boring">}</span></code></pre></pre>
+<h3 id="zoom-control"><a class="header" href="#zoom-control">Zoom Control</a></h3>
+<p>Manage zoom levels per webview:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Set zoom level (0.0 = default, positive = zoom in, negative = zoom out)
+commands.entity(webview).insert(ZoomLevel(1.2));
+
+// Reset to default zoom
+commands.entity(webview).insert(ZoomLevel(0.0));
+<span class="boring">}</span></code></pre></pre>
+<h2 id="developer-experience"><a class="header" href="#developer-experience">Developer Experience</a></h2>
+<h3 id="developer-tools"><a class="header" href="#developer-tools">Developer Tools</a></h3>
+<p>Access Chrome DevTools for debugging:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Show developer tools for a webview
+commands.entity(webview).trigger(RequestShowDevTool);
+
+// Close developer tools
+commands.entity(webview).trigger(RequestCloseDevtool);
+<span class="boring">}</span></code></pre></pre>
+<h3 id="hot-reload"><a class="header" href="#hot-reload">Hot Reload</a></h3>
+<p>Local assets automatically reload when changed during development.</p>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<h3 id="component-organization"><a class="header" href="#component-organization">Component Organization</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Good: Group related components
+commands.spawn((
+    // The uri convert to `cef://localhost/index.html`
+    CefWebviewUri::local("index.html"),
+    WebviewSize(Vec2::new(1920.0, 200.0)),
+    ZoomLevel(0.8),
+    AudioMuted(true),
+    Transform::from_translation(Vec3::new(0.0, 5.0, 0.0)),
+    Mesh3d(meshes.add(Quad::new(Vec2::new(4.0, 1.0)))),
+    MeshMaterial3d(materials.add(WebviewExtendStandardMaterial::default())),
+));
+<span class="boring">}</span></code></pre></pre>
+<h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
+<p>Now that you understand the basic concepts:</p>
+<ul>
+<li>Explore <a href="core-components.html">Core Components</a> in detail</li>
+<li>Learn about <a href="webview-rendering.html">Webview Rendering</a> techniques</li>
+<li>Dive into <a href="ipc.html">Inter-Process Communication</a> patterns</li>
+<li>Check out practical <a href="examples/simple.html">Examples</a></li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="quick-start.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="core-components.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="quick-start.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="core-components.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>

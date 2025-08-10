@@ -1,0 +1,1202 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>bevy_cef</title>
+        <meta name="robots" content="noindex">
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">bevy_cef</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="introduction-to-bevy_cef"><a class="header" href="#introduction-to-bevy_cef">Introduction to bevy_cef</a></h1>
+<p><strong>bevy_cef</strong> is a powerful Bevy plugin that integrates the Chromium Embedded Framework (CEF) into Bevy applications, enabling you to render web content as 3D objects in your game world or as UI overlays.</p>
+<h2 id="what-is-bevy_cef"><a class="header" href="#what-is-bevy_cef">What is bevy_cef?</a></h2>
+<p>bevy_cef bridges the gap between modern web technologies and Bevy's 3D engine by:</p>
+<ul>
+<li><strong>Embedding webviews</strong> as textures on 3D meshes or 2D sprites</li>
+<li><strong>Supporting bidirectional communication</strong> between JavaScript and Bevy systems</li>
+<li><strong>Providing a multi-process architecture</strong> for stability and performance</li>
+<li><strong>Offering local asset serving</strong> through a custom URL scheme</li>
+<li><strong>Enabling developer tools integration</strong> for debugging web content</li>
+</ul>
+<h2 id="key-features"><a class="header" href="#key-features">Key Features</a></h2>
+<h3 id="-web-content-rendering"><a class="header" href="#-web-content-rendering">🌐 Web Content Rendering</a></h3>
+<ul>
+<li>Render any web page as a texture on 3D objects</li>
+<li>Support for HTML5, CSS3, and modern JavaScript</li>
+<li>Local file serving via the <code>cef://localhost/</code> scheme</li>
+<li>Remote web page loading with full browser compatibility</li>
+</ul>
+<h3 id="-inter-process-communication-ipc"><a class="header" href="#-inter-process-communication-ipc">🔄 Inter-Process Communication (IPC)</a></h3>
+<ul>
+<li><strong>JS Emit</strong>: Send events from JavaScript to Bevy systems</li>
+<li><strong>Host Emit</strong>: Send events from Bevy to JavaScript</li>
+<li><strong>Bevy Remote Protocol (BRP)</strong>: Bidirectional RPC communication</li>
+</ul>
+<h3 id="-interactive-controls"><a class="header" href="#-interactive-controls">🎮 Interactive Controls</a></h3>
+<ul>
+<li>Keyboard input forwarding to webviews</li>
+<li>Mouse interaction support</li>
+<li>Navigation controls (back, forward, refresh)</li>
+<li>Zoom level management</li>
+<li>Audio muting capabilities</li>
+</ul>
+<h3 id="-developer-experience"><a class="header" href="#-developer-experience">🔧 Developer Experience</a></h3>
+<ul>
+<li>Chrome DevTools integration for debugging</li>
+<li>Hot-reload support for local assets</li>
+<li>Comprehensive error handling and logging</li>
+<li>Extensive customization options</li>
+</ul>
+<h2 id="architecture-overview"><a class="header" href="#architecture-overview">Architecture Overview</a></h2>
+<p>bevy_cef uses a multi-process architecture similar to modern web browsers:</p>
+<ul>
+<li><strong>Browser Process</strong>: The main Bevy application process</li>
+<li><strong>Render Process</strong>: Separate CEF process for web content rendering</li>
+<li><strong>IPC Communication</strong>: Secure inter-process communication channels</li>
+</ul>
+<p>This design ensures stability - if a web page crashes, it won't bring down your entire application.</p>
+<h2 id="use-cases"><a class="header" href="#use-cases">Use Cases</a></h2>
+<h3 id="game-ui"><a class="header" href="#game-ui">Game UI</a></h3>
+<p>Create rich, responsive game interfaces using familiar web technologies:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>commands.spawn((
+    CefWebviewUri::local("ui/main-menu.html"),
+    // Render as 2D sprite overlay
+));
+<span class="boring">}</span></code></pre></pre>
+<h3 id="in-world-displays"><a class="header" href="#in-world-displays">In-World Displays</a></h3>
+<p>Embed interactive web content directly in your 3D world:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>commands.spawn((
+    CefWebviewUri::new("https://example.com"),
+    Mesh3d(meshes.add(Plane3d::new(Vec3::Z, Vec2::ONE))),
+    MeshMaterial3d(materials.add(WebviewExtendStandardMaterial::default())),
+));
+<span class="boring">}</span></code></pre></pre>
+<h3 id="data-visualization"><a class="header" href="#data-visualization">Data Visualization</a></h3>
+<p>Display real-time data using web-based charting libraries:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Load a local HTML file with Chart.js or D3.js
+commands.spawn((
+    CefWebviewUri::local("charts/dashboard.html"),
+    WebviewSize(Vec2::new(1920.0, 1080.0)),
+));
+<span class="boring">}</span></code></pre></pre>
+<h3 id="development-tools"><a class="header" href="#development-tools">Development Tools</a></h3>
+<p>Integrate web-based development and debugging interfaces directly into your game editor or development build.</p>
+<h2 id="getting-started"><a class="header" href="#getting-started">Getting Started</a></h2>
+<p>Ready to integrate web content into your Bevy application? Check out the <a href="quick-start.html">Quick Start</a> guide to get up and running in minutes, or dive into <a href="basic-concepts.html">Basic Concepts</a> to understand the fundamental components and systems.</p>
+<h2 id="platform-support"><a class="header" href="#platform-support">Platform Support</a></h2>
+<p>Currently, bevy_cef focuses on macOS development with plans for expanded platform support. The plugin automatically handles CEF framework installation and configuration on supported platforms.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="installation"><a class="header" href="#installation">Installation</a></h1>
+<p>This guide will help you set up bevy_cef in your Bevy project.</p>
+<h2 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h2>
+<h3 id="system-requirements"><a class="header" href="#system-requirements">System Requirements</a></h3>
+<ul>
+<li><strong>macOS</strong>: Currently the primary supported platform</li>
+<li><strong>Rust</strong>: 1.70 or later</li>
+<li><strong>Bevy</strong>: 0.16 or later</li>
+</ul>
+<h2 id="adding-bevy_cef-to-your-project"><a class="header" href="#adding-bevy_cef-to-your-project">Adding bevy_cef to Your Project</a></h2>
+<h3 id="1-add-the-dependency"><a class="header" href="#1-add-the-dependency">1. Add the Dependency</a></h3>
+<p>Add bevy_cef to your <code>Cargo.toml</code>:</p>
+<pre><code class="language-toml">[dependencies]
+bevy = "0.16"
+bevy_cef = { version = "0.1", features = ["debug"] }
+</code></pre>
+<h3 id="2-enable-the-plugin"><a class="header" href="#2-enable-the-plugin">2. Enable the Plugin</a></h3>
+<p>Add the <code>CefPlugin</code> to your Bevy app:</p>
+<pre><pre class="playground"><code class="language-rust">use bevy::prelude::*;
+use bevy_cef::prelude::*;
+
+fn main() {
+    App::new()
+        .add_plugins((DefaultPlugins, CefPlugin))
+        .run();
+}</code></pre></pre>
+<h2 id="automatic-setup-with-debug-feature"><a class="header" href="#automatic-setup-with-debug-feature">Automatic Setup with Debug Feature</a></h2>
+<p>When you enable the <code>debug</code> feature (recommended for development), the build system automatically handles everything for you:</p>
+<p>✅ <strong>Downloads</strong> and extracts CEF framework to <code>$HOME/.local/share/cef</code><br />
+✅ <strong>Installs</strong> the <code>bevy_cef_debug_render_process</code> tool<br />
+✅ <strong>Installs</strong> the <code>export-cef-dir</code> tool<br />
+✅ <strong>Configures</strong> all necessary environment variables</p>
+<p>Simply run your project:</p>
+<pre><code class="language-bash">cargo run
+</code></pre>
+<p>That's it! No manual installation required.</p>
+<h2 id="production-builds"><a class="header" href="#production-builds">Production Builds</a></h2>
+<p>For production builds where you want to minimize dependencies, you can omit the debug feature:</p>
+<pre><code class="language-toml">[dependencies]
+bevy = "0.16"
+bevy_cef = "0.1"  # No debug feature
+</code></pre>
+<p>However, you'll need to ensure the CEF framework is available at runtime. The debug feature is recommended for most development scenarios.</p>
+<h2 id="verification"><a class="header" href="#verification">Verification</a></h2>
+<p>To verify your installation is working correctly, try running this simple example:</p>
+<pre><pre class="playground"><code class="language-rust">use bevy::prelude::*;
+use bevy_cef::prelude::*;
+
+fn main() {
+    App::new()
+        .add_plugins((DefaultPlugins, CefPlugin))
+        .add_systems(Startup, setup)
+        .run();
+}
+
+fn setup(
+    mut commands: Commands,
+    mut meshes: ResMut&lt;Assets&lt;Mesh&gt;&gt;,
+    mut materials: ResMut&lt;Assets&lt;WebviewExtendStandardMaterial&gt;&gt;,
+) {
+    // Camera
+    commands.spawn((
+        Camera3d::default(),
+        Transform::from_xyz(0.0, 0.0, 3.0).looking_at(Vec3::ZERO, Vec3::Y),
+    ));
+
+    // Light
+    commands.spawn((
+        DirectionalLight::default(),
+        Transform::from_xyz(1.0, 1.0, 1.0).looking_at(Vec3::ZERO, Vec3::Y),
+    ));
+
+    // Webview
+    commands.spawn((
+        CefWebviewUri::new("https://bevy.org"),
+        Mesh3d(meshes.add(Plane3d::new(Vec3::Z, Vec2::ONE))),
+        MeshMaterial3d(materials.add(WebviewExtendStandardMaterial::default())),
+    ));
+}</code></pre></pre>
+<p>If you see the Bevy website rendered on a plane in your 3D scene, your installation is successful!</p>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="common-installation-issues"><a class="header" href="#common-installation-issues">Common Installation Issues</a></h3>
+<h4 id="build-fails-with-debug-feature"><a class="header" href="#build-fails-with-debug-feature">Build Fails with Debug Feature</a></h4>
+<ul>
+<li>Ensure you have internet connection for CEF download</li>
+<li>Check available disk space in <code>$HOME/.local/share/</code></li>
+<li>Try cleaning and rebuilding: <code>cargo clean &amp;&amp; cargo build</code></li>
+</ul>
+<h4 id="cef-framework-issues"><a class="header" href="#cef-framework-issues">CEF Framework Issues</a></h4>
+<ul>
+<li>The debug feature handles CEF installation automatically</li>
+<li>If issues persist, delete <code>$HOME/.local/share/cef</code> and rebuild</li>
+</ul>
+<h4 id="linker-errors-on-macos"><a class="header" href="#linker-errors-on-macos">Linker Errors on macOS</a></h4>
+<ul>
+<li>Verify Xcode Command Line Tools are installed: <code>xcode-select --install</code></li>
+<li>The debug feature should handle DYLD environment variables automatically</li>
+</ul>
+<p>For more troubleshooting information, see the <a href="troubleshooting/common-issues.html">Troubleshooting</a> section.</p>
+<h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
+<p>Now that you have bevy_cef installed, check out:</p>
+<ul>
+<li><a href="quick-start.html">Quick Start</a> - Build your first webview in minutes</li>
+<li><a href="basic-concepts.html">Basic Concepts</a> - Understand the core components</li>
+<li><a href="examples/simple.html">Examples</a> - Explore practical examples</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h1>
+<p>Get up and running with bevy_cef in just a few minutes! This guide will walk you through creating your first webview-enabled Bevy application.</p>
+<h2 id="create-a-new-project"><a class="header" href="#create-a-new-project">Create a New Project</a></h2>
+<p>Start by creating a new Bevy project:</p>
+<pre><code class="language-bash">cargo new my_webview_app
+cd my_webview_app
+</code></pre>
+<h2 id="add-dependencies"><a class="header" href="#add-dependencies">Add Dependencies</a></h2>
+<p>Add bevy_cef to your <code>Cargo.toml</code>:</p>
+<pre><code class="language-toml">[dependencies]
+bevy = "0.16"
+bevy_cef = { version = "0.1", features = ["debug"] }
+</code></pre>
+<h2 id="your-first-webview"><a class="header" href="#your-first-webview">Your First Webview</a></h2>
+<p>Replace the contents of <code>src/main.rs</code> with:</p>
+<pre><pre class="playground"><code class="language-rust">use bevy::prelude::*;
+use bevy_cef::prelude::*;
+
+fn main() {
+    App::new()
+        .add_plugins((DefaultPlugins, CefPlugin))
+        .add_systems(Startup, setup)
+        .run();
+}
+
+fn setup(
+    mut commands: Commands,
+    mut meshes: ResMut&lt;Assets&lt;Mesh&gt;&gt;,
+    mut materials: ResMut&lt;Assets&lt;WebviewExtendStandardMaterial&gt;&gt;,
+) {
+    // Spawn a camera
+    commands.spawn((
+        Camera3d::default(),
+        Transform::from_translation(Vec3::new(0.0, 0.0, 3.0))
+            .looking_at(Vec3::ZERO, Vec3::Y),
+    ));
+
+    // Spawn a light
+    commands.spawn((
+        DirectionalLight::default(),
+        Transform::from_translation(Vec3::new(1.0, 1.0, 1.0))
+            .looking_at(Vec3::ZERO, Vec3::Y),
+    ));
+
+    // Spawn a webview on a 3D plane
+    commands.spawn((
+        CefWebviewUri::new("https://bevy.org"),
+        Mesh3d(meshes.add(Plane3d::new(Vec3::Z, Vec2::ONE))),
+        MeshMaterial3d(materials.add(WebviewExtendStandardMaterial::default())),
+    ));
+}</code></pre></pre>
+<h2 id="run-your-application"><a class="header" href="#run-your-application">Run Your Application</a></h2>
+<pre><code class="language-bash">cargo run
+</code></pre>
+<p>That's it! You should see the Bevy website rendered on a 3D plane in your application. The first run might take a moment as bevy_cef downloads and sets up the CEF framework automatically.</p>
+<h2 id="what-just-happened"><a class="header" href="#what-just-happened">What Just Happened?</a></h2>
+<p>Let's break down the key components:</p>
+<h3 id="1-cefplugin"><a class="header" href="#1-cefplugin">1. CefPlugin</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>.add_plugins((DefaultPlugins, CefPlugin))
+<span class="boring">}</span></code></pre></pre>
+<p>The <code>CefPlugin</code> initializes the CEF framework and sets up all necessary systems for webview rendering.</p>
+<h3 id="2-cefwebviewuri"><a class="header" href="#2-cefwebviewuri">2. CefWebviewUri</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>CefWebviewUri::new("https://bevy.org")
+<span class="boring">}</span></code></pre></pre>
+<p>This component specifies what web content to load. You can use:</p>
+<ul>
+<li><strong>Remote URLs</strong>: <code>"https://example.com"</code></li>
+<li><strong>Local files</strong>: <code>CefWebviewUri::local("index.html")</code></li>
+</ul>
+<h3 id="3-webviewextendstandardmaterial"><a class="header" href="#3-webviewextendstandardmaterial">3. WebviewExtendStandardMaterial</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>MeshMaterial3d(materials.add(WebviewExtendStandardMaterial::default()))
+<span class="boring">}</span></code></pre></pre>
+<p>This special material renders the webview content as a texture on your 3D mesh.</p>
+<h2 id="try-local-content"><a class="header" href="#try-local-content">Try Local Content</a></h2>
+<p>Create an <code>assets/</code> directory and add a simple HTML file:</p>
+<pre><code class="language-bash">mkdir assets
+</code></pre>
+<p>Create <code>assets/hello.html</code>:</p>
+<pre><code class="language-html">&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+&lt;head&gt;
+    &lt;title&gt;Hello bevy_cef!&lt;/title&gt;
+    &lt;style&gt;
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+            color: white;
+            text-align: center;
+            padding: 50px;
+        }
+    &lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+    &lt;h1&gt;Hello from bevy_cef! 🎮&lt;/h1&gt;
+    &lt;p&gt;This HTML is rendered directly on a 3D mesh!&lt;/p&gt;
+    &lt;p&gt;Current time: &lt;span id="time"&gt;&lt;/span&gt;&lt;/p&gt;
+    
+    &lt;script&gt;
+        function updateTime() {
+            document.getElementById('time').textContent = new Date().toLocaleTimeString();
+        }
+        setInterval(updateTime, 1000);
+        updateTime();
+    &lt;/script&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+<p>Update your webview URI in <code>main.rs</code>:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>CefWebviewUri::local("hello.html"),  // Load local file
+<span class="boring">}</span></code></pre></pre>
+<p>Run again:</p>
+<pre><code class="language-bash">cargo run
+</code></pre>
+<p>You'll see your custom HTML content with a live-updating clock!</p>
+<h2 id="next-steps-1"><a class="header" href="#next-steps-1">Next Steps</a></h2>
+<h3 id="explore-more-features"><a class="header" href="#explore-more-features">Explore More Features</a></h3>
+<ul>
+<li><strong><a href="ipc/js-emit.html">JavaScript Communication</a></strong>: Send data from web pages to Bevy</li>
+<li><strong><a href="ipc/host-emit.html">Host Communication</a></strong>: Send data from Bevy to web pages</li>
+<li><strong><a href="webview-rendering/2d-sprite.html">2D Sprites</a></strong>: Render webviews as UI elements</li>
+<li><strong><a href="developer-tools.html">Developer Tools</a></strong>: Debug your web content</li>
+</ul>
+<h3 id="try-more-examples"><a class="header" href="#try-more-examples">Try More Examples</a></h3>
+<ul>
+<li><strong>Navigation</strong>: Add back/forward buttons</li>
+<li><strong>Zoom Controls</strong>: Implement zoom in/out functionality</li>
+<li><strong>Multiple Webviews</strong>: Render different content on multiple objects</li>
+</ul>
+<h3 id="learn-the-architecture"><a class="header" href="#learn-the-architecture">Learn the Architecture</a></h3>
+<ul>
+<li><strong><a href="basic-concepts.html">Basic Concepts</a></strong>: Understand core components</li>
+<li><strong><a href="architecture/multi-process.html">Multi-Process Design</a></strong>: How CEF integration works</li>
+<li><strong><a href="architecture/plugin-system.html">Plugin System</a></strong>: Deep dive into the plugin architecture</li>
+</ul>
+<h2 id="common-first-steps"><a class="header" href="#common-first-steps">Common First Steps</a></h2>
+<h3 id="adding-interaction"><a class="header" href="#adding-interaction">Adding Interaction</a></h3>
+<p>Make your webview interactive by enabling input:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// In your setup system, also spawn input handling
+commands.spawn((
+    CefWebviewUri::local("interactive.html"),
+    WebviewSize(Vec2::new(800.0, 600.0)),
+    // Webview will automatically receive keyboard and mouse input
+    Mesh3d(meshes.add(Plane3d::new(Vec3::Z, Vec2::ONE))),
+    MeshMaterial3d(materials.add(WebviewExtendStandardMaterial::default())),
+));
+<span class="boring">}</span></code></pre></pre>
+<h3 id="sizing-your-webview"><a class="header" href="#sizing-your-webview">Sizing Your Webview</a></h3>
+<p>Control the resolution of your webview:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>WebviewSize(Vec2::new(1920.0, 1080.0)),  // High resolution
+WebviewSize(Vec2::new(800.0, 600.0)),    // Standard resolution
+<span class="boring">}</span></code></pre></pre>
+<h3 id="multiple-webviews"><a class="header" href="#multiple-webviews">Multiple Webviews</a></h3>
+<p>You can have multiple webviews in the same scene:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// First webview
+commands.spawn((
+    CefWebviewUri::new("https://news.ycombinator.com"),
+    Transform::from_translation(Vec3::new(-2.0, 0.0, 0.0)),
+    Mesh3d(meshes.add(Plane3d::new(Vec3::Z, Vec2::ONE))),
+    MeshMaterial3d(materials.add(WebviewExtendStandardMaterial::default())),
+));
+
+// Second webview  
+commands.spawn((
+    CefWebviewUri::local("dashboard.html"),
+    Transform::from_translation(Vec3::new(2.0, 0.0, 0.0)),
+    Mesh3d(meshes.add(Plane3d::new(Vec3::Z, Vec2::ONE))),
+    MeshMaterial3d(materials.add(WebviewExtendStandardMaterial::default())),
+));
+<span class="boring">}</span></code></pre></pre>
+<p>You're now ready to build amazing applications that blend 3D graphics with modern web technologies!</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="basic-concepts"><a class="header" href="#basic-concepts">Basic Concepts</a></h1>
+<p>Understanding these fundamental concepts will help you make the most of bevy_cef in your projects.</p>
+<h2 id="multi-process-architecture"><a class="header" href="#multi-process-architecture">Multi-Process Architecture</a></h2>
+<p>bevy_cef follows a multi-process architecture similar to modern web browsers:</p>
+<h3 id="browser-process"><a class="header" href="#browser-process">Browser Process</a></h3>
+<ul>
+<li><strong>Main Application</strong>: Your Bevy game/app runs here</li>
+<li><strong>CEF Management</strong>: Handles browser creation and management</li>
+<li><strong>IPC Coordination</strong>: Manages communication with render processes</li>
+</ul>
+<h3 id="render-process"><a class="header" href="#render-process">Render Process</a></h3>
+<ul>
+<li><strong>Web Content</strong>: Each webview runs in a separate process</li>
+<li><strong>Isolation</strong>: Crashes in web content don't affect your main application</li>
+<li><strong>Sandboxing</strong>: Enhanced security through process separation</li>
+</ul>
+<h3 id="benefits"><a class="header" href="#benefits">Benefits</a></h3>
+<ul>
+<li><strong>Stability</strong>: Web content crashes won't crash your game</li>
+<li><strong>Performance</strong>: CPU-intensive web content won't block your game loop</li>
+<li><strong>Security</strong>: Sandboxed execution of untrusted web content</li>
+</ul>
+<h2 id="core-components"><a class="header" href="#core-components">Core Components</a></h2>
+<p>bevy_cef provides several key components that work together:</p>
+<h3 id="cefwebviewuri"><a class="header" href="#cefwebviewuri">CefWebviewUri</a></h3>
+<p>The primary component that defines what web content to display:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Remote web page
+CefWebviewUri::new("https://example.com")
+
+// Local HTML file from assets/
+CefWebviewUri::local("ui/menu.html")
+
+// Equivalent to above
+CefWebviewUri::new("cef://localhost/ui/menu.html")
+<span class="boring">}</span></code></pre></pre>
+<h3 id="webviewsize"><a class="header" href="#webviewsize">WebviewSize</a></h3>
+<p>Controls the rendering resolution of the webview (not the 3D object size):</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>WebviewSize(Vec2::new(1920.0, 1080.0))  // High resolution
+WebviewSize(Vec2::new(800.0, 600.0))    // Standard resolution
+WebviewSize::default()                   // 800x800 pixels
+<span class="boring">}</span></code></pre></pre>
+<h3 id="material-integration"><a class="header" href="#material-integration">Material Integration</a></h3>
+<p>Webviews integrate with Bevy's material system:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Standard material with webview texture
+WebviewExtendStandardMaterial::default()
+
+// Custom material properties
+WebviewExtendStandardMaterial {
+    base: StandardMaterial {
+        unlit: true,
+        emissive: Color::WHITE.into(),
+        ..default()
+    },
+    ..default()
+}
+<span class="boring">}</span></code></pre></pre>
+<h2 id="component-requirements"><a class="header" href="#component-requirements">Component Requirements</a></h2>
+<p>When you add a <code>CefWebviewUri</code> component, bevy_cef automatically requires several other components:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[require(WebviewSize, ZoomLevel, AudioMuted)]
+pub struct CefWebviewUri(pub String);
+<span class="boring">}</span></code></pre></pre>
+<p>This means every webview entity automatically gets:</p>
+<ul>
+<li><strong>WebviewSize</strong>: Default 800x800 resolution</li>
+<li><strong>ZoomLevel</strong>: Default zoom (0.0 = browser default)</li>
+<li><strong>AudioMuted</strong>: Default unmuted (false)</li>
+</ul>
+<h2 id="rendering-modes"><a class="header" href="#rendering-modes">Rendering Modes</a></h2>
+<p>bevy_cef supports different rendering approaches:</p>
+<h3 id="3d-mesh-rendering"><a class="header" href="#3d-mesh-rendering">3D Mesh Rendering</a></h3>
+<p>Render web content on 3D objects in your world:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>commands.spawn((
+    CefWebviewUri::local("interface.html"),
+    Mesh3d(meshes.add(Plane3d::new(Vec3::Z, Vec2::ONE))),
+    MeshMaterial3d(materials.add(WebviewExtendStandardMaterial::default())),
+));
+<span class="boring">}</span></code></pre></pre>
+<h3 id="2d-sprite-rendering"><a class="header" href="#2d-sprite-rendering">2D Sprite Rendering</a></h3>
+<p>Render web content as UI overlays:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>commands.spawn((
+    CefWebviewUri::local("hud.html"),
+    Sprite::default(),
+    WebviewSpriteMaterial::default(),
+));
+<span class="boring">}</span></code></pre></pre>
+<h2 id="local-asset-serving"><a class="header" href="#local-asset-serving">Local Asset Serving</a></h2>
+<p>bevy_cef includes a built-in web server that serves files from your <code>assets/</code> directory:</p>
+<h3 id="custom-scheme"><a class="header" href="#custom-scheme">Custom Scheme</a></h3>
+<ul>
+<li><strong>Scheme</strong>: <code>cef://localhost/</code></li>
+<li><strong>Path Mapping</strong>: <code>assets/</code> directory maps to the root</li>
+<li><strong>Example</strong>: <code>assets/ui/menu.html</code> → <code>cef://localhost/ui/menu.html</code></li>
+</ul>
+<h3 id="supported-file-types"><a class="header" href="#supported-file-types">Supported File Types</a></h3>
+<ul>
+<li>HTML, CSS, JavaScript</li>
+<li>Images (PNG, JPG, SVG, etc.)</li>
+<li>Fonts (WOFF, TTF, etc.)</li>
+<li>JSON, XML, and other data files</li>
+</ul>
+<h3 id="asset-organization"><a class="header" href="#asset-organization">Asset Organization</a></h3>
+<pre><code>assets/
+├── ui/
+│   ├── menu.html
+│   ├── styles.css
+│   └── script.js
+├── images/
+│   └── logo.png
+└── data/
+    └── config.json
+</code></pre>
+<h2 id="inter-process-communication-ipc"><a class="header" href="#inter-process-communication-ipc">Inter-Process Communication (IPC)</a></h2>
+<p>bevy_cef provides three communication patterns:</p>
+<h3 id="1-javascript-to-bevy-js-emit"><a class="header" href="#1-javascript-to-bevy-js-emit">1. JavaScript to Bevy (JS Emit)</a></h3>
+<p>Send events from web content to Bevy systems:</p>
+<pre><code class="language-javascript">// In your HTML/JavaScript
+window.cef.emit('player_action', { action: 'jump', power: 10 });
+</code></pre>
+<pre><pre class="playground"><code class="language-rust">fn main(){
+    App::new()
+        .add_plugins(JsEmitEventPlugin::&lt;PlayerAction&gt;::default())
+    // ...
+}
+
+// In your Bevy system
+#[derive(Event, Deserialize)]
+struct PlayerAction {
+    action: String,
+    power: i32,
+}
+
+fn handle_player_action(trigger: Trigger&lt;PlayerAction&gt;) {
+    let action = trigger.event();
+    info!("Player action: {} with power {}", action.action, action.power);
+}</code></pre></pre>
+<h3 id="2-bevy-to-javascript-host-emit"><a class="header" href="#2-bevy-to-javascript-host-emit">2. Bevy to JavaScript (Host Emit)</a></h3>
+<p>Send events from Bevy to web content:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// In your Bevy system
+commands.entity(webview_entity).trigger(HostEmitEvent {
+    event_name: "score_update".to_string(),
+    data: json!({ "score": 1000, "level": 3 }),
+});
+<span class="boring">}</span></code></pre></pre>
+<pre><code class="language-javascript">// In your HTML/JavaScript
+window.cef.listen('score_update', (data) =&gt; {
+    document.getElementById('score').textContent = data.score;
+    document.getElementById('level').textContent = data.level;
+});
+</code></pre>
+<h3 id="3-bevy-remote-protocol-brp"><a class="header" href="#3-bevy-remote-protocol-brp">3. Bevy Remote Protocol (BRP)</a></h3>
+<p>Please see <a href="https://gist.github.com/coreh/1baf6f255d7e86e4be29874d00137d1d">here</a> for about the Bevy Remote Protocol (BRP).</p>
+<p>Bidirectional RPC calls for complex interactions:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Register BRP method in Bevy
+app.add_plugins(RemotePlugin::default().with_method("get_player_stats", get_stats));
+<span class="boring">}</span></code></pre></pre>
+<pre><code class="language-javascript">// Call from JavaScript
+const stats = await window.cef.brp({ 
+    method: 'get_player_stats',
+    params: { playerId: 42 }
+});
+</code></pre>
+<h2 id="user-interaction"><a class="header" href="#user-interaction">User Interaction</a></h2>
+<h3 id="input-handling"><a class="header" href="#input-handling">Input Handling</a></h3>
+<p>Webviews automatically receive keyboard and mouse input when focused:</p>
+<ul>
+<li><strong>Keyboard</strong>: All keyboard events are forwarded</li>
+<li><strong>Mouse</strong>: Click, scroll, and hover events work naturally</li>
+<li><strong>Focus</strong>: Multiple webviews can coexist; input goes to the focused one</li>
+</ul>
+<h3 id="navigation"><a class="header" href="#navigation">Navigation</a></h3>
+<p>Control web navigation programmatically:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>commands.entity(webview).trigger(RequestGoBack);
+commands.entity(webview).trigger(ReqeustGoForward);
+<span class="boring">}</span></code></pre></pre>
+<h3 id="zoom-control"><a class="header" href="#zoom-control">Zoom Control</a></h3>
+<p>Manage zoom levels per webview:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Set zoom level (0.0 = default, positive = zoom in, negative = zoom out)
+commands.entity(webview).insert(ZoomLevel(1.2));
+
+// Reset to default zoom
+commands.entity(webview).insert(ZoomLevel(0.0));
+<span class="boring">}</span></code></pre></pre>
+<h2 id="developer-experience"><a class="header" href="#developer-experience">Developer Experience</a></h2>
+<h3 id="developer-tools"><a class="header" href="#developer-tools">Developer Tools</a></h3>
+<p>Access Chrome DevTools for debugging:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Show developer tools for a webview
+commands.entity(webview).trigger(RequestShowDevTool);
+
+// Close developer tools
+commands.entity(webview).trigger(RequestCloseDevtool);
+<span class="boring">}</span></code></pre></pre>
+<h3 id="hot-reload"><a class="header" href="#hot-reload">Hot Reload</a></h3>
+<p>Local assets automatically reload when changed during development.</p>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<h3 id="component-organization"><a class="header" href="#component-organization">Component Organization</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Good: Group related components
+commands.spawn((
+    // The uri convert to `cef://localhost/index.html`
+    CefWebviewUri::local("index.html"),
+    WebviewSize(Vec2::new(1920.0, 200.0)),
+    ZoomLevel(0.8),
+    AudioMuted(true),
+    Transform::from_translation(Vec3::new(0.0, 5.0, 0.0)),
+    Mesh3d(meshes.add(Quad::new(Vec2::new(4.0, 1.0)))),
+    MeshMaterial3d(materials.add(WebviewExtendStandardMaterial::default())),
+));
+<span class="boring">}</span></code></pre></pre>
+<h2 id="next-steps-2"><a class="header" href="#next-steps-2">Next Steps</a></h2>
+<p>Now that you understand the basic concepts:</p>
+<ul>
+<li>Explore <a href="core-components.html">Core Components</a> in detail</li>
+<li>Learn about <a href="webview-rendering.html">Webview Rendering</a> techniques</li>
+<li>Dive into <a href="ipc.html">Inter-Process Communication</a> patterns</li>
+<li>Check out practical <a href="examples/simple.html">Examples</a></li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="core-components-1"><a class="header" href="#core-components-1">Core Components</a></h1>
+<p>bevy_cef provides several essential components that control webview behavior. Understanding these components is crucial
+for effective use of the library.</p>
+<h2 id="component-overview"><a class="header" href="#component-overview">Component Overview</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Component</th><th>Purpose</th><th>Default Value</th><th>Required</th></tr></thead><tbody>
+<tr><td><code>CefWebviewUri</code></td><td>Specifies web content URL</td><td>None</td><td>✅ Primary</td></tr>
+<tr><td><code>WebviewSize</code></td><td>Controls rendering resolution</td><td>800×800</td><td>✅ Auto-added</td></tr>
+<tr><td><code>ZoomLevel</code></td><td>Controls webview zoom</td><td>0.0 (default)</td><td>✅ Auto-added</td></tr>
+<tr><td><code>AudioMuted</code></td><td>Controls audio output</td><td>false (unmuted)</td><td>✅ Auto-added</td></tr>
+<tr><td><code>HostWindow</code></td><td>Parent window specification</td><td>Primary window</td><td>❌ Optional</td></tr>
+</tbody></table>
+</div>
+<h2 id="cefwebviewuri-1"><a class="header" href="#cefwebviewuri-1">CefWebviewUri</a></h2>
+<p>The primary component that defines what web content to display.</p>
+<h3 id="usage"><a class="header" href="#usage">Usage</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use bevy_cef::prelude::*;
+
+// Remote web page
+let webview = CefWebviewUri::new("https://example.com");
+
+// Local HTML file from assets/ directory
+let webview = CefWebviewUri::local("ui/menu.html");
+
+// Equivalent to local() method
+let webview = CefWebviewUri::new("cef://localhost/ui/menu.html");
+<span class="boring">}</span></code></pre></pre>
+<h3 id="implementation-details"><a class="header" href="#implementation-details">Implementation Details</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[derive(Component, Debug, Clone, PartialEq, Eq, Hash, Reflect)]
+#[require(WebviewSize, ZoomLevel, AudioMuted)]
+pub struct CefWebviewUri(pub String);
+<span class="boring">}</span></code></pre></pre>
+<p>The <code>#[require(...)]</code> attribute ensures that every webview automatically gets the essential supporting components.</p>
+<h3 id="methods"><a class="header" href="#methods">Methods</a></h3>
+<ul>
+<li><strong><code>new(uri)</code></strong>: Create with any valid URL (http, https, cef://localhost/)</li>
+<li><strong><code>local(path)</code></strong>: Create with local file path, automatically prefixed with <code>cef://localhost/</code></li>
+</ul>
+<h3 id="local-file-serving"><a class="header" href="#local-file-serving">Local File Serving</a></h3>
+<p>When using local files, bevy_cef serves them through a custom scheme:</p>
+<ul>
+<li><strong>Scheme</strong>: <code>cef://localhost/</code></li>
+<li><strong>Root Directory</strong>: Your project's <code>assets/</code> folder</li>
+<li><strong>Path Resolution</strong>: Relative paths from assets/ root</li>
+</ul>
+<p><strong>Example File Structure:</strong></p>
+<pre><code>assets/
+├── index.html          → cef://localhost/index.html
+├── ui/
+│   ├── menu.html      → cef://localhost/ui/menu.html
+│   └── styles.css     → cef://localhost/ui/styles.css
+└── js/
+    └── app.js         → cef://localhost/js/app.js
+</code></pre>
+<h2 id="webviewsize-1"><a class="header" href="#webviewsize-1">WebviewSize</a></h2>
+<p>Controls the internal rendering resolution of the webview, independent of the 3D object size.</p>
+<h3 id="usage-1"><a class="header" href="#usage-1">Usage</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use bevy::math::Vec2;
+
+// High resolution webview
+WebviewSize(Vec2::new(1920.0, 1080.0))
+
+// Standard resolution
+WebviewSize(Vec2::new(800.0, 600.0))
+
+// Square webview
+WebviewSize(Vec2::splat(512.0))
+
+// Default size
+WebviewSize::default () // 800×800
+<span class="boring">}</span></code></pre></pre>
+<h3 id="performance-considerations"><a class="header" href="#performance-considerations">Performance Considerations</a></h3>
+<ul>
+<li><strong>Higher Resolution</strong>: Better quality, more memory usage</li>
+<li><strong>Lower Resolution</strong>: Better performance, potential pixelation</li>
+<li><strong>Aspect Ratio</strong>: Match your 3D mesh proportions for best results</li>
+</ul>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Example: Widescreen webview for cinematic content
+commands.spawn((
+CefWebviewUri::local("video-player.html"),
+WebviewSize(Vec2::new(1920.0, 800.0)),  // 21:9 aspect ratio
+Mesh3d(meshes.add(Quad::new(Vec2::new(4.8, 2.0)))), // Match aspect in 3D
+MeshMaterial3d(materials.add(WebviewExtendStandardMaterial::default ())),
+));
+<span class="boring">}</span></code></pre></pre>
+<h3 id="dynamic-resizing"><a class="header" href="#dynamic-resizing">Dynamic Resizing</a></h3>
+<p>You can change webview size at runtime:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn resize_webview(
+    mut webviews: Query&lt;&amp;mut WebviewSize&gt;,
+    keyboard: Res&lt;ButtonInput&lt;KeyCode&gt;&gt;,
+) {
+    if keyboard.just_pressed(KeyCode::KeyR) {
+        for mut size in webviews.iter_mut() {
+            size.0 *= 1.5; // Increase resolution by 50%
+        }
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<h2 id="zoomlevel"><a class="header" href="#zoomlevel">ZoomLevel</a></h2>
+<p>Controls the zoom level of web content within the webview.</p>
+<h3 id="usage-2"><a class="header" href="#usage-2">Usage</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Default zoom (browser default)
+ZoomLevel(0.0)
+
+// Zoom in 20%
+ZoomLevel(1.2)
+
+// Zoom out 20%
+ZoomLevel(0.8)
+
+// Maximum zoom in
+ZoomLevel(3.0)
+
+// Maximum zoom out  
+ZoomLevel(0.25)
+<span class="boring">}</span></code></pre></pre>
+<h3 id="zoom-behavior"><a class="header" href="#zoom-behavior">Zoom Behavior</a></h3>
+<ul>
+<li><strong>0.0</strong>: Browser default zoom level</li>
+<li><strong>Positive values</strong>: Zoom in (1.2 = 120% of default)</li>
+<li><strong>Negative values</strong>: Zoom out (0.8 = 80% of default)</li>
+<li><strong>Range</strong>: Typically 0.25 to 3.0 (25% to 300%)</li>
+</ul>
+<h3 id="dynamic-zoom-control"><a class="header" href="#dynamic-zoom-control">Dynamic Zoom Control</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn zoom_control(
+    mut webviews: Query&lt;&amp;mut ZoomLevel&gt;,
+    keyboard: Res&lt;ButtonInput&lt;KeyCode&gt;&gt;,
+) {
+    for mut zoom in webviews.iter_mut() {
+        if keyboard.just_pressed(KeyCode::Equal) {
+            zoom.0 = (zoom.0 + 0.1).min(3.0); // Zoom in
+        }
+        if keyboard.just_pressed(KeyCode::Minus) {
+            zoom.0 = (zoom.0 - 0.1).max(0.25); // Zoom out
+        }
+        if keyboard.just_pressed(KeyCode::Digit0) {
+            zoom.0 = 0.0; // Reset zoom
+        }
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="use-cases-1"><a class="header" href="#use-cases-1">Use Cases</a></h3>
+<ul>
+<li><strong>Accessibility</strong>: Larger text for readability</li>
+<li><strong>Dense Content</strong>: Fit more information in limited space</li>
+<li><strong>Responsive Design</strong>: Adapt to different screen sizes</li>
+<li><strong>User Preference</strong>: Allow users to adjust comfortable viewing size</li>
+</ul>
+<h2 id="audiomuted"><a class="header" href="#audiomuted">AudioMuted</a></h2>
+<p>Controls whether audio from the webview is muted.</p>
+<h3 id="usage-3"><a class="header" href="#usage-3">Usage</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Audio enabled (default)
+AudioMuted(false)
+
+// Audio muted
+AudioMuted(true)
+<span class="boring">}</span></code></pre></pre>
+<h3 id="dynamic-audio-control"><a class="header" href="#dynamic-audio-control">Dynamic Audio Control</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn toggle_audio(
+    mut webviews: Query&lt;&amp;mut AudioMuted&gt;,
+    keyboard: Res&lt;ButtonInput&lt;KeyCode&gt;&gt;,
+) {
+    if keyboard.just_pressed(KeyCode::KeyM) {
+        for mut muted in webviews.iter_mut() {
+            muted.0 = !muted.0; // Toggle mute state
+        }
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="use-cases-2"><a class="header" href="#use-cases-2">Use Cases</a></h3>
+<ul>
+<li><strong>Background Content</strong>: Mute decorative webviews</li>
+<li><strong>Multiple Webviews</strong>: Prevent audio conflicts</li>
+<li><strong>User Control</strong>: Provide mute/unmute functionality</li>
+<li><strong>Game State</strong>: Mute during pause or cutscenes</li>
+</ul>
+<h2 id="hostwindow-optional"><a class="header" href="#hostwindow-optional">HostWindow (Optional)</a></h2>
+<p>Specifies which Bevy window should be the parent of the webview. If not provided, the primary window is used.</p>
+<h3 id="usage-4"><a class="header" href="#usage-4">Usage</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Use primary window (default behavior)
+commands.spawn((
+CefWebviewUri::local("ui.html"),
+// No HostWindow component needed
+));
+
+// Specify a particular window
+commands.spawn((
+CefWebviewUri::local("ui.html"),
+HostWindow(secondary_window_entity),
+));
+<span class="boring">}</span></code></pre></pre>
+<h3 id="multi-window-applications"><a class="header" href="#multi-window-applications">Multi-Window Applications</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn setup_multi_window(
+    mut commands: Commands,
+    mut meshes: ResMut&lt;Assets&lt;Mesh&gt;&gt;,
+    mut materials: ResMut&lt;Assets&lt;WebviewExtendStandardMaterial&gt;&gt;,
+) {
+    // Create secondary window
+    let secondary_window = commands.spawn(Window {
+        title: "Secondary Display".to_string(),
+        resolution: (800.0, 600.0).into(),
+        ..default()
+    }).id();
+
+    // Main webview in primary window
+    commands.spawn((
+        CefWebviewUri::local("main-ui.html"),
+        Mesh3d(meshes.add(Plane3d::new(Vec3::Z, Vec2::ONE))),
+        MeshMaterial3d(materials.add(WebviewExtendStandardMaterial::default())),
+    ));
+
+    // Secondary webview in secondary window
+    commands.spawn((
+        CefWebviewUri::local("secondary-ui.html"),
+        HostWindow(secondary_window),
+        Mesh3d(meshes.add(Plane3d::new(Vec3::Z, Vec2::ONE))),
+        MeshMaterial3d(materials.add(WebviewExtendStandardMaterial::default())),
+    ));
+}
+<span class="boring">}</span></code></pre></pre>
+<h2 id="component-combinations"><a class="header" href="#component-combinations">Component Combinations</a></h2>
+<h3 id="common-patterns"><a class="header" href="#common-patterns">Common Patterns</a></h3>
+<p><strong>High-Resolution Interactive Display:</strong></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>commands.spawn((
+CefWebviewUri::local("dashboard.html"),
+WebviewSize(Vec2::new(2560.0, 1440.0)),
+ZoomLevel(0.0),
+AudioMuted(false),
+));
+<span class="boring">}</span></code></pre></pre>
+<p><strong>Compact Information Panel:</strong></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>commands.spawn((
+CefWebviewUri::local("info-panel.html"),
+WebviewSize(Vec2::new(400.0, 300.0)),
+ZoomLevel(0.8),
+AudioMuted(true),
+));
+<span class="boring">}</span></code></pre></pre>
+<p><strong>Video Player:</strong></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>commands.spawn((
+CefWebviewUri::new("https://player.example.com"),
+WebviewSize(Vec2::new(1920.0, 1080.0)),
+ZoomLevel(0.0),
+AudioMuted(false), // Keep audio for video
+));
+<span class="boring">}</span></code></pre></pre>
+<p><strong>Background Decoration:</strong></p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>commands.spawn((
+CefWebviewUri::local("animated-bg.html"),
+WebviewSize(Vec2::new(1024.0, 1024.0)),
+ZoomLevel(0.0),
+AudioMuted(true), // No audio for decoration
+));
+<span class="boring">}</span></code></pre></pre>
+<h2 id="component-lifecycle"><a class="header" href="#component-lifecycle">Component Lifecycle</a></h2>
+<h3 id="automatic-requirements"><a class="header" href="#automatic-requirements">Automatic Requirements</a></h3>
+<p>When you add <code>CefWebviewUri</code>, the required components are automatically added with default values:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// You only need to specify this:
+commands.spawn(CefWebviewUri::local("page.html"));
+
+// But the entity automatically gets:
+// - WebviewSize(Vec2::splat(800.0))
+// - ZoomLevel(0.0)  
+// - AudioMuted(false)
+<span class="boring">}</span></code></pre></pre>
+<h3 id="manual-override"><a class="header" href="#manual-override">Manual Override</a></h3>
+<p>You can override the defaults by adding components explicitly:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>commands.spawn((
+CefWebviewUri::local("page.html"),
+WebviewSize(Vec2::new(1024.0, 768.0)), // Override default
+ZoomLevel(1.2),                        // Override default
+AudioMuted(true),                      // Override default
+));
+<span class="boring">}</span></code></pre></pre>
+<h3 id="runtime-modification"><a class="header" href="#runtime-modification">Runtime Modification</a></h3>
+<p>All components can be modified at runtime through standard Bevy systems:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn modify_webview_properties(
+    mut query: Query&lt;(&amp;mut WebviewSize, &amp;mut ZoomLevel, &amp;mut AudioMuted)&gt;,
+    time: Res&lt;Time&gt;,
+) {
+    for (mut size, mut zoom, mut muted) in query.iter_mut() {
+        // Dynamic effects based on time, input, game state, etc.
+        let scale = (time.elapsed_secs().sin() + 1.0) / 2.0;
+        zoom.0 = 0.8 + scale * 0.4; // Oscillate between 0.8 and 1.2
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<h2 id="best-practices-1"><a class="header" href="#best-practices-1">Best Practices</a></h2>
+<h3 id="performance-optimization"><a class="header" href="#performance-optimization">Performance Optimization</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Good: Appropriate resolution for use case
+WebviewSize(Vec2::new(800.0, 600.0))   // Standard UI
+
+// Avoid: Excessive resolution unless needed
+WebviewSize(Vec2::new(4096.0, 4096.0)) // Only for high-detail content
+<span class="boring">}</span></code></pre></pre>
+<h3 id="memory-management"><a class="header" href="#memory-management">Memory Management</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Good: Mute background content
+commands.spawn((
+CefWebviewUri::local("ambient-display.html"),
+AudioMuted(true), // Prevent memory usage for audio processing
+));
+<span class="boring">}</span></code></pre></pre>
+<h3 id="user-experience"><a class="header" href="#user-experience">User Experience</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Good: Consistent zoom across related webviews
+let ui_zoom = ZoomLevel(1.1);
+for ui_component in ["menu.html", "inventory.html", "settings.html"] {
+commands.spawn((
+CefWebviewUri::local(ui_component),
+ui_zoom,
+));
+}
+<span class="boring">}</span></code></pre></pre>
+<h2 id="next-steps-3"><a class="header" href="#next-steps-3">Next Steps</a></h2>
+<ul>
+<li>Learn about <a href="webview-rendering.html">Webview Rendering</a> techniques</li>
+<li>Explore <a href="ipc.html">Inter-Process Communication</a> patterns</li>
+<li>Check component-specific guides:
+<ul>
+<li><a href="core-components/webview-uri.html">CefWebviewUri Details</a></li>
+<li><a href="core-components/webview-size.html">WebviewSize Details</a></li>
+<li><a href="core-components/host-window.html">HostWindow Details</a></li>
+</ul>
+</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+        <script>
+        window.addEventListener('load', function() {
+            window.setTimeout(window.print, 100);
+        });
+        </script>
+
+
+    </div>
+    </body>
+</html>
