@@ -85,6 +85,7 @@ impl Default for MessageLoopPlugin {
     }
 }
 
+#[cfg(target_os = "macos")]
 fn cef_do_message_loop_work(_: NonSend<RunOnMainThread>) {
     do_message_loop_work();
 }
