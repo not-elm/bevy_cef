@@ -1,0 +1,56 @@
+[package]
+name = "bevy_cef"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[workspace]
+resolver = "2"
+members = [
+    "crates/*",
+    "examples/demo",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0 OR MIT"
+authors = ["notelm"]
+repository = "https://github.com/not-elm/bevy_cef"
+
+[workspace.dependencies]
+bevy = { version = "0.16" }
+bevy_remote = "0.16"
+cef = { version = "138" }
+cef-dll-sys = { version = "138", features = ["sandbox"] }
+download-cef = { version = "2" }
+bevy_cef = { path = "." }
+bevy_cef_core = { path = "crates/bevy_cef_core" }
+async-channel = { version = "2.5" }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1" }
+raw-window-handle = "0.6"
+
+[dependencies]
+bevy = { workspace = true }
+bevy_remote = { workspace = true }
+cef = { workspace = true }
+bevy_cef_core = { workspace = true }
+async-channel = { version = "2.5" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+raw-window-handle = "0.6"
+
+[dev-dependencies]
+bevy = { workspace = true, features = ["file_watcher"]}
+bevy_cef = { workspace = true, features = ["debug"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc = { version = "0.2" }
+
+[features]
+default = []
+serialize = ["bevy/serialize"]
+debug = ["bevy_cef_core/debug"]

@@ -1,0 +1,7 @@
+
+{
+  "permissions": {
+    "allow": ["WebFetch", "WebSearch"],
+    "deny": ["Read(./.env)", "Read(./secrets/**)"]
+  }
+}
