@@ -61,7 +61,7 @@ serde_json = { workspace = true }
 raw-window-handle = "0.6"
 
 [dev-dependencies]
-bevy = { workspace = true, features = ["tonemapping_luts", "multi_threaded", "file_watcher"]}
+bevy = { workspace = true, default-features = true, features = ["file_watcher"]}
 bevy_cef = { workspace = true, features = ["debug"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]

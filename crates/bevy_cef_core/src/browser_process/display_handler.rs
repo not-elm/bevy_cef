@@ -91,7 +91,9 @@ impl ImplDisplayHandler for DisplayHandlerBuilder {
     fn on_cursor_change(
         &self,
         _browser: Option<&mut Browser>,
-        _cursor: *mut u8,
+        #[cfg(target_os = "macos")] _cursor: *mut u8,
+        #[cfg(target_os = "windows")] _cursor: *mut cef_dll_sys::HICON__,
+        #[cfg(target_os = "linux")] _cursor: u64,
         type_: CursorType,
         _: Option<&CursorInfo>,
     ) -> c_int {

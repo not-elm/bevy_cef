@@ -1,4 +1,4 @@
-use bevy_cef_core::prelude::{DebugLibraryLoader, RenderProcessAppBuilder};
+use bevy_cef_core::prelude::*;
 use cef::{args::Args, *};
 
 fn main() {
