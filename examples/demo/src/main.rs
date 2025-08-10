@@ -12,7 +12,7 @@ fn main() {
                 spawn_camera,
                 spawn_directional_light,
                 spawn_github_webview,
-                spawn_google_search_webview,
+                spawn_github_io_webview,
                 spawn_ground,
                 enable_ime,
             ),
@@ -64,13 +64,13 @@ fn spawn_github_webview(
     ));
 }
 
-fn spawn_google_search_webview(
+fn spawn_github_io_webview(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<WebviewExtendStandardMaterial>>,
 ) {
     commands.spawn((
-        CefWebviewUri::new("https://not-elm.github.io/bevy_cef/"),
+        CefWebviewUri::new("https://not-elm.github.io/bevy_cef"),
         WebviewSize(Vec2::splat(800.0)),
         Mesh3d(meshes.add(Plane3d::new(Vec3::Z, Vec2::ONE))),
         MeshMaterial3d(materials.add(WebviewExtendStandardMaterial::default())),

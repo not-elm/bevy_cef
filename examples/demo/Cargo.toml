@@ -8,7 +8,6 @@ repository.workspace = true
 publish = false
 
 [dependencies]
-bevy = { workspace = true, features = ["file_watcher"]}
-bevy_remote = { workspace = true }
+bevy = { workspace = true, default-features = true, features = ["file_watcher"]}
 bevy_cef = { workspace = true, features = ["debug"] }
 
