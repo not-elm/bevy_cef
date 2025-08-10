@@ -52,7 +52,6 @@ impl ImplApp for BrowserProcessAppBuilder {
         let Some(command_line) = command_line else {
             return;
         };
-        //TODO: フラグで切り替えるようにする
         command_line.append_switch(Some(&"use-mock-keychain".into()));
         #[cfg(feature = "debug")]
         {

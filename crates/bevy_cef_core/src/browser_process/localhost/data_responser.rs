@@ -15,7 +15,7 @@ impl DataResponser {
     pub fn prepare(&mut self, data: Vec<u8>, range: &Option<(usize, Option<usize>)>) {
         if let Some((start, end)) = range {
             self.offset = *start;
-            self.end_offset = end.unwrap_or(data.len()-1);
+            self.end_offset = end.unwrap_or(data.len());
             self.data = data;
         } else {
             self.offset = 0;
@@ -40,7 +40,7 @@ impl DataResponser {
             return None;
         }
 
-        let slice = &self.data[start..=end.min(self.data.len()-1)];
+        let slice = &self.data[start..end.min(self.data.len())];
         self.offset += slice.len();
         Some(slice)
     }
