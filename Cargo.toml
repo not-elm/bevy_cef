@@ -62,7 +62,6 @@ raw-window-handle = "0.6"
 
 [dev-dependencies]
 bevy = { workspace = true, default-features = true, features = ["file_watcher"]}
-bevy_cef = { workspace = true, features = ["debug"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = { version = "0.2" }
