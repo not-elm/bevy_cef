@@ -74,4 +74,6 @@ jobs:
       - name: Check format
         run: cargo fmt --all -- --check
 
-
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
