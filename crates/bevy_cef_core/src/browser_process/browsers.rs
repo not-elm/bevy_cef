@@ -62,7 +62,7 @@ impl Browsers {
         ipc_event_sender: Sender<IpcEventRaw>,
         brp_sender: Sender<BrpMessage>,
         system_cursor_icon_sender: SystemCursorIconSenderInner,
-        window_handle: Option<RawWindowHandle>,
+        _window_handle: Option<RawWindowHandle>,
     ) {
         let mut context = Self::request_context(requester);
         let size = Rc::new(Cell::new(webview_size));
@@ -70,7 +70,8 @@ impl Browsers {
             Some(&WindowInfo {
                 windowless_rendering_enabled: true as _,
                 external_begin_frame_enabled: true as _,
-                parent_view: match window_handle {
+                #[cfg(not(target_os = "linux"))]
+                parent_view: match _window_handle {
                     Some(RawWindowHandle::AppKit(handle)) => handle.ns_view.as_ptr(),
                     Some(RawWindowHandle::Win32(handle)) => handle.hwnd.get() as _,
                     Some(RawWindowHandle::Xlib(handle)) => handle.window as _,
