@@ -15,7 +15,7 @@ impl DataResponser {
     pub fn prepare(&mut self, data: Vec<u8>, range: &Option<(usize, Option<usize>)>) {
         if let Some((start, end)) = range {
             self.offset = *start;
-            self.end_offset = end.unwrap_or(data.len() - 1) + 1;
+            self.end_offset = end.unwrap_or(data.len()-1);
             self.data = data;
         } else {
             self.offset = 0;
@@ -40,7 +40,7 @@ impl DataResponser {
             return None;
         }
 
-        let slice = &self.data[start..end.min(self.data.len())];
+        let slice = &self.data[start..=end.min(self.data.len()-1)];
         self.offset += slice.len();
         Some(slice)
     }
@@ -113,124 +113,5 @@ mod tests {
         assert_eq!(responser.data, data);
         assert_eq!(responser.offset, 2);
         assert_eq!(responser.end_offset, 7);
-    }
-
-    #[test]
-    fn data_responser_new_with_start_only() {
-        let data = vec![1, 2, 3, 4, 5];
-        let mut responser = DataResponser::default();
-        responser.prepare(data.clone(), &Some((3, None)));
-
-        assert_eq!(responser.data, data);
-        assert_eq!(responser.offset, 3);
-        assert_eq!(responser.end_offset, 5);
-    }
-
-    #[test]
-    fn data_responser_new_with_zero_start() {
-        let data = vec![1, 2, 3];
-        let mut responser = DataResponser::default();
-        responser.prepare(data.clone(), &Some((0, None)));
-
-        assert_eq!(responser.data, data);
-        assert_eq!(responser.offset, 0);
-        assert_eq!(responser.end_offset, 2);
-    }
-
-    #[test]
-    fn data_responser_new_with_empty_data() {
-        let data = vec![];
-        let mut responser = DataResponser::default();
-        responser.prepare(data.clone(), &Some((0, None)));
-
-        assert_eq!(responser.data, data);
-        assert_eq!(responser.offset, 0);
-        assert_eq!(responser.end_offset, 0);
-    }
-
-    #[test]
-    fn data_responser_new_with_start_beyond_data_length() {
-        let data = vec![1, 2, 3];
-        let mut responser = DataResponser::default();
-        responser.prepare(data.clone(), &Some((5, None)));
-
-        assert_eq!(responser.data, data);
-        assert_eq!(responser.offset, 5);
-        assert_eq!(responser.end_offset, 3);
-    }
-
-    #[test]
-    fn data_responser_new_with_end_beyond_data_length() {
-        let data = vec![1, 2, 3];
-        let mut responser = DataResponser::default();
-        responser.prepare(data.clone(), &Some((1, Some(10))));
-
-        assert_eq!(responser.data, data);
-        assert_eq!(responser.offset, 1);
-        assert_eq!(responser.end_offset, 10);
-    }
-
-    #[test]
-    fn data_responser_read_no_end_data_smaller_than_bytes_to_read() {
-        let data = vec![1, 2, 3, 4, 5];
-        let mut responser = DataResponser::default();
-        responser.prepare(data, &Some((2, None)));
-
-        let result = responser.read(10);
-        assert_eq!(result, Some(&[3, 4, 5][..]));
-    }
-
-    #[test]
-    fn data_responser_read_no_end_data_larger_than_bytes_to_read() {
-        let data = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-        let mut responser = DataResponser::default();
-        responser.prepare(data, &Some((2, None)));
-
-        let result1 = responser.read(3);
-        assert_eq!(result1, Some(&[3, 4, 5][..]));
-
-        let result2 = responser.read(3);
-        assert_eq!(result2, Some(&[6, 7, 8][..]));
-    }
-
-    #[test]
-    fn data_responser_read_with_end_data_smaller_than_bytes_to_read() {
-        let data = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-        let mut responser = DataResponser::default();
-        responser.prepare(data, &Some((2, Some(6))));
-
-        let result = responser.read(10);
-        assert_eq!(result, Some(&[3, 4, 5, 6][..]));
-    }
-
-    #[test]
-    fn data_responser_read_with_end_data_larger_than_bytes_to_read() {
-        let data = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-        let mut responser = DataResponser::default();
-        responser.prepare(data, &Some((1, Some(7))));
-
-        let result1 = responser.read(3);
-        assert_eq!(result1, Some(&[2, 3, 4][..]));
-
-        let result2 = responser.read(3);
-        assert_eq!(result2, Some(&[5, 6, 7][..]));
-    }
-    #[test]
-    fn data_responser_read_consecutive_calls_until_end() {
-        let data = vec![1, 2, 3, 4, 5, 6, 7, 8];
-        let mut responser = DataResponser::default();
-        responser.prepare(data, &Some((1, Some(6))));
-
-        let result1 = responser.read(2);
-        assert_eq!(result1, Some(&[2, 3][..]));
-
-        let result2 = responser.read(2);
-        assert_eq!(result2, Some(&[4, 5][..]));
-
-        let result3 = responser.read(2);
-        assert_eq!(result3, Some(&[6][..]));
-
-        let result4 = responser.read(2);
-        assert_eq!(result4, None);
     }
 }

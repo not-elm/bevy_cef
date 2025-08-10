@@ -1,4 +1,6 @@
+#[cfg(all(target_os = "macos", feature = "debug"))]
 use std::env::home_dir;
+#[cfg(all(target_os = "macos", feature = "debug"))]
 use std::process::Command;
 
 fn main() -> std::io::Result<()> {
@@ -12,6 +14,7 @@ fn main() -> std::io::Result<()> {
     Ok(())
 }
 
+#[cfg(all(target_os = "macos", feature = "debug"))]
 fn install_bevy_cef_debug_render_process() -> std::io::Result<()> {
     let bevy_cef_render_process_path = home_dir()
         .unwrap()
@@ -26,6 +29,7 @@ fn install_bevy_cef_debug_render_process() -> std::io::Result<()> {
     Ok(())
 }
 
+#[cfg(all(target_os = "macos", feature = "debug"))]
 fn install_export_cef_dir() -> std::io::Result<()> {
     let export_cef_dir_path = home_dir()
         .unwrap()
@@ -40,6 +44,7 @@ fn install_export_cef_dir() -> std::io::Result<()> {
     Ok(())
 }
 
+#[cfg(all(target_os = "macos", feature = "debug"))]
 fn export_cef_dir() -> std::io::Result<()> {
     let cef_dir = home_dir().unwrap().join(".local").join("share").join("cef");
     if cef_dir.exists() {
