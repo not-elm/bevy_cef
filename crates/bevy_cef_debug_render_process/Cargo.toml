@@ -1,5 +1,6 @@
 [package]
 name = "bevy_cef_debug_render_process"
+description = "Debug render process for bevy_cef"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

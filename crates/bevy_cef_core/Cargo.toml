@@ -1,5 +1,6 @@
 [package]
 name = "bevy_cef_core"
+description = "Core library for bevy_cef"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
