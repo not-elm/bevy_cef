@@ -4,11 +4,8 @@
 
 use bevy::prelude::*;
 use bevy::time::common_conditions::on_timer;
-use bevy::window::PrimaryWindow;
 use bevy_cef::prelude::*;
 use bevy_remote::{BrpResult, RemotePlugin};
-use cef::Window;
-use serde::Deserialize;
 use std::time::Duration;
 
 fn main() {

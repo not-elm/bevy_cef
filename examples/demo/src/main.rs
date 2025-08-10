@@ -56,7 +56,7 @@ fn spawn_github_webview(
     mut materials: ResMut<Assets<WebviewExtendStandardMaterial>>,
 ) {
     commands.spawn((
-        CefWebviewUri("https://github.com/not-elm".to_string()),
+        CefWebviewUri::new("https://github.com/not-elm/bevy_cef"),
         Mesh3d(meshes.add(Plane3d::new(Vec3::Z, Vec2::ONE))),
         WebviewSize(Vec2::splat(800.0)),
         MeshMaterial3d(materials.add(WebviewExtendStandardMaterial::default())),
@@ -70,7 +70,7 @@ fn spawn_google_search_webview(
     mut materials: ResMut<Assets<WebviewExtendStandardMaterial>>,
 ) {
     commands.spawn((
-        CefWebviewUri("https://www.youtube.com/".to_string()),
+        CefWebviewUri::new("https://not-elm.github.io/bevy_cef/"),
         WebviewSize(Vec2::splat(800.0)),
         Mesh3d(meshes.add(Plane3d::new(Vec3::Z, Vec2::ONE))),
         MeshMaterial3d(materials.add(WebviewExtendStandardMaterial::default())),
