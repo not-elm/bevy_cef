@@ -22,17 +22,15 @@ pub(crate) struct SystemCursorIconSender(Sender<SystemCursorIcon>);
 pub(crate) struct SystemCursorIconReceiver(pub(crate) Receiver<SystemCursorIcon>);
 
 fn update_cursor_icon(
-    par_commands: ParallelCommands,
+    mut commands: Commands,
     cursor_icon_receiver: Res<SystemCursorIconReceiver>,
     windows: Query<Entity>,
 ) {
     while let Ok(cursor_icon) = cursor_icon_receiver.0.try_recv() {
-        windows.par_iter().for_each(|window| {
-            par_commands.command_scope(|mut commands| {
-                commands
-                    .entity(window)
-                    .insert(CursorIcon::System(cursor_icon));
-            });
+        windows.iter().for_each(|window| {
+            commands
+                .entity(window)
+                .insert(CursorIcon::System(cursor_icon));
         });
     }
 }

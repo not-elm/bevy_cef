@@ -6,7 +6,8 @@
 
 ### Bug Fixes
 
-- Fixed so that webview can detect pointers correctly even if it is not the root entity.
+- Fixed so that the webview can detect pointers correctly even if it is not the root entity.
+- Avoid a crash when updating the cursor icon
 
 ### Breaking Changes
 
