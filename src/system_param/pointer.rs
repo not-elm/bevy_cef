@@ -14,7 +14,7 @@ pub struct WebviewPointer<'w, 's, C: Component = Camera3d> {
         (&'static GlobalTransform, &'static WebviewSize),
         (With<CefWebviewUri>, Without<Camera>),
     >,
-    parents: Query<'w, 's, &'static ChildOf>,
+    parents: Query<'w, 's, (Option<&'static ChildOf>, Has<CefWebviewUri>)>,
 }
 
 impl<C: Component> WebviewPointer<'_, '_, C> {
@@ -22,7 +22,7 @@ impl<C: Component> WebviewPointer<'_, '_, C> {
     where
         P: Clone + Reflect + Debug,
     {
-        let webview = self.parents.root_ancestor(trigger.target);
+        let webview = find_webview_entity(trigger.target, &self.parents)?;
         let pos = self.pointer_pos(webview, trigger.pointer_location.position)?;
         Some((webview, pos))
     }
@@ -42,6 +42,20 @@ impl<C: Component> WebviewPointer<'_, '_, C> {
             )
         })
     }
+}
+
+fn find_webview_entity(
+    entity: Entity,
+    parents: &Query<(Option<&ChildOf>, Has<CefWebviewUri>)>,
+) -> Option<Entity> {
+    let (child_of, has_webview) = parents.get(entity).ok()?;
+    if has_webview {
+        return Some(entity);
+    }
+    if let Some(parent) = child_of {
+        return find_webview_entity(parent.0, parents);
+    }
+    None
 }
 
 fn pointer_to_webview_uv(
