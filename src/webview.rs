@@ -1,6 +1,6 @@
 use crate::common::{CefWebviewUri, HostWindow, IpcEventRawSender, WebviewSize};
 use crate::cursor_icon::SystemCursorIconSender;
-use crate::prelude::InitializeScripts;
+use crate::prelude::PreloadScripts;
 use crate::webview::mesh::MeshWebviewPlugin;
 use bevy::ecs::component::HookContext;
 use bevy::ecs::world::DeferredWorld;
@@ -109,7 +109,7 @@ fn create_webview(
             Entity,
             &CefWebviewUri,
             &WebviewSize,
-            &InitializeScripts,
+            &PreloadScripts,
             Option<&HostWindow>,
         ),
         Added<CefWebviewUri>,

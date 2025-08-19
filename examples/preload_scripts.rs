@@ -1,4 +1,6 @@
-//! You can use [`InitializeScripts`] to execute scripts when the page is loaded.
+//! You can use [`PreloadScripts`] to execute scripts when the webview is initialized.
+//!
+//! [`PreloadScripts`] is executed before the scripts in the HTML.
 
 use bevy::prelude::*;
 use bevy_cef::prelude::*;
@@ -36,8 +38,7 @@ fn spawn_webview(
         CefWebviewUri::new("https://github.com/not-elm/bevy_cef"),
         Mesh3d(meshes.add(Plane3d::new(Vec3::Z, Vec2::ONE))),
         MeshMaterial3d(materials.add(WebviewExtendStandardMaterial::default())),
-        InitializeScripts::from([
-            "alert('Hello World!');",
-        ]),
+        // Here, we add a simple script to show an alert.
+        PreloadScripts::from(["alert('Hello World!')"]),
     ));
 }

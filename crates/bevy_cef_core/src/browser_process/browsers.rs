@@ -7,7 +7,13 @@ use async_channel::{Sender, TryRecvError};
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 use bevy_remote::BrpMessage;
-use cef::{Browser, BrowserHost, BrowserSettings, CefString, Client, CompositionUnderline, DictionaryValue, ImplBrowser, ImplBrowserHost, ImplDictionaryValue, ImplFrame, ImplListValue, ImplProcessMessage, ImplRequestContext, MouseButtonType, ProcessId, Range, RequestContext, RequestContextSettings, WindowInfo, browser_host_create_browser_sync, process_message_create, dictionary_value_create};
+use cef::{
+    Browser, BrowserHost, BrowserSettings, CefString, Client, CompositionUnderline,
+    DictionaryValue, ImplBrowser, ImplBrowserHost, ImplDictionaryValue, ImplFrame, ImplListValue,
+    ImplProcessMessage, ImplRequestContext, MouseButtonType, ProcessId, Range, RequestContext,
+    RequestContextSettings, WindowInfo, browser_host_create_browser_sync, dictionary_value_create,
+    process_message_create,
+};
 use cef_dll_sys::{cef_event_flags_t, cef_mouse_button_type_t};
 #[allow(deprecated)]
 use raw_window_handle::RawWindowHandle;
@@ -89,16 +95,15 @@ impl Browsers {
                 windowless_frame_rate: 60,
                 ..Default::default()
             }),
-            None,
+            Self::create_extra_info(initialize_scripts).as_mut(),
             context.as_mut(),
         )
         .expect("Failed to create browser");
-        let host = browser.host().expect("Failed to get browser host");
-        Self::inject_init_script(&host, initialize_scripts);
+
         self.browsers.insert(
             webview,
             WebviewBrowser {
-                host,
+                host: browser.host().expect("Failed to get browser host"),
                 client: browser,
                 size,
             },
@@ -414,21 +419,16 @@ impl Browsers {
             .and_then(|b| b.client.focused_frame().is_some().then_some(b))
     }
 
-    fn inject_init_script(host: &BrowserHost, scripts: &[String]) {
-        let Some(mut params) = dictionary_value_create() else{
-            return;
-        };
-        params.set_string(
-            Some(&CefString::from("source")),
+    fn create_extra_info(scripts: &[String]) -> Option<DictionaryValue> {
+        if scripts.is_empty() {
+            return None;
+        }
+        let extra = dictionary_value_create()?;
+        extra.set_string(
+            Some(&CefString::from(INIT_SCRIPT_KEY)),
             Some(&CefString::from(scripts.join(";").as_str())),
         );
-        params.set_bool(Some(&CefString::from("runImmediately")), 1); // true
-
-        let _id = host.execute_dev_tools_method(
-            0,
-            Some(&CefString::from("Page.addScriptToEvaluateOnNewDocument")),
-            Some(&mut params),
-        );
+        Some(extra)
     }
 }
 
