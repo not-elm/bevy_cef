@@ -9,7 +9,9 @@ impl Plugin for WebviewCoreComponentsPlugin {
         app.register_type::<WebviewSize>()
             .register_type::<CefWebviewUri>()
             .register_type::<HostWindow>()
-            .register_type::<ZoomLevel>();
+            .register_type::<ZoomLevel>()
+            .register_type::<AudioMuted>()
+            .register_type::<PreloadScripts>();
     }
 }
 
@@ -21,7 +23,7 @@ impl Plugin for WebviewCoreComponentsPlugin {
 /// Alternatively, you can also use [`CefWebviewUri::local`].
 #[derive(Component, Debug, Clone, PartialEq, Eq, Hash, Reflect)]
 #[reflect(Component, Debug)]
-#[require(WebviewSize, ZoomLevel, AudioMuted)]
+#[require(WebviewSize, ZoomLevel, AudioMuted, PreloadScripts)]
 #[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serialize", reflect(Serialize, Deserialize))]
 pub struct CefWebviewUri(pub String);
@@ -78,3 +80,20 @@ pub struct ZoomLevel(pub f64);
 #[derive(Reflect, Component, Debug, Copy, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[reflect(Component, Debug, Default, Serialize, Deserialize)]
 pub struct AudioMuted(pub bool);
+
+/// This component is used to preload scripts in the webview.
+///
+/// Scripts specified in this component are executed before the scripts in the HTML.
+#[derive(Reflect, Component, Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[reflect(Component, Debug, Default, Serialize, Deserialize)]
+pub struct PreloadScripts(pub Vec<String>);
+
+impl<L, S> From<L> for PreloadScripts
+where
+    L: IntoIterator<Item = S>,
+    S: Into<String>,
+{
+    fn from(scripts: L) -> Self {
+        Self(scripts.into_iter().map(Into::into).collect())
+    }
+}

@@ -1,5 +1,6 @@
 use crate::common::{CefWebviewUri, HostWindow, IpcEventRawSender, WebviewSize};
 use crate::cursor_icon::SystemCursorIconSender;
+use crate::prelude::PreloadScripts;
 use crate::webview::mesh::MeshWebviewPlugin;
 use bevy::ecs::component::HookContext;
 use bevy::ecs::world::DeferredWorld;
@@ -104,13 +105,19 @@ fn create_webview(
     cursor_icon_sender: Res<SystemCursorIconSender>,
     winit_windows: NonSend<WinitWindows>,
     webviews: Query<
-        (Entity, &CefWebviewUri, &WebviewSize, Option<&HostWindow>),
+        (
+            Entity,
+            &CefWebviewUri,
+            &WebviewSize,
+            &PreloadScripts,
+            Option<&HostWindow>,
+        ),
         Added<CefWebviewUri>,
     >,
     primary_window: Query<Entity, With<PrimaryWindow>>,
 ) {
-    for (entity, uri, size, parent) in webviews.iter() {
-        let host_window = parent
+    for (entity, uri, size, initialize_scripts, host_window) in webviews.iter() {
+        let host_window = host_window
             .and_then(|w| winit_windows.get_window(w.0))
             .or_else(|| winit_windows.get_window(primary_window.single().ok()?))
             .and_then(|w| {
@@ -125,6 +132,7 @@ fn create_webview(
             ipc_event_sender.0.clone(),
             brp_sender.clone(),
             cursor_icon_sender.clone(),
+            &initialize_scripts.0,
             host_window,
         );
     }

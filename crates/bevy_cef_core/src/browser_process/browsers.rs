@@ -8,10 +8,11 @@ use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 use bevy_remote::BrpMessage;
 use cef::{
-    Browser, BrowserHost, BrowserSettings, Client, CompositionUnderline, ImplBrowser,
-    ImplBrowserHost, ImplFrame, ImplListValue, ImplProcessMessage, ImplRequestContext,
-    MouseButtonType, ProcessId, Range, RequestContext, RequestContextSettings, WindowInfo,
-    browser_host_create_browser_sync, process_message_create,
+    Browser, BrowserHost, BrowserSettings, CefString, Client, CompositionUnderline,
+    DictionaryValue, ImplBrowser, ImplBrowserHost, ImplDictionaryValue, ImplFrame, ImplListValue,
+    ImplProcessMessage, ImplRequestContext, MouseButtonType, ProcessId, Range, RequestContext,
+    RequestContextSettings, WindowInfo, browser_host_create_browser_sync, dictionary_value_create,
+    process_message_create,
 };
 use cef_dll_sys::{cef_event_flags_t, cef_mouse_button_type_t};
 #[allow(deprecated)]
@@ -62,6 +63,7 @@ impl Browsers {
         ipc_event_sender: Sender<IpcEventRaw>,
         brp_sender: Sender<BrpMessage>,
         system_cursor_icon_sender: SystemCursorIconSenderInner,
+        initialize_scripts: &[String],
         _window_handle: Option<RawWindowHandle>,
     ) {
         let mut context = Self::request_context(requester);
@@ -93,10 +95,11 @@ impl Browsers {
                 windowless_frame_rate: 60,
                 ..Default::default()
             }),
-            None,
+            Self::create_extra_info(initialize_scripts).as_mut(),
             context.as_mut(),
         )
         .expect("Failed to create browser");
+
         self.browsers.insert(
             webview,
             WebviewBrowser {
@@ -414,6 +417,18 @@ impl Browsers {
         self.browsers
             .get(webview)
             .and_then(|b| b.client.focused_frame().is_some().then_some(b))
+    }
+
+    fn create_extra_info(scripts: &[String]) -> Option<DictionaryValue> {
+        if scripts.is_empty() {
+            return None;
+        }
+        let extra = dictionary_value_create()?;
+        extra.set_string(
+            Some(&CefString::from(INIT_SCRIPT_KEY)),
+            Some(&CefString::from(scripts.join(";").as_str())),
+        );
+        Some(extra)
     }
 }
 
