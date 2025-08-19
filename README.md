@@ -8,7 +8,6 @@ and bidirectional communication between JavaScript and Bevy.
 [![Documentation](https://docs.rs/bevy_cef/badge.svg)](https://docs.rs/bevy_cef)
 [![License](https://img.shields.io/badge/license-Apache%202.0%20OR%20MIT-blue.svg)](https://github.com/not-elm/bevy_cef#license)
 
-
 https://github.com/user-attachments/assets/54f476d0-8eda-4030-a3f6-dc4f2f54209f
 
 
@@ -37,13 +36,16 @@ bevy_cef = "0.1.0"
 
 On macOS, using CEF typically requires creating an app bundle.
 For development, this library provides a `debug` feature flag.
-When enabled, it installs a debug renderer process and the CEF framework locally so the app can run standalone.
+Once enabled, you can run the app without needing the bundle.
 
 > [!NOTE]
 > Use this feature only during development; for releases, bundle the renderer process and the CEF framework inside the
 > app.
 
-### Manual Installation(macOS)
+### Installation debug tools(macOS)
+
+When using `debug`, you need to prepare a separate CEF framework and debug render process.
+Please follow the steps below to set it up.
 
 ```shell
 > cargo install export-cef-dir
@@ -82,23 +84,16 @@ We welcome contributions! Here's how you can help:
 
 1. Clone the repository
 2. Install Rust and Cargo
-3. Run `cargo build --features debug` to set up CEF
-4. Run examples to test functionality
+3. Install the debugging tool with reference to [Installation debug tools](#installation-debug-toolsmacos).
+4. Run `cargo build --features debug` to build the project
 
-### Code Standards
-
-- Follow Rust style guidelines (`cargo fmt`)
-- Pass all lints (`cargo clippy`)
-- Add tests for new features
-- Update documentation for API changes
-
-## 📋 Version Compatibility
+## Version Compatibility
 
 | Bevy | bevy_cef | CEF | Status    |
 |------|----------|-----|-----------|
-| 0.16 | 0.1.0    | 138 | ✅ Current |
+| 0.16 | 0.1.0    | 139 | ✅ Current |
 
-## ⚖️ License
+## License
 
 Licensed under either of
 
@@ -112,8 +107,6 @@ at your option.
 Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as
 defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
 
----
+## Contact
 
-**Built with 🦀 Rust and ❤️ for the Bevy community**
-
-
+- [Discord](https://discord.com/channels/691052431525675048/1404180578969981018)
