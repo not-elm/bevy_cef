@@ -18,6 +18,12 @@ impl HeadersResponser {
         };
         self.headers.clear();
         self.response_length = obtain_response_length(&cef_response.data, range);
+        self.headers
+            .push(("Access-Control-Allow-Origin".to_string(), "*".to_string()));
+        self.headers
+            .push(("Access-Control-Allow-Methods".to_string(), "*".to_string()));
+        self.headers
+            .push(("Access-Control-Allow-Headers".to_string(), "*".to_string()));
         if let Some(content_range) = content_range_header_value(&cef_response.data, range) {
             self.headers
                 .push(("Content-Range".to_string(), content_range));
