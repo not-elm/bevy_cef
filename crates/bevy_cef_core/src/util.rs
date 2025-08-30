@@ -12,8 +12,8 @@ use cef::{
 };
 use cef_dll_sys::_cef_string_utf16_t;
 use cef_dll_sys::cef_scheme_options_t::{
-    CEF_SCHEME_OPTION_CORS_ENABLED, CEF_SCHEME_OPTION_LOCAL, CEF_SCHEME_OPTION_SECURE,
-    CEF_SCHEME_OPTION_STANDARD,
+    CEF_SCHEME_OPTION_CORS_ENABLED, CEF_SCHEME_OPTION_FETCH_ENABLED, CEF_SCHEME_OPTION_LOCAL,
+    CEF_SCHEME_OPTION_SECURE, CEF_SCHEME_OPTION_STANDARD,
 };
 use std::env::home_dir;
 use std::path::PathBuf;
@@ -27,6 +27,7 @@ pub fn cef_scheme_flags() -> u32 {
         | CEF_SCHEME_OPTION_SECURE as u32
         | CEF_SCHEME_OPTION_LOCAL as u32
         | CEF_SCHEME_OPTION_CORS_ENABLED as u32
+        | CEF_SCHEME_OPTION_FETCH_ENABLED as u32
 }
 
 pub fn debug_chromium_libraries_path() -> PathBuf {
@@ -42,11 +43,7 @@ pub fn debug_cef_path() -> PathBuf {
 }
 
 pub fn debug_render_process_path() -> PathBuf {
-    cargo_bin_path().join("bevy_cef_debug_render_process")
-}
-
-pub fn cargo_bin_path() -> PathBuf {
-    home_dir().unwrap().join(".cargo").join("bin")
+    debug_chromium_libraries_path().join("bevy_cef_debug_render_process")
 }
 
 pub trait IntoString {
