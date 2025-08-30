@@ -50,7 +50,8 @@ Please follow the steps below to set it up.
 ```shell
 > cargo install export-cef-dir
 > export-cef-dir --force $HOME/.local/share/cef
-> cargo install bevy_cef_debug_render_process
+> cargo install bevy_cef_debug_render_process "$HOME/.local/share/cef/Chromium Embedded Framework.framework/Libraries"
+> mv $HOME/.cargo/bin/bevy_cef_debug_render_process $HOME/.cargo/bin/bevy_cef_render_process
 ```
 
 ## Examples

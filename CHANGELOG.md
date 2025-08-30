@@ -3,6 +3,7 @@
 ### Features
 
 - Added `PreloadScripts` component for specifying JavaScript to be executed when the page is initialized.
+- Enables GPU when debugging.
 
 ### Bug Fixes
 
