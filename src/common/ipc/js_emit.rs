@@ -3,12 +3,33 @@ use bevy::prelude::*;
 use bevy_cef_core::prelude::*;
 use serde::de::DeserializeOwned;
 use std::marker::PhantomData;
+use std::ops::{Deref, DerefMut};
 
 #[derive(Debug, EntityEvent)]
-pub struct Receive<M: Sync + Send + 'static>{
+pub struct Receive<M: Sync + Send + 'static> {
     #[event_target]
     pub webview: Entity,
     pub payload: M,
+}
+
+impl<M> Deref for Receive<M>
+where
+    M: Sync + Send + 'static,
+{
+    type Target = M;
+
+    fn deref(&self) -> &Self::Target {
+        &self.payload
+    }
+}
+
+impl<M> DerefMut for Receive<M>
+where
+    M: Sync + Send + 'static,
+{
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.payload
+    }
 }
 
 pub struct JsEmitEventPlugin<E: DeserializeOwned>(PhantomData<E>);

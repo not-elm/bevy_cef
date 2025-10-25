@@ -63,13 +63,13 @@ fn spawn_webview(
 }
 
 fn show_devtool(mut commands: Commands, webviews: Query<Entity, With<DebugWebview>>) {
-    commands
-        .entity(webviews.single().unwrap())
-        .trigger(RequestShowDevTool);
+    commands.trigger(RequestShowDevTool {
+        webview: webviews.single().unwrap(),
+    });
 }
 
 fn close_devtool(mut commands: Commands, webviews: Query<Entity, With<DebugWebview>>) {
-    commands
-        .entity(webviews.single().unwrap())
-        .trigger(RequestCloseDevtool);
+    commands.trigger(RequestCloseDevtool{
+        webview: webviews.single().unwrap(),
+    });
 }

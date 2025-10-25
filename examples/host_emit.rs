@@ -52,7 +52,5 @@ fn emit_count(
     webviews: Query<Entity, With<DebugWebview>>,
 ) {
     *count += 1;
-    commands
-        .entity(webviews.single().unwrap())
-        .trigger(HostEmitEvent::new("count", &*count));
+    commands.trigger(HostEmitEvent::new(webviews.single().unwrap(),"count", &*count));
 }
