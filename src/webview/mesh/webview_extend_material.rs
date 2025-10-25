@@ -25,17 +25,19 @@ where
 
 impl<E> Plugin for WebviewExtendMaterialPlugin<E>
 where
-    E: MaterialExtension + Default,
-    <E as AsBindGroup>::Data: PartialEq + Eq + Hash + Clone,
+    E: MaterialExtension + AsBindGroup<Data: PartialEq + Eq + Hash + Clone> + Default,
 {
     fn build(&self, app: &mut App) {
-        app.add_plugins(MaterialPlugin::<WebviewExtendedMaterial<E>>::default())
+        let a = MaterialPlugin::<WebviewExtendedMaterial<E>>::default();
+        app
+             .add_plugins(a)
+
             .add_systems(PostUpdate, render::<E>);
     }
 }
 
 fn render<E: MaterialExtension>(
-    mut er: EventReader<RenderTexture>,
+    mut er: MessageReader<RenderTextureMessage>,
     mut images: ResMut<Assets<Image>>,
     mut materials: ResMut<Assets<WebviewExtendedMaterial<E>>>,
     webviews: Query<&MeshMaterial3d<WebviewExtendedMaterial<E>>>,

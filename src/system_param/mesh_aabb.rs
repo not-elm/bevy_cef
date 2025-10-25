@@ -1,7 +1,7 @@
+use bevy::camera::primitives::Aabb;
 use bevy::ecs::system::SystemParam;
 use bevy::math::Vec3;
-use bevy::prelude::{Children, Entity, GlobalTransform, Query};
-use bevy::render::primitives::Aabb;
+use bevy::prelude::*;
 
 #[derive(SystemParam)]
 pub struct MeshAabb<'w, 's> {

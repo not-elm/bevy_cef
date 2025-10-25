@@ -42,7 +42,7 @@ pub struct Browsers {
 
 impl Default for Browsers {
     fn default() -> Self {
-        let (sender, receiver) = async_channel::unbounded::<RenderTexture>();
+        let (sender, receiver) = async_channel::unbounded::<RenderTextureMessage>();
         Browsers {
             browsers: HashMap::default(),
             sender,
@@ -222,7 +222,7 @@ impl Browsers {
     }
 
     #[inline]
-    pub fn try_receive_texture(&self) -> core::result::Result<RenderTexture, TryRecvError> {
+    pub fn try_receive_texture(&self) -> core::result::Result<RenderTextureMessage, TryRecvError> {
         self.receiver.try_recv()
     }
 

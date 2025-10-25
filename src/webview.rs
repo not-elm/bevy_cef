@@ -1,8 +1,8 @@
+use bevy::ecs::lifecycle::HookContext;
 use crate::common::{CefWebviewUri, HostWindow, IpcEventRawSender, WebviewSize};
 use crate::cursor_icon::SystemCursorIconSender;
 use crate::prelude::PreloadScripts;
 use crate::webview::mesh::MeshWebviewPlugin;
-use bevy::ecs::component::HookContext;
 use bevy::ecs::world::DeferredWorld;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
@@ -35,9 +35,12 @@ pub mod prelude {
 ///     commands.entity(webviews.single().unwrap()).trigger(RequestShowDevTool);
 /// }
 /// ```
-#[derive(Reflect, Debug, Default, Copy, Clone, Serialize, Deserialize, Event)]
-#[reflect(Default, Serialize, Deserialize)]
-pub struct RequestShowDevTool;
+#[derive(Reflect, Debug, Copy, Clone, Serialize, Deserialize, EntityEvent)]
+#[reflect(Serialize, Deserialize)]
+pub struct RequestShowDevTool{
+    #[event_target]
+    pub webview: Entity
+}
 
 /// A Trigger event to request closing the developer tools in a webview.
 ///
@@ -54,9 +57,12 @@ pub struct RequestShowDevTool;
 ///    commands.entity(webviews.single().unwrap()).trigger(RequestCloseDevtool);
 /// }
 /// ```
-#[derive(Reflect, Debug, Default, Copy, Clone, Serialize, Deserialize, Event)]
-#[reflect(Default, Serialize, Deserialize)]
-pub struct RequestCloseDevtool;
+#[derive(Reflect, Debug, Copy, Clone, Serialize, Deserialize, EntityEvent)]
+#[reflect(Serialize, Deserialize)]
+pub struct RequestCloseDevtool{
+    #[event_target]
+    pub webview: Entity
+}
 
 pub struct WebviewPlugin;
 
@@ -147,10 +153,10 @@ fn resize(
     }
 }
 
-fn apply_request_show_devtool(trigger: Trigger<RequestShowDevTool>, browsers: NonSend<Browsers>) {
-    browsers.show_devtool(&trigger.target());
+fn apply_request_show_devtool(trigger: On<RequestShowDevTool>, browsers: NonSend<Browsers>) {
+    browsers.show_devtool(&trigger.webview);
 }
 
-fn apply_request_close_devtool(trigger: Trigger<RequestCloseDevtool>, browsers: NonSend<Browsers>) {
-    browsers.close_devtools(&trigger.target());
+fn apply_request_close_devtool(trigger: On<RequestCloseDevtool>, browsers: NonSend<Browsers>) {
+    browsers.close_devtools(&trigger.webview);
 }

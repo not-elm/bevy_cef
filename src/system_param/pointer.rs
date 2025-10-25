@@ -18,11 +18,11 @@ pub struct WebviewPointer<'w, 's, C: Component = Camera3d> {
 }
 
 impl<C: Component> WebviewPointer<'_, '_, C> {
-    pub fn pos_from_trigger<P>(&self, trigger: &Trigger<Pointer<P>>) -> Option<(Entity, Vec2)>
+    pub fn pos_from_trigger<P>(&self, trigger: &On<Pointer<P>>) -> Option<(Entity, Vec2)>
     where
         P: Clone + Reflect + Debug,
     {
-        let webview = find_webview_entity(trigger.target, &self.parents)?;
+        let webview = find_webview_entity(trigger.entity, &self.parents)?;
         let pos = self.pointer_pos(webview, trigger.pointer_location.position)?;
         Some((webview, pos))
     }

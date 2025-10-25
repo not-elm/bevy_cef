@@ -5,7 +5,7 @@ fn main() {
     let args = Args::new();
     #[cfg(target_os = "macos")]
     let _loader = {
-        let loader = DebugLibraryLoader::new();
+        let loader = cef::library_loader::LibraryLoader::new();
         assert!(loader.load());
         loader
     };
