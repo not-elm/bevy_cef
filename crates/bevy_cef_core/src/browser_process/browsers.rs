@@ -10,11 +10,11 @@ use bevy_remote::BrpMessage;
 use cef::{
     Browser, BrowserHost, BrowserSettings, CefString, Client, CompositionUnderline,
     DictionaryValue, ImplBrowser, ImplBrowserHost, ImplDictionaryValue, ImplFrame, ImplListValue,
-    ImplProcessMessage, ImplRequestContext, MouseButtonType, ProcessId, Range, RequestContext,
-    RequestContextSettings, WindowInfo, browser_host_create_browser_sync, dictionary_value_create,
-    process_message_create,
+    ImplProcessMessage, ImplRequestContext, MouseButtonType, PaintElementType, ProcessId, Range,
+    RequestContext, RequestContextSettings, WindowInfo, browser_host_create_browser_sync,
+    dictionary_value_create, process_message_create,
 };
-use cef_dll_sys::{cef_event_flags_t, cef_mouse_button_type_t};
+use cef_dll_sys::{cef_event_flags_t, cef_mouse_button_type_t, cef_paint_element_type_t};
 #[allow(deprecated)]
 use raw_window_handle::RawWindowHandle;
 use std::cell::Cell;
@@ -31,13 +31,13 @@ pub struct WebviewBrowser {
     pub client: Browser,
     pub host: BrowserHost,
     pub size: SharedViewSize,
+    pub ime_caret: SharedImeCaret,
 }
 
 pub struct Browsers {
     browsers: HashMap<Entity, WebviewBrowser>,
     sender: TextureSender,
     receiver: TextureReceiver,
-    ime_caret: SharedImeCaret,
 }
 
 impl Default for Browsers {
@@ -47,7 +47,6 @@ impl Default for Browsers {
             browsers: HashMap::default(),
             sender,
             receiver,
-            ime_caret: Rc::new(Cell::new(0)),
         }
     }
 }
@@ -68,10 +67,11 @@ impl Browsers {
     ) {
         let mut context = Self::request_context(requester);
         let size = Rc::new(Cell::new(webview_size));
+        let ime_caret = Rc::new(Cell::new(0));
         let browser = browser_host_create_browser_sync(
             Some(&WindowInfo {
                 windowless_rendering_enabled: true as _,
-                external_begin_frame_enabled: true as _,
+                external_begin_frame_enabled: false as _,
                 #[cfg(target_os = "macos")]
                 parent_view: match _window_handle {
                     Some(RawWindowHandle::AppKit(handle)) => handle.ns_view.as_ptr(),
@@ -86,6 +86,7 @@ impl Browsers {
             Some(&mut self.client_handler(
                 webview,
                 size.clone(),
+                ime_caret.clone(),
                 ipc_event_sender,
                 brp_sender,
                 system_cursor_icon_sender,
@@ -99,15 +100,15 @@ impl Browsers {
             context.as_mut(),
         )
         .expect("Failed to create browser");
+        let host = browser.host().expect("Failed to get browser host");
+        let webview_browser = WebviewBrowser {
+            host,
+            client: browser,
+            size,
+            ime_caret,
+        };
 
-        self.browsers.insert(
-            webview,
-            WebviewBrowser {
-                host: browser.host().expect("Failed to get browser host"),
-                client: browser,
-                size,
-            },
-        );
+        self.browsers.insert(webview, webview_browser);
     }
 
     pub fn send_external_begin_frame(&mut self) {
@@ -326,12 +327,12 @@ impl Browsers {
             from: i as _,
             to: i as _,
         };
-        let replacement_range = self.ime_caret_range();
         for browser in self
             .browsers
             .values()
             .filter(|b| b.client.focused_frame().is_some())
         {
+            let replacement_range = Self::ime_caret_range_for(browser);
             browser.host.ime_set_composition(
                 Some(&text.into()),
                 underlines.len(),
@@ -356,12 +357,12 @@ impl Browsers {
     }
 
     pub fn set_ime_commit_text(&self, text: &str) {
-        let replacement_range = self.ime_caret_range();
         for browser in self
             .browsers
             .values()
             .filter(|b| b.client.focused_frame().is_some())
         {
+            let replacement_range = Self::ime_caret_range_for(browser);
             browser
                 .host
                 .ime_commit_text(Some(&text.into()), Some(&replacement_range), 0)
@@ -387,6 +388,7 @@ impl Browsers {
         &self,
         webview: Entity,
         size: SharedViewSize,
+        ime_caret: SharedImeCaret,
         ipc_event_sender: Sender<IpcEventRaw>,
         brp_sender: Sender<BrpMessage>,
         system_cursor_icon_sender: SystemCursorIconSenderInner,
@@ -395,7 +397,7 @@ impl Browsers {
             webview,
             self.sender.clone(),
             size.clone(),
-            self.ime_caret.clone(),
+            ime_caret,
         ))
         .with_display_handler(DisplayHandlerBuilder::build(system_cursor_icon_sender))
         .with_message_handler(JsEmitEventHandler::new(webview, ipc_event_sender))
@@ -404,8 +406,8 @@ impl Browsers {
     }
 
     #[inline]
-    fn ime_caret_range(&self) -> Range {
-        let caret = self.ime_caret.get();
+    fn ime_caret_range_for(browser: &WebviewBrowser) -> Range {
+        let caret = browser.ime_caret.get();
         Range {
             from: caret,
             to: caret,
