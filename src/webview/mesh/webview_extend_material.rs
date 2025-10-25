@@ -5,6 +5,7 @@ use bevy::render::render_resource::AsBindGroup;
 use bevy_cef_core::prelude::*;
 use std::hash::Hash;
 use std::marker::PhantomData;
+use bevy::app::Plugin;
 
 pub type WebviewExtendedMaterial<E> = ExtendedMaterial<WebviewMaterial, E>;
 
@@ -16,7 +17,7 @@ pub struct WebviewExtendMaterialPlugin<E>(PhantomData<E>);
 impl<E> Default for WebviewExtendMaterialPlugin<E>
 where
     E: MaterialExtension + Default,
-    <E as AsBindGroup>::Data: PartialEq + Eq + Hash + Clone,
+    <E as AsBindGroup>::Data: PartialEq + Eq + Hash + Clone + Copy,
 {
     fn default() -> Self {
         Self(PhantomData)
@@ -25,13 +26,11 @@ where
 
 impl<E> Plugin for WebviewExtendMaterialPlugin<E>
 where
-    E: MaterialExtension + AsBindGroup<Data: PartialEq + Eq + Hash + Clone> + Default,
+    E: MaterialExtension + AsBindGroup<Data: PartialEq + Eq + Hash + Clone + Copy> + Default,
 {
     fn build(&self, app: &mut App) {
-        let a = MaterialPlugin::<WebviewExtendedMaterial<E>>::default();
         app
-             .add_plugins(a)
-
+            .add_plugins(MaterialPlugin::<WebviewExtendedMaterial<E>>::default())
             .add_systems(PostUpdate, render::<E>);
     }
 }

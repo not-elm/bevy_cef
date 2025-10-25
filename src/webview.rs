@@ -76,7 +76,7 @@ impl Plugin for WebviewPlugin {
                 Update,
                 (
                     resize.run_if(any_resized),
-                    create_webview.run_if(added_webview),
+                    create_webview.run_if(added_webview.and(a)),
                 ),
             )
             .add_observer(apply_request_show_devtool)
@@ -96,6 +96,10 @@ fn any_resized(webviews: Query<Entity, Changed<WebviewSize>>) -> bool {
 
 fn added_webview(webviews: Query<Entity, Added<CefWebviewUri>>) -> bool {
     !webviews.is_empty()
+}
+
+fn a(world: & World) -> bool{
+    world.contains_non_send::<WinitWindows>()
 }
 
 fn send_external_begin_frame(mut hosts: NonSendMut<Browsers>) {
