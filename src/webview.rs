@@ -1,12 +1,12 @@
-use bevy::ecs::lifecycle::HookContext;
 use crate::common::{CefWebviewUri, HostWindow, IpcEventRawSender, WebviewSize};
 use crate::cursor_icon::SystemCursorIconSender;
 use crate::prelude::PreloadScripts;
 use crate::webview::mesh::MeshWebviewPlugin;
+use bevy::ecs::lifecycle::HookContext;
 use bevy::ecs::world::DeferredWorld;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use bevy::winit::WinitWindows;
+use bevy::winit::{WINIT_WINDOWS, WinitWindows};
 use bevy_cef_core::prelude::*;
 use bevy_remote::BrpSender;
 #[allow(deprecated)]
@@ -37,9 +37,9 @@ pub mod prelude {
 /// ```
 #[derive(Reflect, Debug, Copy, Clone, Serialize, Deserialize, EntityEvent)]
 #[reflect(Serialize, Deserialize)]
-pub struct RequestShowDevTool{
+pub struct RequestShowDevTool {
     #[event_target]
-    pub webview: Entity
+    pub webview: Entity,
 }
 
 /// A Trigger event to request closing the developer tools in a webview.
@@ -59,9 +59,9 @@ pub struct RequestShowDevTool{
 /// ```
 #[derive(Reflect, Debug, Copy, Clone, Serialize, Deserialize, EntityEvent)]
 #[reflect(Serialize, Deserialize)]
-pub struct RequestCloseDevtool{
+pub struct RequestCloseDevtool {
     #[event_target]
-    pub webview: Entity
+    pub webview: Entity,
 }
 
 pub struct WebviewPlugin;
@@ -72,13 +72,7 @@ impl Plugin for WebviewPlugin {
             .init_non_send_resource::<Browsers>()
             .add_plugins((MeshWebviewPlugin,))
             .add_systems(Main, send_external_begin_frame)
-            .add_systems(
-                Update,
-                (
-                    resize.run_if(any_resized),
-                    create_webview.run_if(added_webview.and(a)),
-                ),
-            )
+            .add_systems(Update, (resize.run_if(any_resized), create_webview))
             .add_observer(apply_request_show_devtool)
             .add_observer(apply_request_close_devtool);
 
@@ -98,10 +92,6 @@ fn added_webview(webviews: Query<Entity, Added<CefWebviewUri>>) -> bool {
     !webviews.is_empty()
 }
 
-fn a(world: & World) -> bool{
-    world.contains_non_send::<WinitWindows>()
-}
-
 fn send_external_begin_frame(mut hosts: NonSendMut<Browsers>) {
     hosts.send_external_begin_frame();
 }
@@ -113,7 +103,6 @@ fn create_webview(
     ipc_event_sender: Res<IpcEventRawSender>,
     brp_sender: Res<BrpSender>,
     cursor_icon_sender: Res<SystemCursorIconSender>,
-    winit_windows: NonSend<WinitWindows>,
     webviews: Query<
         (
             Entity,
@@ -127,13 +116,17 @@ fn create_webview(
     primary_window: Query<Entity, With<PrimaryWindow>>,
 ) {
     for (entity, uri, size, initialize_scripts, host_window) in webviews.iter() {
-        let host_window = host_window
-            .and_then(|w| winit_windows.get_window(w.0))
-            .or_else(|| winit_windows.get_window(primary_window.single().ok()?))
-            .and_then(|w| {
-                #[allow(deprecated)]
-                w.raw_window_handle().ok()
-            });
+        let host_window = WINIT_WINDOWS.with(|winit_windows| {
+            let winit_windows = winit_windows.borrow();
+            host_window
+                .and_then(|w| winit_windows.get_window(w.0))
+                .or_else(|| winit_windows.get_window(primary_window.single().ok()?))
+                .and_then(|w| {
+                    #[allow(deprecated)]
+                    w.raw_window_handle().ok()
+                })
+        });
+
         browsers.create_browser(
             entity,
             &uri.0,
