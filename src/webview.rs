@@ -115,29 +115,29 @@ fn create_webview(
     >,
     primary_window: Query<Entity, With<PrimaryWindow>>,
 ) {
-    for (entity, uri, size, initialize_scripts, host_window) in webviews.iter() {
-        let host_window = WINIT_WINDOWS.with(|winit_windows| {
-            let winit_windows = winit_windows.borrow();
-            host_window
+    WINIT_WINDOWS.with(|winit_windows| {
+        let winit_windows = winit_windows.borrow();
+        for (entity, uri, size, initialize_scripts, host_window) in webviews.iter() {
+            let host_window = host_window
                 .and_then(|w| winit_windows.get_window(w.0))
                 .or_else(|| winit_windows.get_window(primary_window.single().ok()?))
                 .and_then(|w| {
                     #[allow(deprecated)]
                     w.raw_window_handle().ok()
-                })
-        });
-        browsers.create_browser(
-            entity,
-            &uri.0,
-            size.0,
-            requester.clone(),
-            ipc_event_sender.0.clone(),
-            brp_sender.clone(),
-            cursor_icon_sender.clone(),
-            &initialize_scripts.0,
-            host_window,
-        );
-    }
+                });
+            browsers.create_browser(
+                entity,
+                &uri.0,
+                size.0,
+                requester.clone(),
+                ipc_event_sender.0.clone(),
+                brp_sender.clone(),
+                cursor_icon_sender.clone(),
+                &initialize_scripts.0,
+                host_window,
+            );
+        }
+    });
 }
 
 fn resize(
