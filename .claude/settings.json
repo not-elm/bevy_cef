@@ -1,7 +1,23 @@
-
 {
   "permissions": {
-    "allow": ["WebFetch", "WebSearch"],
-    "deny": ["Read(./.env)", "Read(./secrets/**)"]
+    "allow": [
+      "WebFetch",
+      "WebSearch",
+      "BASH(ls:*)",
+      "BASH(grep:*)",
+      "BASH(cd:*)",
+      "BASH(pwd:*)",
+      "BASH(echo:*)",
+      "BASH(cat:*)",
+      "BASH(mkdir:*)",
+      "BASH(find:*)",
+      "READ(*)",
+      "READ(**)",
+      "BASH(git:*)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./secrets/**)"
+    ]
   }
 }
