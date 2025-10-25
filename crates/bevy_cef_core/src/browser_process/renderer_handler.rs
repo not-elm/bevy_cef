@@ -1,10 +1,10 @@
 use async_channel::{Receiver, Sender};
+use bevy::prelude::*;
 use cef::rc::{Rc, RcImpl};
 use cef::*;
 use cef_dll_sys::cef_paint_element_type_t;
 use std::cell::Cell;
 use std::os::raw::c_int;
-use bevy::prelude::*;
 
 pub type TextureSender = Sender<RenderTextureMessage>;
 

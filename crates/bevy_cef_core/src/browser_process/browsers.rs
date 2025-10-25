@@ -10,9 +10,9 @@ use bevy_remote::BrpMessage;
 use cef::{
     Browser, BrowserHost, BrowserSettings, CefString, Client, CompositionUnderline,
     DictionaryValue, ImplBrowser, ImplBrowserHost, ImplDictionaryValue, ImplFrame, ImplListValue,
-    ImplProcessMessage, ImplRequestContext, MouseButtonType, ProcessId, Range,
-    RequestContext, RequestContextSettings, WindowInfo, browser_host_create_browser_sync,
-    dictionary_value_create, process_message_create,
+    ImplProcessMessage, ImplRequestContext, MouseButtonType, ProcessId, Range, RequestContext,
+    RequestContextSettings, WindowInfo, browser_host_create_browser_sync, dictionary_value_create,
+    process_message_create,
 };
 use cef_dll_sys::{cef_event_flags_t, cef_mouse_button_type_t};
 #[allow(deprecated)]

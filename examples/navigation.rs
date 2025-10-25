@@ -58,16 +58,12 @@ fn spawn_webview(
 
 fn request_go_back(mut commands: Commands, webviews: Query<Entity, With<DebugWebview>>) {
     for webview in webviews.iter() {
-        commands.trigger(RequestGoBack{
-            webview,
-        });
+        commands.trigger(RequestGoBack { webview });
     }
 }
 
 fn request_go_forward(mut commands: Commands, webviews: Query<Entity, With<DebugWebview>>) {
     for webview in webviews.iter() {
-        commands.trigger(RequestGoForward{
-            webview,
-        });
+        commands.trigger(RequestGoForward { webview });
     }
 }

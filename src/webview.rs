@@ -6,7 +6,7 @@ use bevy::ecs::lifecycle::HookContext;
 use bevy::ecs::world::DeferredWorld;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use bevy::winit::{WINIT_WINDOWS,};
+use bevy::winit::WINIT_WINDOWS;
 use bevy_cef_core::prelude::*;
 use bevy_remote::BrpSender;
 #[allow(deprecated)]
@@ -72,7 +72,13 @@ impl Plugin for WebviewPlugin {
             .init_non_send_resource::<Browsers>()
             .add_plugins((MeshWebviewPlugin,))
             .add_systems(Main, send_external_begin_frame)
-            .add_systems(Update, (resize.run_if(any_resized), create_webview.run_if(added_webview)))
+            .add_systems(
+                Update,
+                (
+                    resize.run_if(any_resized),
+                    create_webview.run_if(added_webview),
+                ),
+            )
             .add_observer(apply_request_show_devtool)
             .add_observer(apply_request_close_devtool);
 

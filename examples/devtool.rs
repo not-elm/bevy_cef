@@ -69,7 +69,7 @@ fn show_devtool(mut commands: Commands, webviews: Query<Entity, With<DebugWebvie
 }
 
 fn close_devtool(mut commands: Commands, webviews: Query<Entity, With<DebugWebview>>) {
-    commands.trigger(RequestCloseDevtool{
+    commands.trigger(RequestCloseDevtool {
         webview: webviews.single().unwrap(),
     });
 }

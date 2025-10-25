@@ -1,11 +1,11 @@
 use crate::prelude::{WebviewMaterial, update_webview_image};
+use bevy::app::Plugin;
 use bevy::pbr::{ExtendedMaterial, MaterialExtension};
 use bevy::prelude::*;
 use bevy::render::render_resource::AsBindGroup;
 use bevy_cef_core::prelude::*;
 use std::hash::Hash;
 use std::marker::PhantomData;
-use bevy::app::Plugin;
 
 pub type WebviewExtendedMaterial<E> = ExtendedMaterial<WebviewMaterial, E>;
 
@@ -29,8 +29,7 @@ where
     E: MaterialExtension + AsBindGroup<Data: PartialEq + Eq + Hash + Clone + Copy> + Default,
 {
     fn build(&self, app: &mut App) {
-        app
-            .add_plugins(MaterialPlugin::<WebviewExtendedMaterial<E>>::default())
+        app.add_plugins(MaterialPlugin::<WebviewExtendedMaterial<E>>::default())
             .add_systems(PostUpdate, render::<E>);
     }
 }

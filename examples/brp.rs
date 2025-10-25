@@ -80,8 +80,6 @@ fn show_devtool(
     }
     *initialized = true;
     for webview in webviews.iter() {
-        commands.trigger(RequestShowDevTool{
-            webview,
-        });
+        commands.trigger(RequestShowDevTool { webview });
     }
 }

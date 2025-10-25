@@ -20,7 +20,10 @@ impl Plugin for WebviewSpritePlugin {
                 on_mouse_wheel.run_if(on_message::<MouseWheel>),
             ),
         )
-        .add_systems(PostUpdate, render.run_if(on_message::<RenderTextureMessage>));
+        .add_systems(
+            PostUpdate,
+            render.run_if(on_message::<RenderTextureMessage>),
+        );
     }
 }
 

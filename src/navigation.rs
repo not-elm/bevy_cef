@@ -15,16 +15,16 @@ impl Plugin for NavigationPlugin {
 
 /// A trigger event to navigate backwards.
 #[derive(Debug, EntityEvent, Copy, Clone, Reflect, Serialize, Deserialize)]
-pub struct RequestGoBack{
+pub struct RequestGoBack {
     #[event_target]
-    pub webview: Entity
+    pub webview: Entity,
 }
 
 /// A trigger event to navigate forwards.
 #[derive(Debug, EntityEvent, Copy, Clone, Reflect, Serialize, Deserialize)]
-pub struct RequestGoForward{
+pub struct RequestGoForward {
     #[event_target]
-    pub webview: Entity
+    pub webview: Entity,
 }
 
 fn apply_request_go_back(trigger: On<RequestGoBack>, browsers: NonSend<Browsers>) {
