@@ -10,7 +10,6 @@ and bidirectional communication between JavaScript and Bevy.
 
 https://github.com/user-attachments/assets/54f476d0-8eda-4030-a3f6-dc4f2f54209f
 
-
 ## ✨ Features
 
 - **🌐 Full Web Browser Integration** - Embed complete web pages with CSS, JavaScript, and modern web APIs
@@ -59,6 +58,7 @@ Please follow the steps below to set it up.
 See [`examples/`](./examples).
 
 On macOS, you need to enable `debug` feature enabled:
+
 ```shell
 cargo run --example simple --features debug
 ```
@@ -90,9 +90,10 @@ We welcome contributions! Here's how you can help:
 
 ## Version Compatibility
 
-| Bevy | bevy_cef | CEF | Status    |
-|------|----------|-----|-----------|
-| 0.16 | 0.1.0    | 139 | ✅ Current |
+| Bevy   | bevy_cef | CEF  | Status        |
+|--------|----------|------|---------------|
+| 0.17 ~ | 0.2.0    | TODO | ⚠️ Unreleased |
+| 0.16   | 0.1.0    | 139  | ✅ Current     |
 
 ## License
 
