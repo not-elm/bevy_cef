@@ -1,21 +1,18 @@
 use async_channel::{Receiver, Sender};
-use bevy::prelude::{Entity, Event};
+use bevy::prelude::*;
 use cef::rc::{Rc, RcImpl};
-use cef::{
-    Browser, CefString, ImplRenderHandler, PaintElementType, Range, Rect, RenderHandler,
-    WrapRenderHandler, sys,
-};
+use cef::*;
 use cef_dll_sys::cef_paint_element_type_t;
 use std::cell::Cell;
 use std::os::raw::c_int;
 
-pub type TextureSender = Sender<RenderTexture>;
+pub type TextureSender = Sender<RenderTextureMessage>;
 
-pub type TextureReceiver = Receiver<RenderTexture>;
+pub type TextureReceiver = Receiver<RenderTextureMessage>;
 
 /// The texture structure passed from [`CefRenderHandler::OnPaint`](https://cef-builds.spotifycdn.com/docs/106.1/classCefRenderHandler.html#a6547d5c9dd472e6b84706dc81d3f1741).
-#[derive(Debug, Clone, PartialEq, Event)]
-pub struct RenderTexture {
+#[derive(Debug, Clone, PartialEq, Message)]
+pub struct RenderTextureMessage {
     /// The entity of target rendering webview.
     pub webview: Entity,
     /// The type of the paint element.
@@ -100,12 +97,39 @@ impl Clone for RenderHandlerBuilder {
 }
 
 impl ImplRenderHandler for RenderHandlerBuilder {
-    fn view_rect(&self, _browser: Option<&mut Browser>, rect: Option<&mut Rect>) {
+    fn view_rect(&self, _browser: Option<&mut Browser>, rect: Option<&mut cef::Rect>) {
         if let Some(rect) = rect {
             let size = self.size.get();
             rect.width = size.x as _;
             rect.height = size.y as _;
         }
+    }
+
+    #[allow(clippy::not_unsafe_ptr_arg_deref)]
+    fn on_paint(
+        &self,
+        _browser: Option<&mut Browser>,
+        type_: PaintElementType,
+        _dirty_rects_count: usize,
+        _dirty_rects: Option<&cef::Rect>,
+        buffer: *const u8,
+        width: c_int,
+        height: c_int,
+    ) {
+        let ty = match type_.as_ref() {
+            cef_paint_element_type_t::PET_POPUP => RenderPaintElementType::Popup,
+            _ => RenderPaintElementType::View,
+        };
+        let texture = RenderTextureMessage {
+            webview: self.webview,
+            ty,
+            width: width as u32,
+            height: height as u32,
+            buffer: unsafe {
+                std::slice::from_raw_parts(buffer, (width * height * 4) as usize).to_vec()
+            },
+        };
+        let _ = self.texture_sender.send_blocking(texture);
     }
 
     fn on_text_selection_changed(
@@ -117,33 +141,6 @@ impl ImplRenderHandler for RenderHandlerBuilder {
         if let Some(selected_range) = selected_range {
             self.ime_caret.set(selected_range.to);
         }
-    }
-
-    #[allow(clippy::not_unsafe_ptr_arg_deref)]
-    fn on_paint(
-        &self,
-        _browser: Option<&mut Browser>,
-        type_: PaintElementType,
-        _dirty_rects_count: usize,
-        _dirty_rects: Option<&Rect>,
-        buffer: *const u8,
-        width: c_int,
-        height: c_int,
-    ) {
-        let ty = match type_.as_ref() {
-            cef_paint_element_type_t::PET_POPUP => RenderPaintElementType::Popup,
-            _ => RenderPaintElementType::View,
-        };
-        let texture = RenderTexture {
-            webview: self.webview,
-            ty,
-            width: width as u32,
-            height: height as u32,
-            buffer: unsafe {
-                std::slice::from_raw_parts(buffer, (width * height * 4) as usize).to_vec()
-            },
-        };
-        let _ = self.texture_sender.send_blocking(texture);
     }
 
     #[inline]

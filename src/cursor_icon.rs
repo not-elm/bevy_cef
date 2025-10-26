@@ -1,7 +1,6 @@
 use async_channel::{Receiver, Sender};
 use bevy::prelude::*;
-use bevy::window::SystemCursorIcon;
-use bevy::winit::cursor::CursorIcon;
+use bevy::window::{CursorIcon, SystemCursorIcon};
 
 /// This plugin manages the system cursor icon by receiving updates from CEF and applying them to the application window's cursor icon.
 pub(super) struct SystemCursorIconPlugin;

@@ -5,8 +5,8 @@
     surface_color,
 }
 
-@group(2) @binding(0) var mask_texture: texture_2d<f32>;
-@group(2) @binding(1) var mask_sampler: sampler;
+@group(#{MATERIAL_BIND_GROUP}) @binding(0) var mask_texture: texture_2d<f32>;
+@group(#{MATERIAL_BIND_GROUP}) @binding(1) var mask_sampler: sampler;
 
 @fragment
 fn fragment(

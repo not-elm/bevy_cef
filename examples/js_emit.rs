@@ -19,12 +19,12 @@ fn main() {
         .run();
 }
 
-#[derive(Event, Deserialize)]
+#[derive(Deserialize)]
 struct Message {
     count: u32,
 }
 
-fn apply_receive_message(trigger: Trigger<Message>) {
+fn apply_receive_message(trigger: On<Receive<Message>>) {
     info!("Received: {:?}", trigger.count);
 }
 
