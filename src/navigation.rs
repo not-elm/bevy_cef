@@ -14,17 +14,23 @@ impl Plugin for NavigationPlugin {
 }
 
 /// A trigger event to navigate backwards.
-#[derive(Default, Debug, Event, Copy, Clone, Reflect, Serialize, Deserialize)]
-pub struct RequestGoBack;
-
-/// A trigger event to navigate forwards.
-#[derive(Default, Debug, Event, Copy, Clone, Reflect, Serialize, Deserialize)]
-pub struct RequestGoForward;
-
-fn apply_request_go_back(trigger: Trigger<RequestGoBack>, browsers: NonSend<Browsers>) {
-    browsers.go_back(&trigger.target());
+#[derive(Debug, EntityEvent, Copy, Clone, Reflect, Serialize, Deserialize)]
+pub struct RequestGoBack {
+    #[event_target]
+    pub webview: Entity,
 }
 
-fn apply_request_go_forward(trigger: Trigger<RequestGoForward>, browsers: NonSend<Browsers>) {
-    browsers.go_forward(&trigger.target());
+/// A trigger event to navigate forwards.
+#[derive(Debug, EntityEvent, Copy, Clone, Reflect, Serialize, Deserialize)]
+pub struct RequestGoForward {
+    #[event_target]
+    pub webview: Entity,
+}
+
+fn apply_request_go_back(trigger: On<RequestGoBack>, browsers: NonSend<Browsers>) {
+    browsers.go_back(&trigger.webview);
+}
+
+fn apply_request_go_forward(trigger: On<RequestGoForward>, browsers: NonSend<Browsers>) {
+    browsers.go_forward(&trigger.webview);
 }

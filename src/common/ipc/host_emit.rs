@@ -5,17 +5,20 @@ use serde::{Deserialize, Serialize};
 /// A trigger event to emit an event from the host to the webview.
 ///
 /// You need to subscribe to this event on the webview side by calling `window.cef.listen("event-id", (e) => {})` beforehand.
-#[derive(Default, Reflect, Debug, Clone, Serialize, Deserialize, Event)]
-#[reflect(Default, Serialize, Deserialize)]
+#[derive(Reflect, Debug, Clone, Serialize, Deserialize, EntityEvent)]
+#[reflect(Serialize, Deserialize)]
 pub struct HostEmitEvent {
+    #[event_target]
+    pub webview: Entity,
     pub id: String,
     pub payload: String,
 }
 
 impl HostEmitEvent {
     /// Creates a new `HostEmitEvent` with the given id and payload.
-    pub fn new(id: impl Into<String>, payload: &impl Serialize) -> Self {
+    pub fn new(webview: Entity, id: impl Into<String>, payload: &impl Serialize) -> Self {
         Self {
+            webview,
             id: id.into(),
             payload: serde_json::to_string(payload).unwrap_or_default(),
         }
@@ -30,8 +33,8 @@ impl Plugin for HostEmitPlugin {
     }
 }
 
-fn host_emit(trigger: Trigger<HostEmitEvent>, browsers: NonSend<Browsers>) {
+fn host_emit(trigger: On<HostEmitEvent>, browsers: NonSend<Browsers>) {
     if let Ok(v) = serde_json::to_value(&trigger.payload) {
-        browsers.emit_event(&trigger.target(), trigger.id.clone(), &v);
+        browsers.emit_event(&trigger.webview, trigger.id.clone(), &v);
     }
 }

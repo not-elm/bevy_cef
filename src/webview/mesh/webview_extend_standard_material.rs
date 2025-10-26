@@ -1,11 +1,11 @@
 use crate::prelude::{WebviewMaterial, update_webview_image};
-use bevy::asset::{load_internal_asset, weak_handle};
+use bevy::asset::*;
 use bevy::pbr::{ExtendedMaterial, MaterialExtension};
 use bevy::prelude::*;
-use bevy::render::render_resource::ShaderRef;
+use bevy::shader::ShaderRef;
 use bevy_cef_core::prelude::*;
 
-const FRAGMENT_SHADER_HANDLE: Handle<Shader> = weak_handle!("b231681f-9c17-4df6-89c9-9dc353e85a08");
+const FRAGMENT_SHADER_HANDLE: Handle<Shader> = uuid_handle!("b231681f-9c17-4df6-89c9-9dc353e85a08");
 
 pub(super) struct WebviewExtendStandardMaterialPlugin;
 
@@ -31,7 +31,7 @@ impl MaterialExtension for WebviewMaterial {
 pub type WebviewExtendStandardMaterial = ExtendedMaterial<StandardMaterial, WebviewMaterial>;
 
 fn render_standard_materials(
-    mut er: EventReader<RenderTexture>,
+    mut er: MessageReader<RenderTextureMessage>,
     mut images: ResMut<Assets<Image>>,
     mut materials: ResMut<Assets<WebviewExtendStandardMaterial>>,
     webviews: Query<&MeshMaterial3d<WebviewExtendStandardMaterial>>,

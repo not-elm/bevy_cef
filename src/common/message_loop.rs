@@ -19,7 +19,7 @@ pub struct MessageLoopPlugin {
 impl Plugin for MessageLoopPlugin {
     fn build(&self, app: &mut App) {
         app.insert_non_send_resource(RunOnMainThread)
-            .add_systems(Update, cef_shutdown.run_if(on_event::<AppExit>));
+            .add_systems(Update, cef_shutdown.run_if(on_message::<AppExit>));
 
         #[cfg(target_os = "macos")]
         app.add_systems(Main, cef_do_message_loop_work);

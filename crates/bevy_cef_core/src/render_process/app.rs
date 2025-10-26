@@ -38,16 +38,16 @@ impl Rc for RenderProcessAppBuilder {
 }
 
 impl ImplApp for RenderProcessAppBuilder {
-    fn render_process_handler(&self) -> Option<RenderProcessHandler> {
-        Some(RenderProcessHandler::new(
-            RenderProcessHandlerBuilder::build(),
-        ))
-    }
-
     fn on_register_custom_schemes(&self, registrar: Option<&mut SchemeRegistrar>) {
         if let Some(registrar) = registrar {
             registrar.add_custom_scheme(Some(&SCHEME_CEF.into()), cef_scheme_flags() as _);
         }
+    }
+
+    fn render_process_handler(&self) -> Option<RenderProcessHandler> {
+        Some(RenderProcessHandler::new(
+            RenderProcessHandlerBuilder::build(),
+        ))
     }
 
     #[inline]

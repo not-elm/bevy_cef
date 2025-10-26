@@ -41,7 +41,7 @@ fn spawn_webview(
     ));
 }
 
-fn change_zoom_level(mut er: EventReader<MouseWheel>, mut webviews: Query<&mut ZoomLevel>) {
+fn change_zoom_level(mut er: MessageReader<MouseWheel>, mut webviews: Query<&mut ZoomLevel>) {
     for event in er.read() {
         webviews.par_iter_mut().for_each(|mut level| {
             if event.y > 0.0 {

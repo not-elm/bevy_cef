@@ -21,7 +21,7 @@ impl Plugin for ResponserPlugin {
     }
 }
 
-fn any_changed_assets(mut er: EventReader<AssetEvent<CefResponse>>) -> bool {
+fn any_changed_assets(mut er: MessageReader<AssetEvent<CefResponse>>) -> bool {
     er.read()
         .any(|event| matches!(event, AssetEvent::Modified { .. }))
 }

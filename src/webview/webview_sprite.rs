@@ -2,7 +2,7 @@ use crate::common::{CefWebviewUri, WebviewSize};
 use crate::prelude::update_webview_image;
 use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
-use bevy_cef_core::prelude::{Browsers, RenderTexture};
+use bevy_cef_core::prelude::{Browsers, RenderTextureMessage};
 use std::fmt::Debug;
 
 pub(in crate::webview) struct WebviewSpritePlugin;
@@ -17,15 +17,18 @@ impl Plugin for WebviewSpritePlugin {
             Update,
             (
                 setup_observers,
-                on_mouse_wheel.run_if(on_event::<MouseWheel>),
+                on_mouse_wheel.run_if(on_message::<MouseWheel>),
             ),
         )
-        .add_systems(PostUpdate, render.run_if(on_event::<RenderTexture>));
+        .add_systems(
+            PostUpdate,
+            render.run_if(on_message::<RenderTextureMessage>),
+        );
     }
 }
 
 fn render(
-    mut er: EventReader<RenderTexture>,
+    mut er: MessageReader<RenderTextureMessage>,
     mut images: ResMut<Assets<bevy::prelude::Image>>,
     webviews: Query<&Sprite, With<CefWebviewUri>>,
 ) {
@@ -52,7 +55,7 @@ fn setup_observers(
 }
 
 fn apply_on_pointer_move(
-    trigger: Trigger<Pointer<Move>>,
+    trigger: On<Pointer<Move>>,
     input: Res<ButtonInput<MouseButton>>,
     browsers: NonSend<Browsers>,
     cameras: Query<(&Camera, &GlobalTransform)>,
@@ -61,11 +64,11 @@ fn apply_on_pointer_move(
     let Some(pos) = obtain_relative_pos_from_trigger(&trigger, &webviews, &cameras) else {
         return;
     };
-    browsers.send_mouse_move(&trigger.target, input.get_pressed(), pos, false);
+    browsers.send_mouse_move(&trigger.entity, input.get_pressed(), pos, false);
 }
 
 fn apply_on_pointer_pressed(
-    trigger: Trigger<Pointer<Pressed>>,
+    trigger: On<Pointer<Press>>,
     browsers: NonSend<Browsers>,
     cameras: Query<(&Camera, &GlobalTransform)>,
     webviews: Query<(&Sprite, &WebviewSize, &GlobalTransform)>,
@@ -73,11 +76,11 @@ fn apply_on_pointer_pressed(
     let Some(pos) = obtain_relative_pos_from_trigger(&trigger, &webviews, &cameras) else {
         return;
     };
-    browsers.send_mouse_click(&trigger.target, pos, trigger.button, false);
+    browsers.send_mouse_click(&trigger.entity, pos, trigger.button, false);
 }
 
 fn apply_on_pointer_released(
-    trigger: Trigger<Pointer<Released>>,
+    trigger: On<Pointer<Release>>,
     browsers: NonSend<Browsers>,
     cameras: Query<(&Camera, &GlobalTransform)>,
     webviews: Query<(&Sprite, &WebviewSize, &GlobalTransform)>,
@@ -85,11 +88,11 @@ fn apply_on_pointer_released(
     let Some(pos) = obtain_relative_pos_from_trigger(&trigger, &webviews, &cameras) else {
         return;
     };
-    browsers.send_mouse_click(&trigger.target, pos, trigger.button, true);
+    browsers.send_mouse_click(&trigger.entity, pos, trigger.button, true);
 }
 
 fn on_mouse_wheel(
-    mut er: EventReader<MouseWheel>,
+    mut er: MessageReader<MouseWheel>,
     browsers: NonSend<Browsers>,
     webviews: Query<(Entity, &Sprite, &WebviewSize, &GlobalTransform)>,
     cameras: Query<(&Camera, &GlobalTransform)>,
@@ -111,11 +114,11 @@ fn on_mouse_wheel(
 }
 
 fn obtain_relative_pos_from_trigger<E: Debug + Clone + Reflect>(
-    trigger: &Trigger<Pointer<E>>,
+    trigger: &On<Pointer<E>>,
     webviews: &Query<(&Sprite, &WebviewSize, &GlobalTransform)>,
     cameras: &Query<(&Camera, &GlobalTransform)>,
 ) -> Option<Vec2> {
-    let (sprite, webview_size, gtf) = webviews.get(trigger.target()).ok()?;
+    let (sprite, webview_size, gtf) = webviews.get(trigger.entity).ok()?;
     obtain_relative_pos(
         sprite,
         webview_size,

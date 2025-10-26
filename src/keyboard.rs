@@ -14,8 +14,8 @@ impl Plugin for KeyboardPlugin {
         app.init_resource::<IsImeCommiting>().add_systems(
             Update,
             (
-                ime_event.run_if(on_event::<Ime>),
-                send_key_event.run_if(on_event::<KeyboardInput>),
+                ime_event.run_if(on_message::<Ime>),
+                send_key_event.run_if(on_message::<KeyboardInput>),
             )
                 .chain(),
         );
@@ -27,7 +27,7 @@ impl Plugin for KeyboardPlugin {
 struct IsImeCommiting(bool);
 
 fn send_key_event(
-    mut er: EventReader<KeyboardInput>,
+    mut er: MessageReader<KeyboardInput>,
     mut is_ime_commiting: ResMut<IsImeCommiting>,
     input: Res<ButtonInput<KeyCode>>,
     browsers: NonSend<Browsers>,
@@ -51,7 +51,7 @@ fn send_key_event(
 }
 
 fn ime_event(
-    mut er: EventReader<Ime>,
+    mut er: MessageReader<Ime>,
     mut is_ime_commiting: ResMut<IsImeCommiting>,
     browsers: NonSend<Browsers>,
 ) {

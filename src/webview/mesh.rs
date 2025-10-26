@@ -29,7 +29,7 @@ impl Plugin for MeshWebviewPlugin {
             Update,
             (
                 setup_observers,
-                on_mouse_wheel.run_if(on_event::<MouseWheel>),
+                on_mouse_wheel.run_if(on_message::<MouseWheel>),
             ),
         );
     }
@@ -49,7 +49,7 @@ fn setup_observers(
 }
 
 fn on_pointer_move(
-    trigger: Trigger<Pointer<Move>>,
+    trigger: On<Pointer<Move>>,
     input: Res<ButtonInput<MouseButton>>,
     pointer: WebviewPointer,
     browsers: NonSend<Browsers>,
@@ -62,7 +62,7 @@ fn on_pointer_move(
 }
 
 fn on_pointer_pressed(
-    trigger: Trigger<Pointer<Pressed>>,
+    trigger: On<Pointer<Press>>,
     browsers: NonSend<Browsers>,
     pointer: WebviewPointer,
 ) {
@@ -73,7 +73,7 @@ fn on_pointer_pressed(
 }
 
 fn on_pointer_released(
-    trigger: Trigger<Pointer<Released>>,
+    trigger: On<Pointer<Release>>,
     browsers: NonSend<Browsers>,
     pointer: WebviewPointer,
 ) {
@@ -84,7 +84,7 @@ fn on_pointer_released(
 }
 
 fn on_mouse_wheel(
-    mut er: EventReader<MouseWheel>,
+    mut er: MessageReader<MouseWheel>,
     browsers: NonSend<Browsers>,
     pointer: WebviewPointer,
     windows: Query<&Window>,

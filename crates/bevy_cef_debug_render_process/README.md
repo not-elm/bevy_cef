@@ -10,3 +10,4 @@ and if you create a release bundle, should create a separate render process.
 ```shell
 > cargo install bevy_cef_debug_render_process
 ```
+

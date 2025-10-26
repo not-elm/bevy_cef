@@ -2,11 +2,11 @@ use crate::common::{CefWebviewUri, HostWindow, IpcEventRawSender, WebviewSize};
 use crate::cursor_icon::SystemCursorIconSender;
 use crate::prelude::PreloadScripts;
 use crate::webview::mesh::MeshWebviewPlugin;
-use bevy::ecs::component::HookContext;
+use bevy::ecs::lifecycle::HookContext;
 use bevy::ecs::world::DeferredWorld;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use bevy::winit::WinitWindows;
+use bevy::winit::WINIT_WINDOWS;
 use bevy_cef_core::prelude::*;
 use bevy_remote::BrpSender;
 #[allow(deprecated)]
@@ -32,12 +32,16 @@ pub mod prelude {
 /// struct DebugWebview;
 ///
 /// fn show_devtool_system(mut commands: Commands, webviews: Query<Entity, With<DebugWebview>>) {
-///     commands.entity(webviews.single().unwrap()).trigger(RequestShowDevTool);
+///     let entity = webviews.single().unwrap();
+///     commands.entity(entity).trigger(|webview| RequestShowDevTool { webview });
 /// }
 /// ```
-#[derive(Reflect, Debug, Default, Copy, Clone, Serialize, Deserialize, Event)]
-#[reflect(Default, Serialize, Deserialize)]
-pub struct RequestShowDevTool;
+#[derive(Reflect, Debug, Copy, Clone, Serialize, Deserialize, EntityEvent)]
+#[reflect(Serialize, Deserialize)]
+pub struct RequestShowDevTool {
+    #[event_target]
+    pub webview: Entity,
+}
 
 /// A Trigger event to request closing the developer tools in a webview.
 ///
@@ -51,12 +55,16 @@ pub struct RequestShowDevTool;
 /// struct DebugWebview;
 ///
 /// fn close_devtool_system(mut commands: Commands, webviews: Query<Entity, With<DebugWebview>>) {
-///    commands.entity(webviews.single().unwrap()).trigger(RequestCloseDevtool);
+///     let entity = webviews.single().unwrap();
+///     commands.entity(entity).trigger(|webview| RequestCloseDevtool { webview });
 /// }
 /// ```
-#[derive(Reflect, Debug, Default, Copy, Clone, Serialize, Deserialize, Event)]
-#[reflect(Default, Serialize, Deserialize)]
-pub struct RequestCloseDevtool;
+#[derive(Reflect, Debug, Copy, Clone, Serialize, Deserialize, EntityEvent)]
+#[reflect(Serialize, Deserialize)]
+pub struct RequestCloseDevtool {
+    #[event_target]
+    pub webview: Entity,
+}
 
 pub struct WebviewPlugin;
 
@@ -103,7 +111,6 @@ fn create_webview(
     ipc_event_sender: Res<IpcEventRawSender>,
     brp_sender: Res<BrpSender>,
     cursor_icon_sender: Res<SystemCursorIconSender>,
-    winit_windows: NonSend<WinitWindows>,
     webviews: Query<
         (
             Entity,
@@ -116,26 +123,29 @@ fn create_webview(
     >,
     primary_window: Query<Entity, With<PrimaryWindow>>,
 ) {
-    for (entity, uri, size, initialize_scripts, host_window) in webviews.iter() {
-        let host_window = host_window
-            .and_then(|w| winit_windows.get_window(w.0))
-            .or_else(|| winit_windows.get_window(primary_window.single().ok()?))
-            .and_then(|w| {
-                #[allow(deprecated)]
-                w.raw_window_handle().ok()
-            });
-        browsers.create_browser(
-            entity,
-            &uri.0,
-            size.0,
-            requester.clone(),
-            ipc_event_sender.0.clone(),
-            brp_sender.clone(),
-            cursor_icon_sender.clone(),
-            &initialize_scripts.0,
-            host_window,
-        );
-    }
+    WINIT_WINDOWS.with(|winit_windows| {
+        let winit_windows = winit_windows.borrow();
+        for (entity, uri, size, initialize_scripts, host_window) in webviews.iter() {
+            let host_window = host_window
+                .and_then(|w| winit_windows.get_window(w.0))
+                .or_else(|| winit_windows.get_window(primary_window.single().ok()?))
+                .and_then(|w| {
+                    #[allow(deprecated)]
+                    w.raw_window_handle().ok()
+                });
+            browsers.create_browser(
+                entity,
+                &uri.0,
+                size.0,
+                requester.clone(),
+                ipc_event_sender.0.clone(),
+                brp_sender.clone(),
+                cursor_icon_sender.clone(),
+                &initialize_scripts.0,
+                host_window,
+            );
+        }
+    });
 }
 
 fn resize(
@@ -147,10 +157,10 @@ fn resize(
     }
 }
 
-fn apply_request_show_devtool(trigger: Trigger<RequestShowDevTool>, browsers: NonSend<Browsers>) {
-    browsers.show_devtool(&trigger.target());
+fn apply_request_show_devtool(trigger: On<RequestShowDevTool>, browsers: NonSend<Browsers>) {
+    browsers.show_devtool(&trigger.webview);
 }
 
-fn apply_request_close_devtool(trigger: Trigger<RequestCloseDevtool>, browsers: NonSend<Browsers>) {
-    browsers.close_devtools(&trigger.target());
+fn apply_request_close_devtool(trigger: On<RequestCloseDevtool>, browsers: NonSend<Browsers>) {
+    browsers.close_devtools(&trigger.webview);
 }
