@@ -32,7 +32,8 @@ pub mod prelude {
 /// struct DebugWebview;
 ///
 /// fn show_devtool_system(mut commands: Commands, webviews: Query<Entity, With<DebugWebview>>) {
-///     commands.entity(webviews.single().unwrap()).trigger(RequestShowDevTool);
+///     let entity = webviews.single().unwrap();
+///     commands.entity(entity).trigger(|webview| RequestShowDevTool { webview });
 /// }
 /// ```
 #[derive(Reflect, Debug, Copy, Clone, Serialize, Deserialize, EntityEvent)]
@@ -54,7 +55,8 @@ pub struct RequestShowDevTool {
 /// struct DebugWebview;
 ///
 /// fn close_devtool_system(mut commands: Commands, webviews: Query<Entity, With<DebugWebview>>) {
-///    commands.entity(webviews.single().unwrap()).trigger(RequestCloseDevtool);
+///     let entity = webviews.single().unwrap();
+///     commands.entity(entity).trigger(|webview| RequestCloseDevtool { webview });
 /// }
 /// ```
 #[derive(Reflect, Debug, Copy, Clone, Serialize, Deserialize, EntityEvent)]
