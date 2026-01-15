@@ -36,7 +36,7 @@ bevy = { version = "0.18", default-features = false, features = [
     "bevy_sprite",
     "bevy_pbr",
     "bevy_winit",
-    "bevy_picking",
+    "picking",
 ] }
 bevy_remote = "0.18"
 cef = { version = "139" }
