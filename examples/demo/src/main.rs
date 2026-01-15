@@ -17,7 +17,7 @@ fn main() {
                 enable_ime,
             ),
         )
-        .insert_resource(AmbientLight::default())
+        .insert_resource(GlobalAmbientLight::default())
         .add_systems(
             Update,
             (
