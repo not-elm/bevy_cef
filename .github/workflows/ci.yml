@@ -28,7 +28,7 @@ jobs:
         if: runner.os == 'linux'
       - name: Build & run tests
         run: |
-          cargo test --workspace --no-default-features
+          cargo test --workspace --no-default-features --tests --exclude demo
   all-doc-tests:
     runs-on: ubuntu-latest
     steps:

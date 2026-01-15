@@ -15,7 +15,6 @@ exclude = ["assets/"]
 resolver = "2"
 members = [
     "crates/*",
-    "examples/demo",
 ]
 
 [workspace.package]
