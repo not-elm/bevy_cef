@@ -20,7 +20,7 @@ impl Plugin for LocalSchemeAssetLoaderPlugin {
 #[reflect(Component, Debug)]
 pub struct CefResponseHandle(pub Handle<CefResponse>);
 
-#[derive(Default)]
+#[derive(Default, TypePath)]
 pub struct CefResponseAssetLoader;
 
 impl AssetLoader for CefResponseAssetLoader {
@@ -35,7 +35,7 @@ impl AssetLoader for CefResponseAssetLoader {
         load_context: &mut LoadContext<'_>,
     ) -> std::result::Result<Self::Asset, Self::Error> {
         let mut body = Vec::new();
-        let mime_type = get_mime_type(load_context.path())
+        let mime_type = get_mime_type(load_context.path().path())
             .unwrap_or("text/html")
             .to_string();
         reader.read_to_end(&mut body).await?;
