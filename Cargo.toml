@@ -15,7 +15,6 @@ exclude = ["assets/"]
 resolver = "2"
 members = [
     "crates/*",
-    "examples/demo",
 ]
 
 [workspace.package]
@@ -29,18 +28,16 @@ keywords = ["bevy", "cef", "web", "rendering"]
 categories = ["game-development", "web-programming", "graphics"]
 
 [workspace.dependencies]
-bevy = { version = "0.17", default-features = false, features = [
+bevy = { version = "0.18", default-features = false, features = [
     "bevy_log",
     "bevy_window",
     "bevy_asset",
     "bevy_sprite",
     "bevy_pbr",
     "bevy_winit",
-    "bevy_picking",
-    "bevy_mesh_picking_backend",
-    "bevy_sprite_picking_backend",
+    "picking",
 ] }
-bevy_remote = "0.17"
+bevy_remote = "0.18"
 cef = { version = "139" }
 cef-dll-sys = { version = "139.0", features = ["sandbox"] }
 bevy_cef = { path = "." , version = "0.2.0-dev" }
