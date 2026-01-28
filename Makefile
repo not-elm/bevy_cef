@@ -1,13 +1,13 @@
 .PHONY: fix install
 
 BIN := bevy_cef_debug_render_process
-CEF_LIB := $(HOME)/.local/share/cef/Chromium Embedded Framework.framework/Libraries
+CEF_LIB := $(HOME)/.local/share/Chromium Embedded Framework.framework/Libraries
 
 
 .PHONY: fix install
 
 BIN := bevy_cef_debug_render_process
-CEF_LIB := $(HOME)/.local/share/cef/Chromium Embedded Framework.framework/Libraries
+CEF_LIB := $(HOME)/.local/share/Chromium Embedded Framework.framework/Libraries
 CARGO_BIN := $(HOME)/.cargo/bin
 
 fix:

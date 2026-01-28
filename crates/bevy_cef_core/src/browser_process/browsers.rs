@@ -148,9 +148,9 @@ impl Browsers {
                 x: position.x as i32,
                 y: position.y as i32,
                 modifiers: match button {
-                    PointerButton::Primary => cef_event_flags_t::EVENTFLAG_LEFT_MOUSE_BUTTON,
-                    PointerButton::Secondary => cef_event_flags_t::EVENTFLAG_RIGHT_MOUSE_BUTTON,
-                    PointerButton::Middle => cef_event_flags_t::EVENTFLAG_MIDDLE_MOUSE_BUTTON,
+                    PointerButton::Primary => cef_event_flags_t::EVENTFLAG_LEFT_MOUSE_BUTTON.0,
+                    PointerButton::Secondary => cef_event_flags_t::EVENTFLAG_RIGHT_MOUSE_BUTTON.0,
+                    PointerButton::Middle => cef_event_flags_t::EVENTFLAG_MIDDLE_MOUSE_BUTTON.0,
                 } as _, // No modifiers for simplicity
             };
             let mouse_button = match button {
@@ -335,8 +335,7 @@ impl Browsers {
             let replacement_range = Self::ime_caret_range_for(browser);
             browser.host.ime_set_composition(
                 Some(&text.into()),
-                underlines.len(),
-                Some(&underlines[0]),
+                Some(&underlines),
                 Some(&replacement_range),
                 Some(&selection_range),
             );
@@ -434,16 +433,19 @@ impl Browsers {
     }
 }
 
+#[allow(clippy::unnecessary_cast)]
 pub fn modifiers_from_mouse_buttons<'a>(buttons: impl IntoIterator<Item = &'a MouseButton>) -> u32 {
-    let mut modifiers = cef_event_flags_t::EVENTFLAG_NONE as u32;
+    let mut modifiers = cef_event_flags_t::EVENTFLAG_NONE.0 as u32;
     for button in buttons {
         match button {
-            MouseButton::Left => modifiers |= cef_event_flags_t::EVENTFLAG_LEFT_MOUSE_BUTTON as u32,
+            MouseButton::Left => {
+                modifiers |= cef_event_flags_t::EVENTFLAG_LEFT_MOUSE_BUTTON.0 as u32
+            }
             MouseButton::Right => {
-                modifiers |= cef_event_flags_t::EVENTFLAG_RIGHT_MOUSE_BUTTON as u32
+                modifiers |= cef_event_flags_t::EVENTFLAG_RIGHT_MOUSE_BUTTON.0 as u32
             }
             MouseButton::Middle => {
-                modifiers |= cef_event_flags_t::EVENTFLAG_MIDDLE_MOUSE_BUTTON as u32
+                modifiers |= cef_event_flags_t::EVENTFLAG_MIDDLE_MOUSE_BUTTON.0 as u32
             }
             _ => {}
         }
@@ -498,13 +500,14 @@ mod tests {
     use bevy::prelude::*;
 
     #[test]
+    #[allow(clippy::unnecessary_cast)]
     fn test_modifiers_from_mouse_buttons() {
         let buttons = vec![&MouseButton::Left, &MouseButton::Right];
         let modifiers = modifiers_from_mouse_buttons(buttons);
         assert_eq!(
             modifiers,
-            cef_dll_sys::cef_event_flags_t::EVENTFLAG_LEFT_MOUSE_BUTTON as u32
-                | cef_dll_sys::cef_event_flags_t::EVENTFLAG_RIGHT_MOUSE_BUTTON as u32
+            cef_dll_sys::cef_event_flags_t::EVENTFLAG_LEFT_MOUSE_BUTTON.0 as u32
+                | cef_dll_sys::cef_event_flags_t::EVENTFLAG_RIGHT_MOUSE_BUTTON.0 as u32
         );
     }
 }

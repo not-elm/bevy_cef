@@ -53,6 +53,9 @@ impl ImplApp for BrowserProcessAppBuilder {
             return;
         };
         command_line.append_switch(Some(&"use-mock-keychain".into()));
+        // command_line.append_switch(Some(&"disable-gpu".into()));
+        // command_line.append_switch(Some(&"disable-gpu-compositing".into()));
+        // command_line.append_switch(Some(&" disable-gpu-shader-disk-cache".into()));
     }
 
     fn browser_process_handler(&self) -> Option<BrowserProcessHandler> {
