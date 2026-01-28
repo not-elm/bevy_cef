@@ -500,6 +500,7 @@ mod tests {
     use bevy::prelude::*;
 
     #[test]
+    #[allow(clippy::unnecessary_cast)]
     fn test_modifiers_from_mouse_buttons() {
         let buttons = vec![&MouseButton::Left, &MouseButton::Right];
         let modifiers = modifiers_from_mouse_buttons(buttons);
