@@ -437,7 +437,9 @@ pub fn modifiers_from_mouse_buttons<'a>(buttons: impl IntoIterator<Item = &'a Mo
     let mut modifiers = cef_event_flags_t::EVENTFLAG_NONE.0 as u32;
     for button in buttons {
         match button {
-            MouseButton::Left => modifiers |= cef_event_flags_t::EVENTFLAG_LEFT_MOUSE_BUTTON.0 as u32,
+            MouseButton::Left => {
+                modifiers |= cef_event_flags_t::EVENTFLAG_LEFT_MOUSE_BUTTON.0 as u32
+            }
             MouseButton::Right => {
                 modifiers |= cef_event_flags_t::EVENTFLAG_RIGHT_MOUSE_BUTTON.0 as u32
             }
