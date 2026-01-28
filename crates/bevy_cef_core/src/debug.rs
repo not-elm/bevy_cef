@@ -21,7 +21,6 @@ impl DebugLibraryLoader {
             .unwrap()
             .join(".local")
             .join("share")
-            .join("cef")
             .join(Self::FRAMEWORK_PATH)
             .canonicalize()
             .unwrap();

@@ -3,10 +3,10 @@ use cef::{args::Args, *};
 
 fn main() {
     let args = Args::new();
+
     #[cfg(target_os = "macos")]
     let _loader = {
-        let loader =
-            cef::library_loader::LibraryLoader::new(&std::env::current_exe().unwrap(), true);
+        let loader = DebugLibraryLoader::new();
         assert!(loader.load());
         loader
     };

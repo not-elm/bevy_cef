@@ -35,11 +35,11 @@ pub fn debug_chromium_libraries_path() -> PathBuf {
 }
 
 pub fn debug_chromium_embedded_framework_dir_path() -> PathBuf {
-    debug_cef_path().join("Chromium Embedded Framework.framework")
-}
-
-pub fn debug_cef_path() -> PathBuf {
-    home_dir().unwrap().join(".local").join("share").join("cef")
+    home_dir()
+        .unwrap()
+        .join(".local")
+        .join("share")
+        .join("Chromium Embedded Framework.framework")
 }
 
 pub fn debug_render_process_path() -> PathBuf {
