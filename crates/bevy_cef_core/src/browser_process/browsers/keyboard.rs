@@ -12,22 +12,22 @@ pub fn keyboard_modifiers(input: &ButtonInput<KeyCode>) -> u32 {
     let mut flags = 0u32;
 
     if input.pressed(KeyCode::ControlLeft) || input.pressed(KeyCode::ControlRight) {
-        flags |= cef_event_flags_t::EVENTFLAG_CONTROL_DOWN.0 as u32;
+        flags |= cef_event_flags_t::EVENTFLAG_CONTROL_DOWN.0;
     }
     if input.pressed(KeyCode::AltLeft) || input.pressed(KeyCode::AltRight) {
-        flags |= cef_event_flags_t::EVENTFLAG_ALT_DOWN.0 as u32;
+        flags |= cef_event_flags_t::EVENTFLAG_ALT_DOWN.0;
     }
     if input.pressed(KeyCode::ShiftLeft) || input.pressed(KeyCode::ShiftRight) {
-        flags |= cef_event_flags_t::EVENTFLAG_SHIFT_DOWN.0 as u32;
+        flags |= cef_event_flags_t::EVENTFLAG_SHIFT_DOWN.0;
     }
     if input.pressed(KeyCode::SuperLeft) || input.pressed(KeyCode::SuperRight) {
-        flags |= cef_event_flags_t::EVENTFLAG_COMMAND_DOWN.0 as u32;
+        flags |= cef_event_flags_t::EVENTFLAG_COMMAND_DOWN.0;
     }
     if input.pressed(KeyCode::CapsLock) {
-        flags |= cef_event_flags_t::EVENTFLAG_CAPS_LOCK_ON.0 as u32;
+        flags |= cef_event_flags_t::EVENTFLAG_CAPS_LOCK_ON.0;
     }
     if input.pressed(KeyCode::NumLock) {
-        flags |= cef_event_flags_t::EVENTFLAG_NUM_LOCK_ON.0 as u32;
+        flags |= cef_event_flags_t::EVENTFLAG_NUM_LOCK_ON.0;
     }
 
     flags

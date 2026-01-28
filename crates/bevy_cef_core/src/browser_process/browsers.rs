@@ -434,17 +434,17 @@ impl Browsers {
 }
 
 pub fn modifiers_from_mouse_buttons<'a>(buttons: impl IntoIterator<Item = &'a MouseButton>) -> u32 {
-    let mut modifiers = cef_event_flags_t::EVENTFLAG_NONE.0 as u32;
+    let mut modifiers = cef_event_flags_t::EVENTFLAG_NONE.0;
     for button in buttons {
         match button {
             MouseButton::Left => {
-                modifiers |= cef_event_flags_t::EVENTFLAG_LEFT_MOUSE_BUTTON.0 as u32
+                modifiers |= cef_event_flags_t::EVENTFLAG_LEFT_MOUSE_BUTTON.0
             }
             MouseButton::Right => {
-                modifiers |= cef_event_flags_t::EVENTFLAG_RIGHT_MOUSE_BUTTON.0 as u32
+                modifiers |= cef_event_flags_t::EVENTFLAG_RIGHT_MOUSE_BUTTON.0
             }
             MouseButton::Middle => {
-                modifiers |= cef_event_flags_t::EVENTFLAG_MIDDLE_MOUSE_BUTTON.0 as u32
+                modifiers |= cef_event_flags_t::EVENTFLAG_MIDDLE_MOUSE_BUTTON.0
             }
             _ => {}
         }
