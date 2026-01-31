@@ -1,5 +1,5 @@
+use std::sync::mpsc::Sender;
 use crate::browser_process::browser_process_handler::BrowserProcessHandlerBuilder;
-use crate::browser_process::message_pump::MessagePumpChecker;
 use crate::util::{SCHEME_CEF, cef_scheme_flags};
 use cef::rc::{Rc, RcImpl};
 use cef::{
@@ -7,21 +7,21 @@ use cef::{
     SchemeRegistrar, WrapApp,
 };
 use cef_dll_sys::{_cef_app_t, cef_base_ref_counted_t};
+use crate::browser_process::MessageLoopTimer;
 
 /// ## Reference
 ///
 /// - [`CefApp Class Reference`](https://cef-builds.spotifycdn.com/docs/106.1/classCefApp.html)
-#[derive(Default)]
 pub struct BrowserProcessAppBuilder {
     object: *mut RcImpl<_cef_app_t, Self>,
-    timer: MessagePumpChecker,
+    message_loop_working_requester: Sender<MessageLoopTimer>,
 }
 
 impl BrowserProcessAppBuilder {
-    pub fn build(timer: MessagePumpChecker) -> cef::App {
+    pub fn build(message_loop_working_requester: Sender<MessageLoopTimer>) -> cef::App {
         cef::App::new(Self {
             object: core::ptr::null_mut(),
-            timer,
+            message_loop_working_requester,
         })
     }
 }
@@ -35,7 +35,7 @@ impl Clone for BrowserProcessAppBuilder {
         };
         Self {
             object,
-            timer: self.timer.clone(),
+            message_loop_working_requester: self.message_loop_working_requester.clone(),
         }
     }
 }
@@ -71,7 +71,7 @@ impl ImplApp for BrowserProcessAppBuilder {
     }
 
     fn browser_process_handler(&self) -> Option<BrowserProcessHandler> {
-        Some(BrowserProcessHandlerBuilder::build(self.timer.clone()))
+        Some(BrowserProcessHandlerBuilder::build(self.message_loop_working_requester.clone()))
     }
 
     #[inline]

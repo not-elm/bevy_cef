@@ -1,20 +1,23 @@
-use crate::browser_process::message_pump::MessagePumpChecker;
+use crate::prelude::MessageLoopTimer;
 use cef::rc::{Rc, RcImpl};
 use cef::*;
+use std::sync::mpsc::Sender;
 
 /// ## Reference
 ///
 /// - [`CefBrowserProcessHandler Class Reference`](https://cef-builds.spotifycdn.com/docs/106.1/classCefBrowserProcessHandler.html)
 pub struct BrowserProcessHandlerBuilder {
     object: *mut RcImpl<cef_dll_sys::cef_browser_process_handler_t, Self>,
-    timer: MessagePumpChecker,
+    message_loop_working_requester: Sender<MessageLoopTimer>,
 }
 
 impl BrowserProcessHandlerBuilder {
-    pub fn build(timer: MessagePumpChecker) -> BrowserProcessHandler {
+    pub fn build(
+        message_loop_working_requester: Sender<MessageLoopTimer>,
+    ) -> BrowserProcessHandler {
         BrowserProcessHandler::new(Self {
             object: core::ptr::null_mut(),
-            timer,
+            message_loop_working_requester,
         })
     }
 }
@@ -44,7 +47,7 @@ impl Clone for BrowserProcessHandlerBuilder {
 
         Self {
             object,
-            timer: self.timer.clone(),
+            message_loop_working_requester: self.message_loop_working_requester.clone(),
         }
     }
 }
@@ -64,8 +67,11 @@ impl ImplBrowserProcessHandler for BrowserProcessHandlerBuilder {
     }
 
     fn on_schedule_message_pump_work(&self, delay_ms: i64) {
-      self.timer.schedule(delay_ms);
+        let _ = self
+            .message_loop_working_requester
+            .send(MessageLoopTimer::new(delay_ms));
     }
+
     #[inline]
     fn get_raw(&self) -> *mut cef_dll_sys::_cef_browser_process_handler_t {
         self.object.cast()

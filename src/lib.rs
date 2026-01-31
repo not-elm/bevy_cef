@@ -30,7 +30,7 @@ impl Plugin for CefPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((
             LocalHostPlugin,
-            MessageLoopPlugin::default(),
+            MessageLoopPlugin,
             WebviewCoreComponentsPlugin,
             WebviewPlugin,
             IpcPlugin,
