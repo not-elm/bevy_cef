@@ -1,17 +1,13 @@
 //! A simple example that shows how to spawn a webview in world space.
 
+use bevy::dev_tools::fps_overlay::FpsOverlayPlugin;
 use bevy::prelude::*;
 use bevy::winit::{UpdateMode, WinitSettings};
 use bevy_cef::prelude::*;
 
 fn main() {
     App::new()
-        .insert_resource(WinitSettings {
-            focused_mode: UpdateMode::Continuous,
-            unfocused_mode: UpdateMode::Continuous,
-        })
-
-        .add_plugins((DefaultPlugins, CefPlugin))
+        .add_plugins((DefaultPlugins, CefPlugin, FpsOverlayPlugin::default()))
         .add_systems(
             Startup,
             (spawn_camera, spawn_directional_light, spawn_webview),

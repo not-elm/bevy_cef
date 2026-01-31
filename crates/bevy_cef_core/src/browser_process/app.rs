@@ -1,4 +1,5 @@
 use crate::browser_process::browser_process_handler::BrowserProcessHandlerBuilder;
+use crate::browser_process::message_pump::MessagePumpChecker;
 use crate::util::{SCHEME_CEF, cef_scheme_flags};
 use cef::rc::{Rc, RcImpl};
 use cef::{
@@ -6,7 +7,6 @@ use cef::{
     SchemeRegistrar, WrapApp,
 };
 use cef_dll_sys::{_cef_app_t, cef_base_ref_counted_t};
-use crate::browser_process::message_pump::MessagePumpChecker;
 
 /// ## Reference
 ///
@@ -21,7 +21,7 @@ impl BrowserProcessAppBuilder {
     pub fn build(timer: MessagePumpChecker) -> cef::App {
         cef::App::new(Self {
             object: core::ptr::null_mut(),
-            timer
+            timer,
         })
     }
 }
@@ -33,7 +33,10 @@ impl Clone for BrowserProcessAppBuilder {
             rc_impl.interface.add_ref();
             self.object
         };
-        Self { object, timer: self.timer.clone() }
+        Self {
+            object,
+            timer: self.timer.clone(),
+        }
     }
 }
 

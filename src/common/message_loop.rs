@@ -88,9 +88,7 @@ impl Default for MessageLoopPlugin {
 }
 
 fn cef_do_message_loop_work(timer: NonSend<MessagePumpChecker>) {
-    let count = timer.should_iterate_message_loop_count();
-    for _ in 0..count {
-        println!("cef_do_message_loop_work");
+    if timer.should_do_work() {
         cef::do_message_loop_work();
     }
 }
