@@ -1,7 +1,6 @@
-use std::sync::{Arc, Mutex};
-use std::sync::mpsc::{Receiver, Sender};
-use std::time::{Duration, Instant};
 use bevy::prelude::Deref;
+use std::sync::mpsc::Receiver;
+use std::time::{Duration, Instant};
 
 /// Maximum delay between message loop iterations (~30fps).
 /// Following CEF's official cefclient pattern (`kMaxTimerDelay = 1000/30`).

@@ -1,4 +1,4 @@
-use std::sync::mpsc::Sender;
+use crate::browser_process::MessageLoopTimer;
 use crate::browser_process::browser_process_handler::BrowserProcessHandlerBuilder;
 use crate::util::{SCHEME_CEF, cef_scheme_flags};
 use cef::rc::{Rc, RcImpl};
@@ -7,7 +7,7 @@ use cef::{
     SchemeRegistrar, WrapApp,
 };
 use cef_dll_sys::{_cef_app_t, cef_base_ref_counted_t};
-use crate::browser_process::MessageLoopTimer;
+use std::sync::mpsc::Sender;
 
 /// ## Reference
 ///
@@ -71,7 +71,9 @@ impl ImplApp for BrowserProcessAppBuilder {
     }
 
     fn browser_process_handler(&self) -> Option<BrowserProcessHandler> {
-        Some(BrowserProcessHandlerBuilder::build(self.message_loop_working_requester.clone()))
+        Some(BrowserProcessHandlerBuilder::build(
+            self.message_loop_working_requester.clone(),
+        ))
     }
 
     #[inline]
