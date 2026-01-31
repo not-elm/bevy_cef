@@ -6,6 +6,7 @@ use cef::{
     SchemeRegistrar, WrapApp,
 };
 use cef_dll_sys::{_cef_app_t, cef_base_ref_counted_t};
+use crate::browser_process::message_pump::MessagePumpChecker;
 
 /// ## Reference
 ///
@@ -13,12 +14,14 @@ use cef_dll_sys::{_cef_app_t, cef_base_ref_counted_t};
 #[derive(Default)]
 pub struct BrowserProcessAppBuilder {
     object: *mut RcImpl<_cef_app_t, Self>,
+    timer: MessagePumpChecker,
 }
 
 impl BrowserProcessAppBuilder {
-    pub fn build() -> cef::App {
+    pub fn build(timer: MessagePumpChecker) -> cef::App {
         cef::App::new(Self {
             object: core::ptr::null_mut(),
+            timer
         })
     }
 }
@@ -30,7 +33,7 @@ impl Clone for BrowserProcessAppBuilder {
             rc_impl.interface.add_ref();
             self.object
         };
-        Self { object }
+        Self { object, timer: self.timer.clone() }
     }
 }
 
@@ -58,14 +61,14 @@ impl ImplApp for BrowserProcessAppBuilder {
         // command_line.append_switch(Some(&" disable-gpu-shader-disk-cache".into()));
     }
 
-    fn browser_process_handler(&self) -> Option<BrowserProcessHandler> {
-        Some(BrowserProcessHandlerBuilder::build())
-    }
-
     fn on_register_custom_schemes(&self, registrar: Option<&mut SchemeRegistrar>) {
         if let Some(registrar) = registrar {
             registrar.add_custom_scheme(Some(&SCHEME_CEF.into()), cef_scheme_flags() as _);
         }
+    }
+
+    fn browser_process_handler(&self) -> Option<BrowserProcessHandler> {
+        Some(BrowserProcessHandlerBuilder::build(self.timer.clone()))
     }
 
     #[inline]

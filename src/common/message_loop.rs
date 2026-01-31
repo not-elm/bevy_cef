@@ -9,6 +9,7 @@ use cef::{Settings, api_hash, execute_process, initialize, shutdown, sys};
 /// - Windows and Linux: Support [`multi_threaded_message_loop`](https://cef-builds.spotifycdn.com/docs/106.1/structcef__settings__t.html#a518ac90db93ca5133a888faa876c08e0), so it is used.
 /// - macOS: Calls [`CefDoMessageLoopWork`](https://cef-builds.spotifycdn.com/docs/106.1/cef__app_8h.html#a830ae43dcdffcf4e719540204cefdb61) every frame.
 pub struct MessageLoopPlugin {
+    timer: MessagePumpChecker,
     _app: Box<cef::App>,
     #[cfg(all(target_os = "macos", not(feature = "debug")))]
     _loader: Box<cef::library_loader::LibraryLoader>,
@@ -18,6 +19,7 @@ pub struct MessageLoopPlugin {
 
 impl Plugin for MessageLoopPlugin {
     fn build(&self, app: &mut App) {
+        app.insert_non_send_resource(self.timer.clone());
         app.insert_non_send_resource(RunOnMainThread)
             .add_systems(Main, cef_do_message_loop_work)
             .add_systems(Update, cef_shutdown.run_if(on_message::<AppExit>));
@@ -41,7 +43,8 @@ impl Default for MessageLoopPlugin {
         let _ = api_hash(sys::CEF_API_VERSION_LAST, 0);
 
         let args = Args::new();
-        let mut app = BrowserProcessAppBuilder::build();
+        let timer = MessagePumpChecker::default();
+        let mut app = BrowserProcessAppBuilder::build(timer.clone());
         let ret = execute_process(
             Some(args.as_main_args()),
             Some(&mut app),
@@ -62,7 +65,7 @@ impl Default for MessageLoopPlugin {
             windowless_rendering_enabled: true as _,
             // #[cfg(any(target_os = "windows", target_os = "linux"))]
             // multi_threaded_message_loop: true as _,
-            #[cfg(target_os = "macos")]
+            multi_threaded_message_loop: false as _,
             external_message_pump: true as _,
             ..Default::default()
         };
@@ -79,12 +82,17 @@ impl Default for MessageLoopPlugin {
             _app: Box::new(app),
             #[cfg(target_os = "macos")]
             _loader: Box::new(_loader),
+            timer,
         }
     }
 }
 
-fn cef_do_message_loop_work(_: NonSend<RunOnMainThread>) {
-    cef::do_message_loop_work();
+fn cef_do_message_loop_work(timer: NonSend<MessagePumpChecker>) {
+    let count = timer.should_iterate_message_loop_count();
+    for _ in 0..count {
+        println!("cef_do_message_loop_work");
+        cef::do_message_loop_work();
+    }
 }
 
 fn cef_shutdown(_: NonSend<RunOnMainThread>) {

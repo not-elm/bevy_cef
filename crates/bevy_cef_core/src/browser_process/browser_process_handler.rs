@@ -1,17 +1,20 @@
 use cef::rc::{Rc, RcImpl};
 use cef::*;
+use crate::browser_process::message_pump::MessagePumpChecker;
 
 /// ## Reference
 ///
 /// - [`CefBrowserProcessHandler Class Reference`](https://cef-builds.spotifycdn.com/docs/106.1/classCefBrowserProcessHandler.html)
 pub struct BrowserProcessHandlerBuilder {
     object: *mut RcImpl<cef_dll_sys::cef_browser_process_handler_t, Self>,
+    timer: MessagePumpChecker
 }
 
 impl BrowserProcessHandlerBuilder {
-    pub fn build() -> BrowserProcessHandler {
+    pub fn build(timer: MessagePumpChecker) -> BrowserProcessHandler {
         BrowserProcessHandler::new(Self {
             object: core::ptr::null_mut(),
+            timer,
         })
     }
 }
@@ -39,7 +42,7 @@ impl Clone for BrowserProcessHandlerBuilder {
             rc_impl
         };
 
-        Self { object }
+        Self { object, timer: self.timer.clone()}
     }
 }
 
@@ -55,6 +58,11 @@ impl ImplBrowserProcessHandler for BrowserProcessHandlerBuilder {
         command_line.append_switch(Some(&"ignore-certificate-errors".into()));
         command_line.append_switch(Some(&"ignore-ssl-errors".into()));
         command_line.append_switch(Some(&"enable-logging=stderr".into()));
+    }
+
+    fn on_schedule_message_pump_work(&self, delay_ms: i64) {
+        println!("schedule after: {delay_ms}");
+        self.timer.schedule(delay_ms);
     }
     #[inline]
     fn get_raw(&self) -> *mut cef_dll_sys::_cef_browser_process_handler_t {

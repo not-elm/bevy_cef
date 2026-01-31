@@ -1,10 +1,16 @@
 //! A simple example that shows how to spawn a webview in world space.
 
 use bevy::prelude::*;
+use bevy::winit::{UpdateMode, WinitSettings};
 use bevy_cef::prelude::*;
 
 fn main() {
     App::new()
+        .insert_resource(WinitSettings {
+            focused_mode: UpdateMode::Continuous,
+            unfocused_mode: UpdateMode::Continuous,
+        })
+
         .add_plugins((DefaultPlugins, CefPlugin))
         .add_systems(
             Startup,
