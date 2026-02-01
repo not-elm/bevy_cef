@@ -2,7 +2,12 @@
 
 ### Features
 
-- Support Bevy 0.17
+- Support Bevy 0.18
+  - Enable message loop support for Windows and Linux
+  - Rename `bevy_picking` to `picking`
+  - Change `AmbientLight` to `GlobalAmbientLight`
+- Update CEF version to 144.2.0+144.0.11
+- Improve message loop handling
 - Added `PreloadScripts` component for specifying JavaScript to be executed when the page is initialized.
 - Enables GPU when debugging.
 
@@ -13,6 +18,10 @@
 
 ### Breaking Changes
 
+- Bevy 0.18 upgrade introduces breaking changes for users on Bevy 0.17
+  - `bevy_picking` renamed to `picking`
+  - `AmbientLight` changed to `GlobalAmbientLight`
+- Demo example removed from workspace
 - Changed `JsEmitEventPlugin` to use `Receive<E>` wrapper for events
   - Events no longer need to implement the `Event` trait, only `DeserializeOwned + Send + Sync + 'static`
 - Changed `HostEmitEvent` to `EntityEvent` with required `webview` field

@@ -57,6 +57,7 @@ impl ImplApp for RenderProcessAppBuilder {
 }
 
 impl WrapApp for RenderProcessAppBuilder {
+    #[inline]
     fn wrap_rc(&mut self, object: *mut RcImpl<_cef_app_t, Self>) {
         self.object = object;
     }

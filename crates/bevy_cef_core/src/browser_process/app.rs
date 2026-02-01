@@ -1,3 +1,4 @@
+use crate::browser_process::MessageLoopTimer;
 use crate::browser_process::browser_process_handler::BrowserProcessHandlerBuilder;
 use crate::util::{SCHEME_CEF, cef_scheme_flags};
 use cef::rc::{Rc, RcImpl};
@@ -6,19 +7,21 @@ use cef::{
     SchemeRegistrar, WrapApp,
 };
 use cef_dll_sys::{_cef_app_t, cef_base_ref_counted_t};
+use std::sync::mpsc::Sender;
 
 /// ## Reference
 ///
 /// - [`CefApp Class Reference`](https://cef-builds.spotifycdn.com/docs/106.1/classCefApp.html)
-#[derive(Default)]
 pub struct BrowserProcessAppBuilder {
     object: *mut RcImpl<_cef_app_t, Self>,
+    message_loop_working_requester: Sender<MessageLoopTimer>,
 }
 
 impl BrowserProcessAppBuilder {
-    pub fn build() -> cef::App {
+    pub fn build(message_loop_working_requester: Sender<MessageLoopTimer>) -> cef::App {
         cef::App::new(Self {
             object: core::ptr::null_mut(),
+            message_loop_working_requester,
         })
     }
 }
@@ -30,7 +33,10 @@ impl Clone for BrowserProcessAppBuilder {
             rc_impl.interface.add_ref();
             self.object
         };
-        Self { object }
+        Self {
+            object,
+            message_loop_working_requester: self.message_loop_working_requester.clone(),
+        }
     }
 }
 
@@ -58,14 +64,16 @@ impl ImplApp for BrowserProcessAppBuilder {
         // command_line.append_switch(Some(&" disable-gpu-shader-disk-cache".into()));
     }
 
-    fn browser_process_handler(&self) -> Option<BrowserProcessHandler> {
-        Some(BrowserProcessHandlerBuilder::build())
-    }
-
     fn on_register_custom_schemes(&self, registrar: Option<&mut SchemeRegistrar>) {
         if let Some(registrar) = registrar {
             registrar.add_custom_scheme(Some(&SCHEME_CEF.into()), cef_scheme_flags() as _);
         }
+    }
+
+    fn browser_process_handler(&self) -> Option<BrowserProcessHandler> {
+        Some(BrowserProcessHandlerBuilder::build(
+            self.message_loop_working_requester.clone(),
+        ))
     }
 
     #[inline]
