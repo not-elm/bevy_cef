@@ -1,15 +1,16 @@
 ## Unreleased
 
-### Features
+### Breaking Changes
 
 - Support Bevy 0.18
-  - Enable message loop support for Windows and Linux
-  - Rename `bevy_picking` to `picking`
-  - Change `AmbientLight` to `GlobalAmbientLight`
 - Update CEF version to 144.2.0+144.0.11
 - Improve message loop handling
+- We can now specify command-line switches when creating the `CefPlugin`.
+  - As a result, `CefPlugin` is no longer a unit struct.
+
+### Features
+
 - Added `PreloadScripts` component for specifying JavaScript to be executed when the page is initialized.
-- Enables GPU when debugging.
 
 ### Bug Fixes
 
