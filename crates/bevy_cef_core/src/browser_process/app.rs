@@ -67,14 +67,11 @@ impl ImplApp for BrowserProcessAppBuilder {
         };
 
         for switch in &self.config.switches {
-            command_line.append_switch(Some(&switch.as_str().into()));
+            command_line.append_switch(Some(&(*switch).into()));
         }
 
         for (name, value) in &self.config.switch_values {
-            command_line.append_switch_with_value(
-                Some(&name.as_str().into()),
-                Some(&value.as_str().into()),
-            );
+            command_line.append_switch_with_value(Some(&(*name).into()), Some(&(*value).into()));
         }
     }
 
