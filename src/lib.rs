@@ -25,6 +25,7 @@ pub mod prelude {
 
 pub struct RunOnMainThread;
 
+#[derive(Debug)]
 pub struct CefPlugin {
     switches: Vec<String>,
     switch_values: Vec<(String, String)>,
