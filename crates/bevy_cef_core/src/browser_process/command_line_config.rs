@@ -9,7 +9,7 @@
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```no_run
 /// use bevy_cef::prelude::*;
 ///
 /// // Add switches while preserving defaults (recommended)
