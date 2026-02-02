@@ -1,6 +1,28 @@
 /// Configuration for CEF command line switches.
 ///
 /// Used to customize CEF behavior at startup.
+///
+/// # Default Switches
+///
+/// On macOS debug builds, the following switches are enabled by default:
+/// - `use-mock-keychain`: Uses a mock keychain for testing
+///
+/// # Example
+///
+/// ```ignore
+/// use bevy_cef::prelude::*;
+///
+/// // Add switches while preserving defaults (recommended)
+/// let config = CommandLineConfig::default()
+///     .with_switch("disable-gpu")
+///     .with_switch_value("remote-debugging-port", "9222");
+///
+/// // Or use direct initialization (replaces defaults)
+/// let config = CommandLineConfig {
+///     switches: vec!["disable-gpu"],
+///     switch_values: vec![("remote-debugging-port", "9222")],
+/// };
+/// ```
 #[derive(Clone, Debug)]
 pub struct CommandLineConfig {
     pub switches: Vec<&'static str>,
