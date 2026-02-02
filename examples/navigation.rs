@@ -11,7 +11,7 @@ use bevy_cef::prelude::*;
 
 fn main() {
     App::new()
-        .add_plugins((DefaultPlugins, CefPlugin))
+        .add_plugins((DefaultPlugins, CefPlugin::default()))
         .add_systems(
             Startup,
             (spawn_camera, spawn_directional_light, spawn_webview),

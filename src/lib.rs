@@ -16,21 +16,28 @@ use crate::mute::AudioMutePlugin;
 use crate::prelude::{IpcPlugin, NavigationPlugin, WebviewPlugin};
 use crate::zoom::ZoomPlugin;
 use bevy::prelude::*;
+use bevy_cef_core::prelude::CommandLineConfig;
 use bevy_remote::RemotePlugin;
 
 pub mod prelude {
     pub use crate::{CefPlugin, RunOnMainThread, common::*, navigation::*, webview::prelude::*};
+    pub use bevy_cef_core::prelude::CommandLineConfig;
 }
 
 pub struct RunOnMainThread;
 
-pub struct CefPlugin;
+#[derive(Debug, Default)]
+pub struct CefPlugin {
+    pub command_line_config: CommandLineConfig,
+}
 
 impl Plugin for CefPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((
             LocalHostPlugin,
-            MessageLoopPlugin,
+            MessageLoopPlugin {
+                config: self.command_line_config.clone(),
+            },
             WebviewCoreComponentsPlugin,
             WebviewPlugin,
             IpcPlugin,

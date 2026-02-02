@@ -13,7 +13,7 @@ fn main() {
         .add_plugins((
             DefaultPlugins,
             RemotePlugin::default().with_method("greet", greet),
-            CefPlugin,
+            CefPlugin::default(),
         ))
         .add_systems(
             Startup,

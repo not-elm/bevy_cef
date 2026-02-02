@@ -1,3 +1,4 @@
+use crate::browser_process::CommandLineConfig;
 use crate::browser_process::MessageLoopTimer;
 use crate::browser_process::browser_process_handler::BrowserProcessHandlerBuilder;
 use crate::util::{SCHEME_CEF, cef_scheme_flags};
@@ -15,13 +16,18 @@ use std::sync::mpsc::Sender;
 pub struct BrowserProcessAppBuilder {
     object: *mut RcImpl<_cef_app_t, Self>,
     message_loop_working_requester: Sender<MessageLoopTimer>,
+    config: CommandLineConfig,
 }
 
 impl BrowserProcessAppBuilder {
-    pub fn build(message_loop_working_requester: Sender<MessageLoopTimer>) -> cef::App {
+    pub fn build(
+        message_loop_working_requester: Sender<MessageLoopTimer>,
+        config: CommandLineConfig,
+    ) -> cef::App {
         cef::App::new(Self {
             object: core::ptr::null_mut(),
             message_loop_working_requester,
+            config,
         })
     }
 }
@@ -36,6 +42,7 @@ impl Clone for BrowserProcessAppBuilder {
         Self {
             object,
             message_loop_working_requester: self.message_loop_working_requester.clone(),
+            config: self.config.clone(),
         }
     }
 }
@@ -58,10 +65,14 @@ impl ImplApp for BrowserProcessAppBuilder {
         let Some(command_line) = command_line else {
             return;
         };
-        command_line.append_switch(Some(&"use-mock-keychain".into()));
-        // command_line.append_switch(Some(&"disable-gpu".into()));
-        // command_line.append_switch(Some(&"disable-gpu-compositing".into()));
-        // command_line.append_switch(Some(&" disable-gpu-shader-disk-cache".into()));
+
+        for switch in &self.config.switches {
+            command_line.append_switch(Some(&(*switch).into()));
+        }
+
+        for (name, value) in &self.config.switch_values {
+            command_line.append_switch_with_value(Some(&(*name).into()), Some(&(*value).into()));
+        }
     }
 
     fn on_register_custom_schemes(&self, registrar: Option<&mut SchemeRegistrar>) {

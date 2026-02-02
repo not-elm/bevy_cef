@@ -8,7 +8,7 @@ fn main() {
     App::new()
         .add_plugins((
             DefaultPlugins,
-            CefPlugin,
+            CefPlugin::default(),
             JsEmitEventPlugin::<Message>::default(),
         ))
         .add_systems(
