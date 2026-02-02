@@ -6,10 +6,12 @@ mod context_menu_handler;
 mod display_handler;
 mod localhost;
 mod message_pump;
+mod command_line_config;
 mod renderer_handler;
 mod request_context_handler;
 
 pub use app::*;
+pub use command_line_config::*;
 pub use browser_process_handler::*;
 pub use browsers::*;
 pub use client_handler::*;
