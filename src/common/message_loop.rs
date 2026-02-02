@@ -8,7 +8,9 @@ use cef::{Settings, api_hash, execute_process, initialize, shutdown, sys};
 ///
 /// - Windows and Linux: Support [`multi_threaded_message_loop`](https://cef-builds.spotifycdn.com/docs/106.1/structcef__settings__t.html#a518ac90db93ca5133a888faa876c08e0), so it is used.
 /// - macOS: Calls [`CefDoMessageLoopWork`](https://cef-builds.spotifycdn.com/docs/106.1/cef__app_8h.html#a830ae43dcdffcf4e719540204cefdb61) every frame.
-pub struct MessageLoopPlugin;
+pub struct MessageLoopPlugin {
+    pub config: CommandLineConfig,
+}
 
 impl Plugin for MessageLoopPlugin {
     fn build(&self, app: &mut App) {
@@ -19,7 +21,7 @@ impl Plugin for MessageLoopPlugin {
         let args = Args::new();
         let (tx, rx) = std::sync::mpsc::channel();
 
-        let mut cef_app = BrowserProcessAppBuilder::build(tx);
+        let mut cef_app = BrowserProcessAppBuilder::build(tx, self.config.clone());
         let ret = execute_process(
             Some(args.as_main_args()),
             Some(&mut cef_app),
