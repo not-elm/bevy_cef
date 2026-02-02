@@ -12,7 +12,7 @@ fn main() {
     App::new()
         .add_plugins((
             DefaultPlugins,
-            CefPlugin,
+            CefPlugin::new(),
             WebviewExtendMaterialPlugin::<CustomExtension>::default(),
         ))
         .add_systems(Startup, (spawn_camera, spawn_webview))
