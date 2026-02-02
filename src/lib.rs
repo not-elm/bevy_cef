@@ -52,11 +52,7 @@ impl CefPlugin {
     }
 
     /// Add a command line switch with a value (e.g., "remote-debugging-port", "9222").
-    pub fn with_switch_value(
-        mut self,
-        name: impl Into<String>,
-        value: impl Into<String>,
-    ) -> Self {
+    pub fn with_switch_value(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
         self.switch_values.push((name.into(), value.into()));
         self
     }
