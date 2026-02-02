@@ -7,21 +7,6 @@
 - Improve message loop handling
 - We can now specify command-line switches when creating the `CefPlugin`.
   - As a result, `CefPlugin` is no longer a unit struct.
-
-### Features
-
-- Added `PreloadScripts` component for specifying JavaScript to be executed when the page is initialized.
-
-### Bug Fixes
-
-- Fixed so that the webview can detect pointers correctly even if it is not the root entity.
-- Avoid a crash when updating the cursor icon
-
-### Breaking Changes
-
-- Bevy 0.18 upgrade introduces breaking changes for users on Bevy 0.17
-  - `bevy_picking` renamed to `picking`
-  - `AmbientLight` changed to `GlobalAmbientLight`
 - Demo example removed from workspace
 - Changed `JsEmitEventPlugin` to use `Receive<E>` wrapper for events
   - Events no longer need to implement the `Event` trait, only `DeserializeOwned + Send + Sync + 'static`
@@ -35,6 +20,15 @@
   - `Default` trait is no longer implemented
 - Remove auto install debug tools
   - Please refer to [README.md](./README.md) and install manually from now on.
+
+### Features
+
+- Added `PreloadScripts` component for specifying JavaScript to be executed when the page is initialized.
+
+### Bug Fixes
+
+- Fixed so that the webview can detect pointers correctly even if it is not the root entity.
+- Avoid a crash when updating the cursor icon
 
 ## v0.1.0
 
