@@ -16,8 +16,8 @@ use crate::mute::AudioMutePlugin;
 use crate::prelude::{IpcPlugin, NavigationPlugin, WebviewPlugin};
 use crate::zoom::ZoomPlugin;
 use bevy::prelude::*;
-use bevy_remote::RemotePlugin;
 use bevy_cef_core::prelude::CommandLineConfig;
+use bevy_remote::RemotePlugin;
 
 pub mod prelude {
     pub use crate::{CefPlugin, RunOnMainThread, common::*, navigation::*, webview::prelude::*};
@@ -35,7 +35,7 @@ impl Default for CefPlugin {
         Self {
             switches: vec![
                 #[cfg(all(target_os = "macos", debug_assertions))]
-                "use-mock-keychain".to_string()
+                "use-mock-keychain".to_string(),
             ],
             switch_values: Vec::new(),
         }
@@ -61,7 +61,7 @@ impl Plugin for CefPlugin {
         app.add_plugins((
             LocalHostPlugin,
             MessageLoopPlugin {
-                config: CommandLineConfig{
+                config: CommandLineConfig {
                     switches: self.switches.clone(),
                     switch_values: self.switch_values.clone(),
                 },
