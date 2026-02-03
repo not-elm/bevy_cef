@@ -24,6 +24,9 @@
 ### Features
 
 - Added `PreloadScripts` component for specifying JavaScript to be executed when the page is initialized.
+- Added `CefExtensions` type for registering custom JavaScript APIs via CEF's `register_extension`
+  - Extensions are global and load before any page scripts
+  - New `extensions` example demonstrating custom JS APIs
 
 ### Bug Fixes
 

@@ -8,13 +8,17 @@ use bevy::platform::collections::HashMap;
 use bevy_remote::BrpResult;
 use cef::rc::{Rc, RcImpl};
 use cef::{
-    Browser, CefString, DictionaryValue, Frame, ImplBrowser, ImplDictionaryValue, ImplFrame,
-    ImplListValue, ImplProcessMessage, ImplRenderProcessHandler, ImplV8Context, ImplV8Value,
-    ProcessId, ProcessMessage, V8Context, V8Propertyattribute, V8Value, WrapRenderProcessHandler,
-    sys, v8_value_create_function, v8_value_create_object,
+    command_line_get_global, register_extension, Browser, CefString, DictionaryValue, Frame,
+    ImplBrowser, ImplCommandLine, ImplDictionaryValue, ImplFrame, ImplListValue,
+    ImplProcessMessage, ImplRenderProcessHandler, ImplV8Context, ImplV8Value, ProcessId,
+    ProcessMessage, V8Context, V8Propertyattribute, V8Value, WrapRenderProcessHandler, sys,
+    v8_value_create_function, v8_value_create_object,
 };
+use std::collections::HashMap as StdHashMap;
 use std::os::raw::c_int;
 use std::sync::Mutex;
+
+const EXTENSIONS_SWITCH: &str = "bevy-cef-extensions";
 
 pub(crate) static BRP_PROMISES: Mutex<HashMap<String, V8Value>> = Mutex::new(HashMap::new());
 pub(crate) static LISTEN_EVENTS: Mutex<HashMap<String, V8Value>> = Mutex::new(HashMap::new());
@@ -65,6 +69,10 @@ impl Clone for RenderProcessHandlerBuilder {
 }
 
 impl ImplRenderProcessHandler for RenderProcessHandlerBuilder {
+    fn on_web_kit_initialized(&self) {
+        register_extensions_from_command_line();
+    }
+
     fn on_browser_created(
         &self,
         browser: Option<&mut Browser>,
@@ -228,4 +236,38 @@ fn handle_listen_message(message: &ProcessMessage, mut ctx: V8Context) {
         );
     }
     ctx.exit();
+}
+
+fn register_extensions_from_command_line() {
+    let Some(cmd_line) = command_line_get_global() else {
+        return;
+    };
+    println!("bevy_cef: register_extensions_from_command_line");
+    if cmd_line.has_switch(Some(&EXTENSIONS_SWITCH.into())) == 0 {
+        println!("bevy_cef: not extensions switch found");
+        return;
+    }
+    println!("bevy_cef: registering extensions from command line");
+    let json = cmd_line
+        .switch_value(Some(&EXTENSIONS_SWITCH.into()))
+        .into_string();
+    println!("bevy_cef: {json}");
+    if json.is_empty() {
+        return;
+    }
+
+    let Ok(extensions) = serde_json::from_str::<StdHashMap<String, String>>(&json) else {
+        eprintln!("bevy_cef: failed to parse extensions JSON: {}", json);
+        return;
+    };
+
+    for (name, code) in extensions {
+        // CEF convention: extension names should be prefixed with "v8/" for V8 extensions
+        let full_name = format!("v8/{}", name);
+        register_extension(
+            Some(&full_name.as_str().into()),
+            Some(&code.as_str().into()),
+            None,
+        );
+    }
 }
