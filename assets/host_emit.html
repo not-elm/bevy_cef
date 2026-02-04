@@ -15,7 +15,7 @@
 <h1 id="count" style="color: aqua">0</h1>
 <script>
     const count = document.getElementById("count");
-    window.cef.listen("count", (payload) => {
+    cef.listen("count", (payload) => {
         count.innerText = payload;
     })
 </script>

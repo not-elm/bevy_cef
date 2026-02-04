@@ -19,7 +19,6 @@
 
     <script>
         function testExtension() {
-            console.error(myGame)
             if (typeof myGame !== 'undefined') {
                 myGame.sendScore(Math.floor(Math.random() * 100));
                 document.getElementById('output').innerHTML = 'Score sent! Check Bevy console.';

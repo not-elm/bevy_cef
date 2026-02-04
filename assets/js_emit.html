@@ -17,7 +17,7 @@
     let count = 0;
     window.setInterval(() => {
         console.log("Emitting count:", count);
-        window.cef.emit({
+        cef.emit({
             count,
         });
         countElement.innerText = count;
