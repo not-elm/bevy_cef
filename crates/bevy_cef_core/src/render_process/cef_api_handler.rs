@@ -9,6 +9,16 @@ use cef::{
 use cef_dll_sys::cef_process_id_t;
 use std::os::raw::c_int;
 
+/// Handles the `window.cef` JavaScript API functions.
+///
+/// This handler is registered as a CEF extension during `on_web_kit_initialized`
+/// and provides three native functions:
+/// - `__cef_brp`: Async Bevy Remote Protocol requests
+/// - `__cef_emit`: Send events from JavaScript to Bevy
+/// - `__cef_listen`: Register callbacks for events from Bevy
+///
+/// The Frame is obtained dynamically via `v8_context_get_current_context().frame()`
+/// since extensions are global and not bound to a specific context.
 pub struct CefApiHandler {
     object: *mut RcImpl<sys::_cef_v8_handler_t, Self>,
 }
@@ -142,9 +152,9 @@ impl CefApiHandler {
     fn execute_listen(&self, arguments: Option<&[Option<V8Value>]>) -> c_int {
         if let Some(arguments) = arguments
             && let Some(Some(id)) = arguments.first()
-            && 0 < id.is_string()
+            && id.is_string().is_positive()
             && let Some(Some(callback)) = arguments.get(1)
-            && 0 < callback.is_function()
+            && callback.is_function().is_positive()
         {
             LISTEN_EVENTS
                 .lock()
