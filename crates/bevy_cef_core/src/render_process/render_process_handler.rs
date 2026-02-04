@@ -1,6 +1,5 @@
-use crate::prelude::{EmitBuilder, IntoString};
-use crate::render_process::brp::BrpBuilder;
-use crate::render_process::listen::ListenBuilder;
+use crate::prelude::{EXTENSIONS_SWITCH, IntoString};
+use crate::render_process::cef_api_handler::CefApiHandler;
 use crate::util::json_to_v8;
 use crate::util::v8_accessor::V8DefaultAccessorBuilder;
 use crate::util::v8_interceptor::V8DefaultInterceptorBuilder;
@@ -8,13 +7,29 @@ use bevy::platform::collections::HashMap;
 use bevy_remote::BrpResult;
 use cef::rc::{Rc, RcImpl};
 use cef::{
-    Browser, CefString, DictionaryValue, Frame, ImplBrowser, ImplDictionaryValue, ImplFrame,
-    ImplListValue, ImplProcessMessage, ImplRenderProcessHandler, ImplV8Context, ImplV8Value,
-    ProcessId, ProcessMessage, V8Context, V8Propertyattribute, V8Value, WrapRenderProcessHandler,
-    sys, v8_value_create_function, v8_value_create_object,
+    Browser, CefString, DictionaryValue, Frame, ImplBrowser, ImplCommandLine, ImplDictionaryValue,
+    ImplFrame, ImplListValue, ImplProcessMessage, ImplRenderProcessHandler, ImplV8Context,
+    ImplV8Value, ProcessId, ProcessMessage, V8Context, V8Handler, V8Value,
+    WrapRenderProcessHandler, command_line_get_global, register_extension, sys,
+    v8_value_create_object,
 };
+use std::collections::HashMap as StdHashMap;
 use std::os::raw::c_int;
 use std::sync::Mutex;
+
+const CEF_API_EXTENSION_NAME: &str = "v8/bevy-cef-api";
+const CEF_API_EXTENSION_CODE: &str = r#"
+var cef;
+if (!cef) cef = {};
+(function() {
+  native function __cef_brp();
+  native function __cef_emit();
+  native function __cef_listen();
+  cef.brp = __cef_brp;
+  cef.emit = __cef_emit;
+  cef.listen = __cef_listen;
+})();
+"#;
 
 pub(crate) static BRP_PROMISES: Mutex<HashMap<String, V8Value>> = Mutex::new(HashMap::new());
 pub(crate) static LISTEN_EVENTS: Mutex<HashMap<String, V8Value>> = Mutex::new(HashMap::new());
@@ -65,6 +80,11 @@ impl Clone for RenderProcessHandlerBuilder {
 }
 
 impl ImplRenderProcessHandler for RenderProcessHandlerBuilder {
+    fn on_web_kit_initialized(&self) {
+        register_cef_api_extension();
+        register_extensions_from_command_line();
+    }
+
     fn on_browser_created(
         &self,
         browser: Option<&mut Browser>,
@@ -91,7 +111,6 @@ impl ImplRenderProcessHandler for RenderProcessHandlerBuilder {
             && let Some(browser) = browser
         {
             inject_initialize_scripts(browser, context, frame);
-            inject_cef_api(context, frame);
         }
     }
 
@@ -137,46 +156,12 @@ fn inject_initialize_scripts(browser: &mut Browser, context: &mut V8Context, fra
     }
 }
 
-fn inject_cef_api(context: &mut V8Context, frame: &mut Frame) {
-    if let Some(g) = context.global()
-        && let Some(mut cef) = v8_value_create_object(
-            Some(&mut V8DefaultAccessorBuilder::build()),
-            Some(&mut V8DefaultInterceptorBuilder::build()),
-        )
-        && let Some(mut brp) = v8_value_create_function(
-            Some(&"brp".into()),
-            Some(&mut BrpBuilder::build(frame.clone())),
-        )
-        && let Some(mut emit) = v8_value_create_function(
-            Some(&"emit".into()),
-            Some(&mut EmitBuilder::build(frame.clone())),
-        )
-        && let Some(mut listen) = v8_value_create_function(
-            Some(&"listen".into()),
-            Some(&mut ListenBuilder::build(frame.clone())),
-        )
-    {
-        cef.set_value_bykey(
-            Some(&"brp".into()),
-            Some(&mut brp),
-            V8Propertyattribute::default(),
-        );
-        cef.set_value_bykey(
-            Some(&"emit".into()),
-            Some(&mut emit),
-            V8Propertyattribute::default(),
-        );
-        cef.set_value_bykey(
-            Some(&"listen".into()),
-            Some(&mut listen),
-            V8Propertyattribute::default(),
-        );
-        g.set_value_bykey(
-            Some(&"cef".into()),
-            Some(&mut cef),
-            V8Propertyattribute::default(),
-        );
-    }
+fn register_cef_api_extension() {
+    register_extension(
+        Some(&CEF_API_EXTENSION_NAME.into()),
+        Some(&CEF_API_EXTENSION_CODE.into()),
+        Some(&mut V8Handler::new(CefApiHandler::default())),
+    );
 }
 
 fn handle_brp_message(message: &ProcessMessage, ctx: V8Context) {
@@ -228,4 +213,33 @@ fn handle_listen_message(message: &ProcessMessage, mut ctx: V8Context) {
         );
     }
     ctx.exit();
+}
+
+fn register_extensions_from_command_line() {
+    let Some(cmd_line) = command_line_get_global() else {
+        return;
+    };
+    if cmd_line.has_switch(Some(&EXTENSIONS_SWITCH.into())) == 0 {
+        return;
+    }
+    let json = cmd_line
+        .switch_value(Some(&EXTENSIONS_SWITCH.into()))
+        .into_string();
+    if json.is_empty() {
+        return;
+    }
+
+    let Ok(extensions) = serde_json::from_str::<StdHashMap<String, String>>(&json) else {
+        eprintln!("bevy_cef: failed to parse extensions JSON: {}", json);
+        return;
+    };
+
+    for (name, code) in extensions {
+        let full_name = format!("v8/{}", name);
+        register_extension(
+            Some(&full_name.as_str().into()),
+            Some(&code.as_str().into()),
+            None,
+        );
+    }
 }

@@ -10,93 +10,87 @@ This is `bevy_cef`, a Bevy plugin that integrates the Chromium Embedded Framewor
 
 ### Multi-Process Design
 - **Browser Process**: Main application process running Bevy (`bevy_cef_core::browser_process`)
-- **Render Process**: Separate CEF render process (`bevy_cef_core::render_process`) 
+- **Render Process**: Separate CEF render process (`bevy_cef_core::render_process`)
 - Communication through IPC channels and Bevy Remote Protocol (BRP)
 
 ### Core Components
-- `CefWebviewUri`: Component specifying webview URL (remote or local via `cef://localhost/`)
-- `WebviewSize`: Controls webview rendering dimensions (default 800x800)
-- `WebviewExtendStandardMaterial`: Material for rendering webviews on 3D meshes
-- `HostWindow`: Optional parent window specification
-- `ZoomLevel`: Webview zoom control
-- `AudioMuted`: Audio muting control
+- `CefWebviewUri`: URL specification (`CefWebviewUri::new("url")` or `CefWebviewUri::local("file.html")`)
+- `WebviewSize`: Rendering dimensions (default 800x800), controls texture resolution not 3D size
+- `WebviewExtendStandardMaterial`: Primary material for 3D mesh rendering
+- `WebviewSpriteMaterial`: Material for 2D sprite rendering
+- `HostWindow`: Optional parent window (defaults to PrimaryWindow)
+- `ZoomLevel`: f64 zoom control (0.0 = default)
+- `AudioMuted`: bool for audio control
+- `PreloadScripts`: Vec<String> of scripts to execute before page scripts
+- `CefExtensions`: Custom JS extensions via `register_extension` (global to all webviews)
 
 ### Plugin Architecture
-The main `CefPlugin` orchestrates several sub-plugins:
-- `LocalHostPlugin`: Serves local assets via custom scheme
-- `MessageLoopPlugin`: CEF message loop integration
+The main `CefPlugin` accepts `CommandLineConfig` for CEF command-line switches and `CefExtensions` for custom JavaScript APIs. Sub-plugins:
+- `LocalHostPlugin`: Serves local assets via `cef://localhost/` scheme
+- `MessageLoopPlugin`: CEF message loop integration (macOS uses `CefDoMessageLoopWork()`)
 - `WebviewCoreComponentsPlugin`: Core component registration
-- `WebviewPlugin`: Main webview management
-- `IpcPlugin`: Inter-process communication
-- `KeyboardPlugin`, `NavigationPlugin`, `ZoomPlugin`, `AudioMutePlugin`: Feature-specific functionality
+- `WebviewPlugin`: Webview lifecycle and DevTools
+- `IpcPlugin`: IPC containing `IpcRawEventPlugin` and `HostEmitPlugin`
+- `KeyboardPlugin`, `SystemCursorIconPlugin`, `NavigationPlugin`, `ZoomPlugin`, `AudioMutePlugin`
+- `RemotePlugin`: Auto-added for BRP support if not present
 
 ### IPC System
 Three communication patterns:
-1. **JS Emit**: Webview → Bevy app via `JsEmitEventPlugin<T>`
-2. **Host Emit**: Bevy app → Webview via event emission
-3. **BRP (Bevy Remote Protocol)**: Bidirectional RPC calls
+1. **JS Emit**: Webview → Bevy via `JsEmitEventPlugin<E>` where E: `DeserializeOwned + Send + Sync + 'static`
+   - Events wrapped in `Receive<E>` EntityEvent
+   - JavaScript: `window.cef.emit('event_name', data)`
+2. **Host Emit**: Bevy → Webview via `HostEmitEvent` (EntityEvent)
+   - JavaScript: `window.cef.listen('event_name', callback)`
+3. **BRP**: Bidirectional RPC via `bevy_remote`
+   - JavaScript: `await window.cef.brp({ method: 'method_name', params: {...} })`
+
+### EntityEvent Pattern
+Navigation and DevTools events are `EntityEvent` types requiring explicit `webview: Entity` field:
+- `HostEmitEvent`, `RequestGoBack`, `RequestGoForward`, `RequestShowDevTool`, `RequestCloseDevtool`
 
 ## Development Commands
 
-### Code Quality
 ```bash
 # Fix and format code
 make fix
-# Which runs:
-# cargo clippy --fix --allow-dirty --allow-staged --workspace --all --all-features
-# cargo fmt --all
-```
 
-### Development Setup
-The build system automatically handles CEF dependencies on macOS with debug feature:
-- Installs `bevy_cef_debug_render_process` tool
-- Installs `export-cef-dir` tool  
-- Downloads/extracts CEF framework to `$HOME/.local/share/cef`
+# Run examples (macOS requires debug feature)
+cargo run --example simple --features debug
 
-### Manual Installation
-```bash
 # Install debug render process tool
 make install
-# Or: cargo install --path ./crates/bevy_cef_debug_render_process --force
 ```
 
-## Key Examples
-
-- `examples/simple.rs`: Basic webview on 3D plane
-- `examples/js_emit.rs`: JavaScript to Bevy communication
-- `examples/host_emit.rs`: Bevy to JavaScript communication  
-- `examples/brp.rs`: Bidirectional RPC with devtools
-- `examples/navigation.rs`: Page navigation controls
-- `examples/zoom_level.rs`: Zoom functionality
-- `examples/sprite.rs`: Webview as 2D sprite
-- `examples/devtool.rs`: Chrome DevTools integration
+### Debug Tools Setup (macOS)
+Manual installation required before running with `debug` feature:
+```bash
+cargo install export-cef-dir
+export-cef-dir --force $HOME/.local/share
+cargo install bevy_cef_debug_render_process
+mv $HOME/.cargo/bin/bevy_cef_debug_render_process "$HOME/.local/share/Chromium Embedded Framework.framework/Libraries/bevy_cef_debug_render_process"
+```
 
 ## Local Asset Loading
 
-Local HTML/assets are served via the custom `cef://localhost/` scheme:
+Local HTML/assets served via `cef://localhost/` scheme:
 - Place assets in `assets/` directory
 - Reference as `CefWebviewUri::local("filename.html")`
-- Or manually: `cef://localhost/filename.html`
 
 ## Testing
 
-No automated tests are present in this codebase. Testing is done through the example applications.
-
-### Manually Testing
-
-- Run tests with `cargo test --workspace --all-features`
+No automated tests. Testing done through examples:
+- `cargo test --workspace --all-features` (for any future tests)
+- Examples: simple, js_emit, host_emit, brp, navigation, zoom_level, sprite, devtool, custom_material, preload_scripts, extensions
 
 ## Platform Notes
 
-- Currently focused on macOS development (see Cargo.toml target-specific dependencies)
-- CEF framework must be available at `$HOME/.local/share/cef`
-- Uses `objc` crate for macOS-specific window handling
-- DYLD environment variables required for CEF library loading
+- Primary platform: macOS (uses `objc` crate for window handling)
+- CEF framework location: `$HOME/.local/share/Chromium Embedded Framework.framework`
+- Windows/Linux: Infrastructure ready but needs testing
+- Key resources (`Browsers`, library loaders) are `NonSend` - CEF is not thread-safe
 
 ## Workspace Structure
 
-This is a Cargo workspace with:
 - Root crate: `bevy_cef` (public API)
 - `crates/bevy_cef_core`: Core CEF integration logic
 - `crates/bevy_cef_debug_render_process`: Debug render process executable
-- `examples/demo`: Standalone demo application

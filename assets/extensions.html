@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CEF Extensions Example</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background: #1a1a2e; color: #eee; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        #output { margin-top: 20px; padding: 10px; background: #16213e; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h1>CEF Extensions Example</h1>
+    <p>Testing custom JavaScript extensions registered via register_extension.</p>
+
+    <button onclick="testExtension()">Test myGame.sendScore()</button>
+    <button onclick="checkVersion()">Check Version</button>
+
+    <div id="output">Output will appear here...</div>
+
+    <script>
+        function testExtension() {
+            if (typeof myGame !== 'undefined') {
+                myGame.sendScore(Math.floor(Math.random() * 100));
+                document.getElementById('output').innerHTML = 'Score sent! Check Bevy console.';
+            } else {
+                document.getElementById('output').innerHTML = 'Error: myGame extension not found';
+            }
+        }
+
+        function checkVersion() {
+            if (typeof myGame !== 'undefined' && myGame.version) {
+                document.getElementById('output').innerHTML = 'myGame version: ' + myGame.version;
+            } else {
+                document.getElementById('output').innerHTML = 'Error: myGame.version not found';
+            }
+        }
+    </script>
+</body>
+</html>

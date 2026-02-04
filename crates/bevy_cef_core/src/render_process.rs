@@ -3,9 +3,7 @@ use cef::args::Args;
 use cef::{api_hash, execute_process, sys};
 
 pub mod app;
-pub mod brp;
-pub mod emit;
-pub mod listen;
+pub mod cef_api_handler;
 pub mod render_process_handler;
 
 /// Execute the CEF render process.

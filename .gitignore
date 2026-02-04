@@ -4,3 +4,4 @@ book/
 .DS_Store**/.DS_Store
 .claude/memo.md
 docs/plans/
+.worktrees/
