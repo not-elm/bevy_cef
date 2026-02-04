@@ -29,7 +29,7 @@ fn update_cursor_icon(
         windows.iter().for_each(|window| {
             commands
                 .entity(window)
-                .insert(CursorIcon::System(cursor_icon));
+                .try_insert(CursorIcon::System(cursor_icon));
         });
     }
 }
