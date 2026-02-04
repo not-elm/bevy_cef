@@ -9,7 +9,7 @@ use cef::rc::{Rc, RcImpl};
 use cef::{
     Browser, CefString, DictionaryValue, Frame, ImplBrowser, ImplCommandLine, ImplDictionaryValue,
     ImplFrame, ImplListValue, ImplProcessMessage, ImplRenderProcessHandler, ImplV8Context,
-    ImplV8Value, ProcessId, ProcessMessage, V8Context, V8Handler, V8Value,
+    ImplV8Exception, ImplV8Value, ProcessId, ProcessMessage, V8Context, V8Handler, V8Value,
     WrapRenderProcessHandler, command_line_get_global, register_extension, sys,
     v8_value_create_object,
 };
@@ -151,7 +151,27 @@ fn inject_initialize_scripts(browser: &mut Browser, context: &mut V8Context, fra
         Some(CefString::from(script.as_str()))
     }) {
         context.enter();
-        context.eval(Some(&script), Some(&(&frame.url()).into()), 0, None, None);
+        let mut retval: Option<V8Value> = None;
+        let mut exception: Option<cef::V8Exception> = None;
+        let result = context.eval(
+            Some(&script),
+            Some(&(&frame.url()).into()),
+            0,
+            Some(&mut retval),
+            Some(&mut exception),
+        );
+        if result == 0 {
+            if let Some(ex) = exception {
+                eprintln!(
+                    "bevy_cef: eval failed - message: {}, line: {}, column: {}",
+                    ex.message().into_string(),
+                    ex.line_number(),
+                    ex.start_column(),
+                );
+            } else {
+                eprintln!("bevy_cef: eval failed with no exception details");
+            }
+        }
         context.exit();
     }
 }
