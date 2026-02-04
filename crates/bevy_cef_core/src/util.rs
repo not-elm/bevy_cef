@@ -18,6 +18,8 @@ use cef_dll_sys::cef_scheme_options_t::{
 use std::env::home_dir;
 use std::path::PathBuf;
 
+pub const EXTENSIONS_SWITCH: &str = "bevy-cef-extensions";
+
 pub const SCHEME_CEF: &str = "cef";
 
 pub const HOST_CEF: &str = "localhost";

@@ -1,4 +1,4 @@
-use crate::prelude::IntoString;
+use crate::prelude::{IntoString, EXTENSIONS_SWITCH};
 use crate::render_process::cef_api_handler::CefApiHandler;
 use crate::util::json_to_v8;
 use crate::util::v8_accessor::V8DefaultAccessorBuilder;
@@ -16,8 +16,6 @@ use cef::{
 use std::collections::HashMap as StdHashMap;
 use std::os::raw::c_int;
 use std::sync::Mutex;
-
-const EXTENSIONS_SWITCH: &str = "bevy-cef-extensions";
 
 const CEF_API_EXTENSION_NAME: &str = "v8/bevy-cef-api";
 const CEF_API_EXTENSION_CODE: &str = r#"

@@ -1,4 +1,4 @@
-use crate::prelude::{CefExtensions, MessageLoopTimer};
+use crate::prelude::{CefExtensions, MessageLoopTimer, EXTENSIONS_SWITCH};
 use cef::rc::{Rc, RcImpl};
 use cef::*;
 use std::sync::mpsc::Sender;
@@ -70,14 +70,13 @@ impl ImplBrowserProcessHandler for BrowserProcessHandlerBuilder {
         command_line.append_switch(Some(&"ignore-ssl-errors".into()));
         command_line.append_switch(Some(&"enable-logging=stderr".into()));
         // Pass extensions to render process via command line
-        if !self.extensions.is_empty() {
-            if let Ok(json) = serde_json::to_string(&self.extensions.0) {
+        if !self.extensions.is_empty()
+            && let Ok(json) = serde_json::to_string(&self.extensions.0) {
                 command_line.append_switch_with_value(
-                    Some(&"bevy-cef-extensions".into()),
+                    Some(&EXTENSIONS_SWITCH.into()),
                     Some(&json.as_str().into()),
                 );
             }
-        }
     }
 
     fn on_schedule_message_pump_work(&self, delay_ms: i64) {
