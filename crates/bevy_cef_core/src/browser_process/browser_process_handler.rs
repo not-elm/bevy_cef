@@ -1,4 +1,4 @@
-use crate::prelude::{CefExtensions, MessageLoopTimer, EXTENSIONS_SWITCH};
+use crate::prelude::{CefExtensions, EXTENSIONS_SWITCH, MessageLoopTimer};
 use cef::rc::{Rc, RcImpl};
 use cef::*;
 use std::sync::mpsc::Sender;
@@ -10,7 +10,6 @@ pub struct BrowserProcessHandlerBuilder {
     object: *mut RcImpl<cef_dll_sys::cef_browser_process_handler_t, Self>,
     message_loop_working_requester: Sender<MessageLoopTimer>,
     extensions: CefExtensions,
-
 }
 
 impl BrowserProcessHandlerBuilder {
@@ -71,12 +70,13 @@ impl ImplBrowserProcessHandler for BrowserProcessHandlerBuilder {
         command_line.append_switch(Some(&"enable-logging=stderr".into()));
         // Pass extensions to render process via command line
         if !self.extensions.is_empty()
-            && let Ok(json) = serde_json::to_string(&self.extensions.0) {
-                command_line.append_switch_with_value(
-                    Some(&EXTENSIONS_SWITCH.into()),
-                    Some(&json.as_str().into()),
-                );
-            }
+            && let Ok(json) = serde_json::to_string(&self.extensions.0)
+        {
+            command_line.append_switch_with_value(
+                Some(&EXTENSIONS_SWITCH.into()),
+                Some(&json.as_str().into()),
+            );
+        }
     }
 
     fn on_schedule_message_pump_work(&self, delay_ms: i64) {

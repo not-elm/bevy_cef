@@ -1,4 +1,4 @@
-use crate::prelude::{IntoString, EXTENSIONS_SWITCH};
+use crate::prelude::{EXTENSIONS_SWITCH, IntoString};
 use crate::render_process::cef_api_handler::CefApiHandler;
 use crate::util::json_to_v8;
 use crate::util::v8_accessor::V8DefaultAccessorBuilder;
@@ -7,10 +7,10 @@ use bevy::platform::collections::HashMap;
 use bevy_remote::BrpResult;
 use cef::rc::{Rc, RcImpl};
 use cef::{
-    command_line_get_global, register_extension, Browser, CefString, DictionaryValue, Frame,
-    ImplBrowser, ImplCommandLine, ImplDictionaryValue, ImplFrame, ImplListValue,
-    ImplProcessMessage, ImplRenderProcessHandler, ImplV8Context, ImplV8Value, ProcessId,
-    ProcessMessage, V8Context, V8Handler, V8Value, WrapRenderProcessHandler, sys,
+    Browser, CefString, DictionaryValue, Frame, ImplBrowser, ImplCommandLine, ImplDictionaryValue,
+    ImplFrame, ImplListValue, ImplProcessMessage, ImplRenderProcessHandler, ImplV8Context,
+    ImplV8Value, ProcessId, ProcessMessage, V8Context, V8Handler, V8Value,
+    WrapRenderProcessHandler, command_line_get_global, register_extension, sys,
     v8_value_create_object,
 };
 use std::collections::HashMap as StdHashMap;

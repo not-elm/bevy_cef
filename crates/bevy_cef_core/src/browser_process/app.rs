@@ -4,7 +4,10 @@ use crate::browser_process::MessageLoopTimer;
 use crate::browser_process::browser_process_handler::BrowserProcessHandlerBuilder;
 use crate::util::{SCHEME_CEF, cef_scheme_flags};
 use cef::rc::{Rc, RcImpl};
-use cef::{BrowserProcessHandler, CefString, CommandLine, ImplApp, ImplCommandLine, ImplSchemeRegistrar, SchemeRegistrar, WrapApp};
+use cef::{
+    BrowserProcessHandler, CefString, CommandLine, ImplApp, ImplCommandLine, ImplSchemeRegistrar,
+    SchemeRegistrar, WrapApp,
+};
 use cef_dll_sys::{_cef_app_t, cef_base_ref_counted_t};
 use std::sync::mpsc::Sender;
 

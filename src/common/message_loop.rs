@@ -22,7 +22,8 @@ impl Plugin for MessageLoopPlugin {
         let args = Args::new();
         let (tx, rx) = std::sync::mpsc::channel();
 
-        let mut cef_app = BrowserProcessAppBuilder::build(tx, self.config.clone(), self.extensions.clone());
+        let mut cef_app =
+            BrowserProcessAppBuilder::build(tx, self.config.clone(), self.extensions.clone());
         let ret = execute_process(
             Some(args.as_main_args()),
             Some(&mut cef_app),
