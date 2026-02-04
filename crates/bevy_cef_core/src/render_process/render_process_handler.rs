@@ -132,7 +132,7 @@ fn inject_initialize_scripts(browser: &mut Browser, context: &mut V8Context, fra
         Some(CefString::from(script.as_str()))
     }) {
         context.enter();
-        frame.execute_java_script(Some(&script), Some(&(&frame.url()).into()), 0);
+        context.eval(Some(&script), Some(&(&frame.url()).into()), 0, None, None);
         context.exit();
     }
 }
