@@ -13,8 +13,8 @@ pub struct CefApiHandler {
     object: *mut RcImpl<sys::_cef_v8_handler_t, Self>,
 }
 
-impl CefApiHandler {
-    pub fn new() -> Self {
+impl Default for CefApiHandler {
+    fn default() -> Self {
         Self {
             object: core::ptr::null_mut(),
         }

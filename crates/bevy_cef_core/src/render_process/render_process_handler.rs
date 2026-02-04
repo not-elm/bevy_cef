@@ -160,7 +160,7 @@ fn register_cef_api_extension() {
     register_extension(
         Some(&CEF_API_EXTENSION_NAME.into()),
         Some(&CEF_API_EXTENSION_CODE.into()),
-        Some(&mut V8Handler::new(CefApiHandler::new())),
+        Some(&mut V8Handler::new(CefApiHandler::default())),
     );
 }
 
