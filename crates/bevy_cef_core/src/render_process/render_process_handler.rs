@@ -221,16 +221,12 @@ fn register_extensions_from_command_line() {
     let Some(cmd_line) = command_line_get_global() else {
         return;
     };
-    println!("bevy_cef: register_extensions_from_command_line");
     if cmd_line.has_switch(Some(&EXTENSIONS_SWITCH.into())) == 0 {
-        println!("bevy_cef: not extensions switch found");
         return;
     }
-    println!("bevy_cef: registering extensions from command line");
     let json = cmd_line
         .switch_value(Some(&EXTENSIONS_SWITCH.into()))
         .into_string();
-    println!("bevy_cef: {json}");
     if json.is_empty() {
         return;
     }
@@ -241,7 +237,6 @@ fn register_extensions_from_command_line() {
     };
 
     for (name, code) in extensions {
-        // CEF convention: extension names should be prefixed with "v8/" for V8 extensions
         let full_name = format!("v8/{}", name);
         register_extension(
             Some(&full_name.as_str().into()),
