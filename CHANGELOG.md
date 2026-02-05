@@ -34,6 +34,7 @@
 
 - Fixed so that the webview can detect pointers correctly even if it is not the root entity.
 - Avoid a crash when updating the cursor icon
+- Fixed IME input not working due to `bevy_winit` not calling `set_ime_allowed()` on initial window creation
 
 ## v0.1.0
 
