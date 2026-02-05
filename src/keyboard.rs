@@ -14,12 +14,51 @@ impl Plugin for KeyboardPlugin {
         app.init_resource::<IsImeCommiting>().add_systems(
             Update,
             (
+                // Workaround for bevy_winit not calling `set_ime_allowed` on initial window
+                // creation when `Window::ime_enabled` is `true` from the start.
+                activate_ime,
                 ime_event.run_if(on_message::<Ime>),
                 send_key_event.run_if(on_message::<KeyboardInput>),
             )
                 .chain(),
         );
     }
+}
+
+/// Workaround: bevy_winit does not call `winit::Window::set_ime_allowed()` during initial window
+/// creation when `Window::ime_enabled` is `true`. This means `Ime` events are never generated.
+///
+/// To trigger bevy_winit's own `changed_windows` system, we temporarily toggle `ime_enabled` off
+/// then back on over two frames, which causes the change detection to fire and call
+/// `set_ime_allowed(true)` internally.
+fn activate_ime(mut windows: Query<&mut Window>, mut state: Local<ImeActivationState>) {
+    match *state {
+        ImeActivationState::Pending => {
+            for mut window in windows.iter_mut() {
+                if window.ime_enabled {
+                    window.ime_enabled = false;
+                    *state = ImeActivationState::Toggled;
+                }
+            }
+        }
+        ImeActivationState::Toggled => {
+            for mut window in windows.iter_mut() {
+                if !window.ime_enabled {
+                    window.ime_enabled = true;
+                    *state = ImeActivationState::Done;
+                }
+            }
+        }
+        ImeActivationState::Done => {}
+    }
+}
+
+#[derive(Default)]
+enum ImeActivationState {
+    #[default]
+    Pending,
+    Toggled,
+    Done,
 }
 
 #[derive(Resource, Default, Serialize, Deserialize, Reflect)]
