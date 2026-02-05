@@ -28,7 +28,7 @@ impl<C: Component> WebviewPointer<'_, '_, C> {
     }
 
     pub fn pointer_pos(&self, webview: Entity, viewport_pos: Vec2) -> Option<Vec2> {
-        let (min, max) = self.aabb.calculate(webview);
+        let (min, max) = self.aabb.calculate_local(webview);
         let aabb_size = Vec2::new(max.x - min.x, max.y - min.y);
         let (webview_gtf, webview_size) = self.webviews.get(webview).ok()?;
         self.cameras.iter().find_map(|(camera, camera_gtf)| {
