@@ -31,7 +31,6 @@ pub struct WebviewBrowser {
     pub client: Browser,
     pub host: BrowserHost,
     pub size: SharedViewSize,
-    pub ime_caret: SharedImeCaret,
 }
 
 pub struct Browsers {
@@ -67,7 +66,6 @@ impl Browsers {
     ) {
         let mut context = Self::request_context(requester);
         let size = Rc::new(Cell::new(webview_size));
-        let ime_caret = Rc::new(Cell::new(0));
         let browser = browser_host_create_browser_sync(
             Some(&WindowInfo {
                 windowless_rendering_enabled: true as _,
@@ -86,7 +84,6 @@ impl Browsers {
             Some(&mut self.client_handler(
                 webview,
                 size.clone(),
-                ime_caret.clone(),
                 ipc_event_sender,
                 brp_sender,
                 system_cursor_icon_sender,
@@ -105,7 +102,6 @@ impl Browsers {
             host,
             client: browser,
             size,
-            ime_caret,
         };
 
         self.browsers.insert(webview, webview_browser);
@@ -332,13 +328,26 @@ impl Browsers {
             .values()
             .filter(|b| b.client.focused_frame().is_some())
         {
-            let replacement_range = Self::ime_caret_range_for(browser);
+            let replacement_range = Self::ime_caret_range_for();
             browser.host.ime_set_composition(
                 Some(&text.into()),
                 Some(&underlines),
                 Some(&replacement_range),
                 Some(&selection_range),
             );
+        }
+    }
+
+    /// ## Reference
+    ///
+    /// [`ImeCancelComposition`](https://cef-builds.spotifycdn.com/docs/122.0/classCefBrowserHost.html#ac12a8076859d0c1e58e55080f698e7a9)
+    pub fn ime_cancel_composition(&self) {
+        for browser in self
+            .browsers
+            .values()
+            .filter(|b| b.client.focused_frame().is_some())
+        {
+            browser.host.ime_cancel_composition();
         }
     }
 
@@ -361,10 +370,10 @@ impl Browsers {
             .values()
             .filter(|b| b.client.focused_frame().is_some())
         {
-            let replacement_range = Self::ime_caret_range_for(browser);
+            let replacement_range = Self::ime_caret_range_for();
             browser
                 .host
-                .ime_commit_text(Some(&text.into()), Some(&replacement_range), 0)
+                .ime_commit_text(Some(&text.into()), Some(&replacement_range), 0);
         }
     }
 
@@ -387,7 +396,6 @@ impl Browsers {
         &self,
         webview: Entity,
         size: SharedViewSize,
-        ime_caret: SharedImeCaret,
         ipc_event_sender: Sender<IpcEventRaw>,
         brp_sender: Sender<BrpMessage>,
         system_cursor_icon_sender: SystemCursorIconSenderInner,
@@ -396,7 +404,6 @@ impl Browsers {
             webview,
             self.sender.clone(),
             size.clone(),
-            ime_caret,
         ))
         .with_display_handler(DisplayHandlerBuilder::build(system_cursor_icon_sender))
         .with_message_handler(JsEmitEventHandler::new(webview, ipc_event_sender))
@@ -405,11 +412,11 @@ impl Browsers {
     }
 
     #[inline]
-    fn ime_caret_range_for(browser: &WebviewBrowser) -> Range {
-        let caret = browser.ime_caret.get();
+    fn ime_caret_range_for() -> Range {
+        // Use sentinel replacement range to indicate caret position
         Range {
-            from: caret,
-            to: caret,
+            from: u32::MAX,
+            to: u32::MAX,
         }
     }
 
