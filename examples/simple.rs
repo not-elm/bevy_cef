@@ -5,13 +5,16 @@ use bevy_cef::prelude::*;
 
 fn main() {
     App::new()
-        .add_plugins((DefaultPlugins.set(WindowPlugin{
-            primary_window: Some(Window{
-                ime_enabled: true,
+        .add_plugins((
+            DefaultPlugins.set(WindowPlugin {
+                primary_window: Some(Window {
+                    ime_enabled: true,
+                    ..default()
+                }),
                 ..default()
             }),
-            ..default()
-        }), CefPlugin::default()))
+            CefPlugin::default(),
+        ))
         .add_systems(
             Startup,
             (spawn_camera, spawn_directional_light, spawn_webview),
