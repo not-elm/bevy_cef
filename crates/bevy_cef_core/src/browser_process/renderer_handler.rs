@@ -33,8 +33,7 @@ pub enum RenderPaintElementType {
     Popup,
 }
 
-pub type SharedViewSize = std::rc::Rc<Cell<bevy::prelude::Vec2>>;
-pub type SharedImeCaret = std::rc::Rc<Cell<u32>>;
+pub type SharedViewSize = std::rc::Rc<Cell<Vec2>>;
 
 /// ## Reference
 ///
@@ -44,7 +43,6 @@ pub struct RenderHandlerBuilder {
     webview: Entity,
     texture_sender: TextureSender,
     size: SharedViewSize,
-    ime_caret: SharedImeCaret,
 }
 
 impl RenderHandlerBuilder {
@@ -52,14 +50,12 @@ impl RenderHandlerBuilder {
         webview: Entity,
         texture_sender: TextureSender,
         size: SharedViewSize,
-        ime_caret: SharedImeCaret,
     ) -> RenderHandler {
         RenderHandler::new(Self {
             object: std::ptr::null_mut(),
             webview,
             texture_sender,
             size,
-            ime_caret,
         })
     }
 }
@@ -91,7 +87,6 @@ impl Clone for RenderHandlerBuilder {
             webview: self.webview,
             texture_sender: self.texture_sender.clone(),
             size: self.size.clone(),
-            ime_caret: self.ime_caret.clone(),
         }
     }
 }
@@ -129,17 +124,6 @@ impl ImplRenderHandler for RenderHandlerBuilder {
             },
         };
         let _ = self.texture_sender.send_blocking(texture);
-    }
-
-    fn on_text_selection_changed(
-        &self,
-        _browser: Option<&mut Browser>,
-        _: Option<&CefString>,
-        selected_range: Option<&Range>,
-    ) {
-        if let Some(selected_range) = selected_range {
-            self.ime_caret.set(selected_range.to);
-        }
     }
 
     #[inline]

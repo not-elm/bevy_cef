@@ -104,7 +104,7 @@ fn ime_event(
                 is_ime_commiting.0 = true;
             }
             Ime::Disabled { .. } => {
-                browsers.ime_finish_composition(false);
+                browsers.ime_cancel_composition();
             }
             _ => {}
         }
