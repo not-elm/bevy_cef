@@ -351,7 +351,6 @@ impl Browsers {
         }
     }
 
-
     /// ## Reference
     ///
     /// [`ImeSetComposition`](https://cef-builds.spotifycdn.com/docs/122.0/classCefBrowserHost.html#a567b41fb2d3917843ece3b57adc21ebe)
