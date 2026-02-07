@@ -6,13 +6,7 @@ use bevy_cef::prelude::*;
 fn main() {
     App::new()
         .add_plugins((
-            DefaultPlugins.set(WindowPlugin {
-                primary_window: Some(Window {
-                    ime_enabled: true,
-                    ..default()
-                }),
-                ..default()
-            }),
+            DefaultPlugins,
             CefPlugin::default(),
         ))
         .add_systems(

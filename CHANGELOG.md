@@ -3,7 +3,7 @@
 ### Breaking Changes
 
 - Support Bevy 0.18
-- Update CEF version to 144.2.0+144.0.11
+- Update CEF version to 144.4.0
 - Improve message loop handling
 - We can now specify command-line switches when creating the `CefPlugin`.
   - As a result, `CefPlugin` is no longer a unit struct.
