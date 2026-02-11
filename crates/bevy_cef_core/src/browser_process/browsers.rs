@@ -271,20 +271,20 @@ impl Browsers {
 
     /// Navigate a specific webview to a new URL.
     pub fn navigate(&self, webview: &Entity, url: &str) {
-        if let Some(browser) = self.browsers.get(webview) {
-            if let Some(frame) = browser.client.main_frame() {
-                frame.load_url(Some(&url.into()));
-            }
+        if let Some(browser) = self.browsers.get(webview)
+            && let Some(frame) = browser.client.main_frame()
+        {
+            frame.load_url(Some(&url.into()));
         }
     }
 
     /// Reload a specific webview's current page.
     pub fn reload_webview(&self, webview: &Entity) {
-        if let Some(browser) = self.browsers.get(webview) {
-            if let Some(frame) = browser.client.main_frame() {
-                let url = frame.url().into_string();
-                frame.load_url(Some(&url.as_str().into()));
-            }
+        if let Some(browser) = self.browsers.get(webview)
+            && let Some(frame) = browser.client.main_frame()
+        {
+            let url = frame.url().into_string();
+            frame.load_url(Some(&url.as_str().into()));
         }
     }
 
