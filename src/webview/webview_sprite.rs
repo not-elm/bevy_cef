@@ -1,4 +1,4 @@
-use crate::common::{CefWebviewUri, WebviewSize};
+use crate::common::{WebviewSize, WebviewSource};
 use crate::prelude::update_webview_image;
 use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
@@ -30,7 +30,7 @@ impl Plugin for WebviewSpritePlugin {
 fn render(
     mut er: MessageReader<RenderTextureMessage>,
     mut images: ResMut<Assets<bevy::prelude::Image>>,
-    webviews: Query<&Sprite, With<CefWebviewUri>>,
+    webviews: Query<&Sprite, With<WebviewSource>>,
 ) {
     for texture in er.read() {
         if let Ok(sprite) = webviews.get(texture.webview)
@@ -43,7 +43,7 @@ fn render(
 
 fn setup_observers(
     mut commands: Commands,
-    webviews: Query<Entity, (Added<CefWebviewUri>, With<Sprite>)>,
+    webviews: Query<Entity, (Added<WebviewSource>, With<Sprite>)>,
 ) {
     for entity in webviews.iter() {
         commands

@@ -51,7 +51,7 @@ fn spawn_webview(
     mut materials: ResMut<Assets<WebviewExtendStandardMaterial>>,
 ) {
     commands.spawn((
-        CefWebviewUri::local("brp.html"),
+        WebviewSource::local("brp.html"),
         Mesh3d(meshes.add(Plane3d::new(Vec3::Z, Vec2::ONE))),
         MeshMaterial3d(materials.add(WebviewExtendStandardMaterial {
             base: StandardMaterial {
@@ -72,7 +72,7 @@ fn ime(mut windows: Query<&mut bevy::prelude::Window>) {
 
 fn show_devtool(
     mut commands: Commands,
-    webviews: Query<Entity, With<CefWebviewUri>>,
+    webviews: Query<Entity, With<WebviewSource>>,
     mut initialized: Local<bool>,
 ) {
     if *initialized {

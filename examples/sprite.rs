@@ -16,7 +16,7 @@ fn spawn_camera_2d(mut commands: Commands) {
 
 fn spawn_sprite_webview(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     commands.spawn((
-        CefWebviewUri::new("https://github.com/not-elm/bevy_cef"),
+        WebviewSource::new("https://github.com/not-elm/bevy_cef"),
         Pickable::default(),
         Sprite {
             image: images.add(Image::default()),

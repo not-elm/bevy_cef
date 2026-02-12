@@ -1,4 +1,4 @@
-use crate::prelude::{CefWebviewUri, WebviewSize};
+use crate::prelude::{WebviewSize, WebviewSource};
 use crate::system_param::mesh_aabb::MeshAabb;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
@@ -12,9 +12,9 @@ pub struct WebviewPointer<'w, 's, C: Component = Camera3d> {
         'w,
         's,
         (&'static GlobalTransform, &'static WebviewSize),
-        (With<CefWebviewUri>, Without<Camera>),
+        (With<WebviewSource>, Without<Camera>),
     >,
-    parents: Query<'w, 's, (Option<&'static ChildOf>, Has<CefWebviewUri>)>,
+    parents: Query<'w, 's, (Option<&'static ChildOf>, Has<WebviewSource>)>,
 }
 
 impl<C: Component> WebviewPointer<'_, '_, C> {
@@ -46,7 +46,7 @@ impl<C: Component> WebviewPointer<'_, '_, C> {
 
 fn find_webview_entity(
     entity: Entity,
-    parents: &Query<(Option<&ChildOf>, Has<CefWebviewUri>)>,
+    parents: &Query<(Option<&ChildOf>, Has<WebviewSource>)>,
 ) -> Option<Entity> {
     let (child_of, has_webview) = parents.get(entity).ok()?;
     if has_webview {

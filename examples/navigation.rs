@@ -50,7 +50,7 @@ fn spawn_webview(
 ) {
     commands.spawn((
         DebugWebview,
-        CefWebviewUri::new("https://github.com/not-elm/bevy_cef"),
+        WebviewSource::new("https://github.com/not-elm/bevy_cef"),
         Mesh3d(meshes.add(Plane3d::new(Vec3::Z, Vec2::ONE))),
         MeshMaterial3d(materials.add(WebviewExtendStandardMaterial::default())),
     ));

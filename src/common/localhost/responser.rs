@@ -1,5 +1,5 @@
 use crate::common::localhost::asset_loader::CefResponseHandle;
-use crate::common::{CefWebviewUri, InlineHtml};
+use crate::common::{ResolvedWebviewUri, WebviewSource};
 use bevy::platform::collections::{HashMap, HashSet};
 use bevy::prelude::*;
 use bevy_cef_core::prelude::*;
@@ -34,7 +34,7 @@ impl Plugin for ResponserPlugin {
         app.insert_resource(Requester(tx))
             .insert_resource(RequesterReceiver(rx))
             .init_resource::<InlineHtmlStore>()
-            .add_systems(PreUpdate, setup_inline_html)
+            .add_systems(PreUpdate, resolve_webview_source)
             .add_systems(
                 Update,
                 (
@@ -51,37 +51,37 @@ fn any_changed_assets(mut er: MessageReader<AssetEvent<CefResponse>>) -> bool {
         .any(|event| matches!(event, AssetEvent::Modified { .. }))
 }
 
-fn setup_inline_html(
+fn resolve_webview_source(
     mut commands: Commands,
     mut store: ResMut<InlineHtmlStore>,
-    query: Query<
-        (
-            Entity,
-            &InlineHtml,
-            Option<&InlineHtmlId>,
-            Has<CefWebviewUri>,
-        ),
-        Added<InlineHtml>,
-    >,
+    query: Query<(Entity, &WebviewSource, Option<&InlineHtmlId>), Changed<WebviewSource>>,
 ) {
-    for (entity, inline_html, existing_id, has_uri) in query.iter() {
-        // Clean up old entry if re-inserted
+    for (entity, source, existing_id) in query.iter() {
+        // Clean up old inline entry if switching away or updating
         if let Some(old_id) = existing_id {
             store.by_id.remove(&old_id.0);
         }
 
-        let id = INLINE_ID_COUNTER
-            .fetch_add(1, Ordering::Relaxed)
-            .to_string();
-        store
-            .by_id
-            .insert(id.clone(), inline_html.0.as_bytes().to_vec());
+        match source {
+            WebviewSource::Url(url) => {
+                let mut entity_commands = commands.entity(entity);
+                entity_commands.insert(ResolvedWebviewUri(url.clone()));
+                if existing_id.is_some() {
+                    entity_commands.remove::<InlineHtmlId>();
+                }
+            }
+            WebviewSource::InlineHtml(html) => {
+                let id = INLINE_ID_COUNTER
+                    .fetch_add(1, Ordering::Relaxed)
+                    .to_string();
+                store.by_id.insert(id.clone(), html.as_bytes().to_vec());
 
-        let uri = CefWebviewUri::local(format!("{INLINE_PREFIX}{id}"));
-        if has_uri {
-            warn!("Entity {entity} already has CefWebviewUri; overwriting with inline HTML URI");
+                let url = format!("{SCHEME_CEF}://{HOST_CEF}/{INLINE_PREFIX}{id}");
+                commands
+                    .entity(entity)
+                    .insert((ResolvedWebviewUri(url), InlineHtmlId(id)));
+            }
         }
-        commands.entity(entity).insert((uri, InlineHtmlId(id)));
     }
 }
 

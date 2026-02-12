@@ -33,7 +33,7 @@ fn spawn_webview(
     mut materials: ResMut<Assets<WebviewExtendStandardMaterial>>,
 ) {
     commands.spawn((
-        InlineHtml::new(
+        WebviewSource::inline(
             r#"<!DOCTYPE html>
 <html>
 <head>

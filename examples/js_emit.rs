@@ -48,7 +48,7 @@ fn spawn_webview(
     mut materials: ResMut<Assets<WebviewExtendStandardMaterial>>,
 ) {
     commands.spawn((
-        CefWebviewUri::local("js_emit.html"),
+        WebviewSource::local("js_emit.html"),
         Mesh3d(meshes.add(Plane3d::new(Vec3::Z, Vec2::ONE))),
         MeshMaterial3d(materials.add(WebviewExtendStandardMaterial::default())),
     ));

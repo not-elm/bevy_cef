@@ -7,7 +7,7 @@ pub(crate) struct WebviewCoreComponentsPlugin;
 impl Plugin for WebviewCoreComponentsPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<WebviewSize>()
-            .register_type::<CefWebviewUri>()
+            .register_type::<WebviewSource>()
             .register_type::<HostWindow>()
             .register_type::<ZoomLevel>()
             .register_type::<AudioMuted>()
@@ -15,34 +15,53 @@ impl Plugin for WebviewCoreComponentsPlugin {
     }
 }
 
-/// A component that specifies the URI of the webview.
+/// A component that specifies the content source of a webview.
 ///
-/// When opening a remote web page, specify the URI with the http(s) schema.
+/// Use [`WebviewSource::new`] for remote URLs, [`WebviewSource::local`] for local files
+/// served via `cef://localhost/`, or [`WebviewSource::inline`] for raw HTML content.
 ///
-/// When opening a local file, use the custom schema `cef://localhost/` to specify the file path.
-/// Alternatively, you can also use [`CefWebviewUri::local`].
-#[derive(Component, Debug, Clone, PartialEq, Eq, Hash, Reflect)]
+/// When the value of this component is changed at runtime, the existing browser
+/// automatically navigates to the new source without being recreated.
+#[derive(Component, Debug, Clone, Reflect)]
 #[reflect(Component, Debug)]
 #[require(WebviewSize, ZoomLevel, AudioMuted, PreloadScripts)]
-#[cfg_attr(feature = "serialize", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serialize", reflect(Serialize, Deserialize))]
-pub struct CefWebviewUri(pub String);
+pub enum WebviewSource {
+    /// A remote or local URL (e.g. `"https://..."` or `"cef://localhost/file.html"`).
+    Url(String),
+    /// Raw HTML content served via an internal `cef://localhost/__inline__/{id}` scheme.
+    InlineHtml(String),
+}
 
-impl CefWebviewUri {
-    /// Creates a new `CefWebviewUri` with the given URI.
+impl WebviewSource {
+    /// Creates a URL source.
     ///
-    /// If you want to specify a local file path, use [`CefWebviewUri::local`] instead.
-    pub fn new(uri: impl Into<String>) -> Self {
-        Self(uri.into())
+    /// To specify a local file path, use [`WebviewSource::local`] instead.
+    pub fn new(url: impl Into<String>) -> Self {
+        Self::Url(url.into())
     }
 
-    /// Creates a new `CefWebviewUri` with the given file path.
+    /// Creates a local file source.
     ///
-    /// It interprets the given path as a file path in the format `cef://localhost/<file_path>`.
-    pub fn local(uri: impl Into<String>) -> Self {
-        Self(format!("{SCHEME_CEF}://{HOST_CEF}/{}", uri.into()))
+    /// The given path is interpreted as `cef://localhost/<path>`.
+    pub fn local(path: impl Into<String>) -> Self {
+        Self::Url(format!("{SCHEME_CEF}://{HOST_CEF}/{}", path.into()))
+    }
+
+    /// Creates an inline HTML source.
+    ///
+    /// The HTML content is served through the internal `cef://localhost/__inline__/{id}` scheme,
+    /// so IPC (`window.cef.emit/listen/brp`) and [`PreloadScripts`] work as expected.
+    pub fn inline(html: impl Into<String>) -> Self {
+        Self::InlineHtml(html.into())
     }
 }
+
+/// Internal component holding the resolved URL string passed to CEF.
+///
+/// This is automatically managed by the resolver system and should not be
+/// inserted manually.
+#[derive(Component, Debug, Clone)]
+pub(crate) struct ResolvedWebviewUri(pub(crate) String);
 
 /// Specifies the view size of the webview.
 ///
@@ -95,46 +114,5 @@ where
 {
     fn from(scripts: L) -> Self {
         Self(scripts.into_iter().map(Into::into).collect())
-    }
-}
-
-/// A component that specifies inline HTML content for a webview.
-///
-/// When this component is added to an entity, a [`CefWebviewUri`] is automatically
-/// generated and inserted. The HTML content is served through the internal
-/// `cef://localhost/__inline__/{id}` scheme, so IPC (`window.cef.emit/listen/brp`)
-/// and [`PreloadScripts`] work as expected.
-///
-/// ## Example
-///
-/// ```rust,no_run
-/// use bevy::prelude::*;
-/// use bevy_cef::prelude::*;
-///
-/// fn spawn_inline(
-///     mut commands: Commands,
-///     mut meshes: ResMut<Assets<Mesh>>,
-///     mut materials: ResMut<Assets<WebviewExtendStandardMaterial>>,
-/// ) {
-///     commands.spawn((
-///         InlineHtml::new("<h1>Hello from inline HTML!</h1>"),
-///         Mesh3d(meshes.add(Plane3d::new(Vec3::Z, Vec2::ONE))),
-///         MeshMaterial3d(materials.add(WebviewExtendStandardMaterial::default())),
-///     ));
-/// }
-/// ```
-///
-/// ## Note
-///
-/// Relative paths in the inline HTML (e.g. `<script src="app.js">`) resolve
-/// against the internal `__inline__/` path. To reference local assets, use
-/// absolute paths such as `cef://localhost/app.js`.
-#[derive(Component, Debug, Clone)]
-pub struct InlineHtml(pub String);
-
-impl InlineHtml {
-    /// Creates a new [`InlineHtml`] with the given HTML content.
-    pub fn new(html: impl Into<String>) -> Self {
-        Self(html.into())
     }
 }
