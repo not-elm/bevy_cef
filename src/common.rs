@@ -1,6 +1,6 @@
 mod components;
 mod ipc;
-mod localhost;
+pub(crate) mod localhost;
 mod message_loop;
 
 pub use components::*;

@@ -37,7 +37,7 @@ impl Plugin for MeshWebviewPlugin {
 
 fn setup_observers(
     mut commands: Commands,
-    webviews: Query<Entity, (Added<CefWebviewUri>, Or<(With<Mesh3d>, With<Mesh2d>)>)>,
+    webviews: Query<Entity, (Added<WebviewSource>, Or<(With<Mesh3d>, With<Mesh2d>)>)>,
 ) {
     for entity in webviews.iter() {
         commands
@@ -88,7 +88,7 @@ fn on_mouse_wheel(
     browsers: NonSend<Browsers>,
     pointer: WebviewPointer,
     windows: Query<&Window>,
-    webviews: Query<Entity, With<CefWebviewUri>>,
+    webviews: Query<Entity, With<WebviewSource>>,
 ) {
     let Some(cursor_pos) = windows.iter().find_map(|window| window.cursor_position()) else {
         return;

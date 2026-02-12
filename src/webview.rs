@@ -1,4 +1,7 @@
-use crate::common::{CefWebviewUri, HostWindow, IpcEventRawSender, WebviewSize};
+use crate::common::localhost::responser::{InlineHtmlId, InlineHtmlStore};
+use crate::common::{
+    HostWindow, IpcEventRawSender, ResolvedWebviewUri, WebviewSize, WebviewSource,
+};
 use crate::cursor_icon::SystemCursorIconSender;
 use crate::prelude::PreloadScripts;
 use crate::webview::mesh::MeshWebviewPlugin;
@@ -79,15 +82,23 @@ impl Plugin for WebviewPlugin {
                 (
                     resize.run_if(any_resized),
                     create_webview.run_if(added_webview),
+                    navigate_on_source_change,
                 ),
             )
             .add_observer(apply_request_show_devtool)
             .add_observer(apply_request_close_devtool);
 
         app.world_mut()
-            .register_component_hooks::<CefWebviewUri>()
+            .register_component_hooks::<WebviewSource>()
             .on_despawn(|mut world: DeferredWorld, ctx: HookContext| {
                 world.non_send_resource_mut::<Browsers>().close(&ctx.entity);
+            });
+
+        app.world_mut()
+            .register_component_hooks::<InlineHtmlId>()
+            .on_remove(|mut world: DeferredWorld, ctx: HookContext| {
+                let id = world.get::<InlineHtmlId>(ctx.entity).unwrap().0.clone();
+                world.resource_mut::<InlineHtmlStore>().remove(&id);
             });
     }
 }
@@ -96,7 +107,7 @@ fn any_resized(webviews: Query<Entity, Changed<WebviewSize>>) -> bool {
     !webviews.is_empty()
 }
 
-fn added_webview(webviews: Query<Entity, Added<CefWebviewUri>>) -> bool {
+fn added_webview(webviews: Query<Entity, Added<ResolvedWebviewUri>>) -> bool {
     !webviews.is_empty()
 }
 
@@ -114,12 +125,12 @@ fn create_webview(
     webviews: Query<
         (
             Entity,
-            &CefWebviewUri,
+            &ResolvedWebviewUri,
             &WebviewSize,
             &PreloadScripts,
             Option<&HostWindow>,
         ),
-        Added<CefWebviewUri>,
+        Added<ResolvedWebviewUri>,
     >,
     primary_window: Query<Entity, With<PrimaryWindow>>,
 ) {
@@ -146,6 +157,19 @@ fn create_webview(
             );
         }
     });
+}
+
+fn navigate_on_source_change(
+    browsers: NonSend<Browsers>,
+    webviews: Query<(Entity, &ResolvedWebviewUri), Changed<ResolvedWebviewUri>>,
+    added: Query<Entity, Added<ResolvedWebviewUri>>,
+) {
+    for (entity, uri) in webviews.iter() {
+        if added.contains(entity) {
+            continue;
+        }
+        browsers.navigate(&entity, &uri.0);
+    }
 }
 
 fn resize(

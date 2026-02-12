@@ -64,6 +64,9 @@ bevy_cef = { workspace = true, features = ["debug"] }
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = { version = "0.2" }
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("cargo-clippy"))'] }
+
 [features]
 default = []
 serialize = ["bevy/serialize"]

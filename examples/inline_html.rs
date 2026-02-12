@@ -1,11 +1,5 @@
-//! Shows how to navigate a webview using keyboard input.
-//!
-//! ## Keyboard Controls
-//!
-//! - Press `Z` to go back in history.
-//! - Press `X` to go forward in history.
+//! Demonstrates rendering inline HTML content directly without an external URL or asset file.
 
-use bevy::input::common_conditions::input_just_pressed;
 use bevy::prelude::*;
 use bevy_cef::prelude::*;
 
@@ -16,18 +10,8 @@ fn main() {
             Startup,
             (spawn_camera, spawn_directional_light, spawn_webview),
         )
-        .add_systems(
-            Update,
-            (
-                request_go_back.run_if(input_just_pressed(KeyCode::KeyZ)),
-                request_go_forward.run_if(input_just_pressed(KeyCode::KeyX)),
-            ),
-        )
         .run();
 }
-
-#[derive(Component)]
-struct DebugWebview;
 
 fn spawn_camera(mut commands: Commands) {
     commands.spawn((
@@ -49,21 +33,35 @@ fn spawn_webview(
     mut materials: ResMut<Assets<WebviewExtendStandardMaterial>>,
 ) {
     commands.spawn((
-        DebugWebview,
-        WebviewSource::new("https://github.com/not-elm/bevy_cef"),
+        WebviewSource::inline(
+            r#"<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: system-ui, sans-serif;
+            color: white;
+        }
+        .container { text-align: center; }
+        h1 { font-size: 3rem; margin-bottom: 0.5rem; }
+        p { font-size: 1.2rem; opacity: 0.8; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Inline HTML</h1>
+        <p>This content is rendered from a Rust string.</p>
+    </div>
+</body>
+</html>"#,
+        ),
         Mesh3d(meshes.add(Plane3d::new(Vec3::Z, Vec2::ONE))),
         MeshMaterial3d(materials.add(WebviewExtendStandardMaterial::default())),
     ));
-}
-
-fn request_go_back(mut commands: Commands, webviews: Query<Entity, With<DebugWebview>>) {
-    for webview in webviews.iter() {
-        commands.trigger(RequestGoBack { webview });
-    }
-}
-
-fn request_go_forward(mut commands: Commands, webviews: Query<Entity, With<DebugWebview>>) {
-    for webview in webviews.iter() {
-        commands.trigger(RequestGoForward { webview });
-    }
 }

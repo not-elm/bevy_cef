@@ -1,4 +1,4 @@
-use crate::common::CefWebviewUri;
+use crate::common::WebviewSource;
 use bevy::input::keyboard::KeyboardInput;
 use bevy::prelude::*;
 use bevy_cef_core::prelude::{Browsers, create_cef_key_event, keyboard_modifiers};
@@ -70,7 +70,7 @@ fn send_key_event(
     mut is_ime_commiting: ResMut<IsImeCommiting>,
     input: Res<ButtonInput<KeyCode>>,
     browsers: NonSend<Browsers>,
-    webviews: Query<Entity, With<CefWebviewUri>>,
+    webviews: Query<Entity, With<WebviewSource>>,
 ) {
     let modifiers = keyboard_modifiers(&input);
     for event in er.read() {
