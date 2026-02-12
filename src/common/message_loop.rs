@@ -131,7 +131,6 @@ mod macos {
     pub fn install_cef_app_protocol() {
         unsafe {
             let cls = Class::get("NSApplication").expect("NSApplication クラスが見つかりません");
-            #[allow(unexpected_cfgs)]
             let sel_name = sel!(isHandlingSendEvent);
             let success = class_addMethod(
                 cls as *const _,
@@ -141,7 +140,6 @@ mod macos {
             );
             assert!(success, "メソッド追加に失敗しました");
 
-            #[allow(unexpected_cfgs)]
             let sel_set = sel!(setHandlingSendEvent:);
             let success2 = class_addMethod(
                 cls as *const _,
