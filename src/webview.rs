@@ -1,3 +1,4 @@
+use crate::common::localhost::responser::{InlineHtmlId, InlineHtmlStore};
 use crate::common::{CefWebviewUri, HostWindow, IpcEventRawSender, WebviewSize};
 use crate::cursor_icon::SystemCursorIconSender;
 use crate::prelude::PreloadScripts;
@@ -88,6 +89,13 @@ impl Plugin for WebviewPlugin {
             .register_component_hooks::<CefWebviewUri>()
             .on_despawn(|mut world: DeferredWorld, ctx: HookContext| {
                 world.non_send_resource_mut::<Browsers>().close(&ctx.entity);
+            });
+
+        app.world_mut()
+            .register_component_hooks::<InlineHtmlId>()
+            .on_despawn(|mut world: DeferredWorld, ctx: HookContext| {
+                let id = world.get::<InlineHtmlId>(ctx.entity).unwrap().0.clone();
+                world.resource_mut::<InlineHtmlStore>().remove(&id);
             });
     }
 }

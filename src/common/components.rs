@@ -97,3 +97,44 @@ where
         Self(scripts.into_iter().map(Into::into).collect())
     }
 }
+
+/// A component that specifies inline HTML content for a webview.
+///
+/// When this component is added to an entity, a [`CefWebviewUri`] is automatically
+/// generated and inserted. The HTML content is served through the internal
+/// `cef://localhost/__inline__/{uuid}` scheme, so IPC (`window.cef.emit/listen/brp`)
+/// and [`PreloadScripts`] work as expected.
+///
+/// ## Example
+///
+/// ```rust,no_run
+/// use bevy::prelude::*;
+/// use bevy_cef::prelude::*;
+///
+/// fn spawn_inline(
+///     mut commands: Commands,
+///     mut meshes: ResMut<Assets<Mesh>>,
+///     mut materials: ResMut<Assets<WebviewExtendStandardMaterial>>,
+/// ) {
+///     commands.spawn((
+///         InlineHtml::new("<h1>Hello from inline HTML!</h1>"),
+///         Mesh3d(meshes.add(Plane3d::new(Vec3::Z, Vec2::ONE))),
+///         MeshMaterial3d(materials.add(WebviewExtendStandardMaterial::default())),
+///     ));
+/// }
+/// ```
+///
+/// ## Note
+///
+/// Relative paths in the inline HTML (e.g. `<script src="app.js">`) resolve
+/// against the internal `__inline__/` path. To reference local assets, use
+/// absolute paths such as `cef://localhost/app.js`.
+#[derive(Component, Debug, Clone)]
+pub struct InlineHtml(pub String);
+
+impl InlineHtml {
+    /// Creates a new [`InlineHtml`] with the given HTML content.
+    pub fn new(html: impl Into<String>) -> Self {
+        Self(html.into())
+    }
+}
