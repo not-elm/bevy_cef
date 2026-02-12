@@ -102,7 +102,7 @@ where
 ///
 /// When this component is added to an entity, a [`CefWebviewUri`] is automatically
 /// generated and inserted. The HTML content is served through the internal
-/// `cef://localhost/__inline__/{uuid}` scheme, so IPC (`window.cef.emit/listen/brp`)
+/// `cef://localhost/__inline__/{id}` scheme, so IPC (`window.cef.emit/listen/brp`)
 /// and [`PreloadScripts`] work as expected.
 ///
 /// ## Example

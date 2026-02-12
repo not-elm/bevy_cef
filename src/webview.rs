@@ -93,7 +93,7 @@ impl Plugin for WebviewPlugin {
 
         app.world_mut()
             .register_component_hooks::<InlineHtmlId>()
-            .on_despawn(|mut world: DeferredWorld, ctx: HookContext| {
+            .on_remove(|mut world: DeferredWorld, ctx: HookContext| {
                 let id = world.get::<InlineHtmlId>(ctx.entity).unwrap().0.clone();
                 world.resource_mut::<InlineHtmlStore>().remove(&id);
             });
