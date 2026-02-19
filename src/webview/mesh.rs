@@ -88,7 +88,7 @@ fn on_mouse_wheel(
     browsers: NonSend<Browsers>,
     pointer: WebviewPointer,
     windows: Query<&Window>,
-    webviews: Query<Entity, With<WebviewSource>>,
+    webviews: Query<Entity, (With<WebviewSource>, Or<(With<Mesh3d>, With<Mesh2d>)>)>,
 ) {
     let Some(cursor_pos) = windows.iter().find_map(|window| window.cursor_position()) else {
         return;
