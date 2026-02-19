@@ -116,3 +116,10 @@ where
         Self(scripts.into_iter().map(Into::into).collect())
     }
 }
+
+/// Holds the webview surface texture handle for alpha hit-testing.
+///
+/// This component is automatically inserted and updated by the render systems.
+/// It provides material-type-agnostic access to the webview texture.
+#[derive(Component, Debug, Clone)]
+pub(crate) struct WebviewSurface(pub(crate) Handle<Image>);
