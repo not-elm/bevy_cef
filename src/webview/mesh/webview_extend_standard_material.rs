@@ -1,4 +1,4 @@
-use crate::prelude::{WebviewMaterial, update_webview_image};
+use crate::prelude::{WebviewMaterial, WebviewSurface, update_webview_image};
 use bevy::asset::*;
 use bevy::pbr::{ExtendedMaterial, MaterialExtension};
 use bevy::prelude::*;
@@ -31,6 +31,7 @@ impl MaterialExtension for WebviewMaterial {
 pub type WebviewExtendStandardMaterial = ExtendedMaterial<StandardMaterial, WebviewMaterial>;
 
 fn render_standard_materials(
+    mut commands: Commands,
     mut er: MessageReader<RenderTextureMessage>,
     mut images: ResMut<Assets<Image>>,
     mut materials: ResMut<Assets<WebviewExtendStandardMaterial>>,
@@ -44,6 +45,9 @@ fn render_standard_materials(
                     .extension
                     .surface
                     .get_or_insert_with(|| images.add(Image::default()));
+                commands
+                    .entity(texture.webview)
+                    .insert(WebviewSurface(handle.clone()));
                 images.get_mut(handle.id())
             }
         {
