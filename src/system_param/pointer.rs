@@ -1,3 +1,4 @@
+use crate::common::WebviewSurface;
 use crate::prelude::{WebviewSize, WebviewSource};
 use crate::system_param::mesh_aabb::MeshAabb;
 use bevy::ecs::system::SystemParam;
@@ -15,6 +16,8 @@ pub struct WebviewPointer<'w, 's, C: Component = Camera3d> {
         (With<WebviewSource>, Without<Camera>),
     >,
     parents: Query<'w, 's, (Option<&'static ChildOf>, Has<WebviewSource>)>,
+    surfaces: Query<'w, 's, &'static WebviewSurface>,
+    images: Res<'w, Assets<Image>>,
 }
 
 impl<C: Component> WebviewPointer<'_, '_, C> {
@@ -31,7 +34,7 @@ impl<C: Component> WebviewPointer<'_, '_, C> {
         let (min, max) = self.aabb.calculate_local(webview);
         let aabb_size = Vec2::new(max.x - min.x, max.y - min.y);
         let (webview_gtf, webview_size) = self.webviews.get(webview).ok()?;
-        self.cameras.iter().find_map(|(camera, camera_gtf)| {
+        let pos = self.cameras.iter().find_map(|(camera, camera_gtf)| {
             pointer_to_webview_uv(
                 viewport_pos,
                 camera,
@@ -40,7 +43,32 @@ impl<C: Component> WebviewPointer<'_, '_, C> {
                 aabb_size,
                 webview_size.0,
             )
-        })
+        })?;
+        if self.is_transparent_at(webview, pos) {
+            return None;
+        }
+        Some(pos)
+    }
+
+    fn is_transparent_at(&self, webview: Entity, pos: Vec2) -> bool {
+        let Ok(surface) = self.surfaces.get(webview) else {
+            return false;
+        };
+        let Some(image) = self.images.get(surface.0.id()) else {
+            return false;
+        };
+        let width = image.width();
+        let height = image.height();
+        if width == 0 || height == 0 {
+            return false;
+        }
+        let x = (pos.x.floor() as u32).min(width - 1);
+        let y = (pos.y.floor() as u32).min(height - 1);
+        let offset = ((y * width + x) * 4 + 3) as usize;
+        let Some(data) = image.data.as_ref() else {
+            return false;
+        };
+        data.len() > offset && data[offset] == 0
     }
 }
 
