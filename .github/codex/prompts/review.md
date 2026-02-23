@@ -10,6 +10,22 @@ First, read `CLAUDE.md` at the repository root. It describes:
 - IPC system patterns (JsEmit, HostEmit, BRP)
 - Platform notes (macOS primary, NonSend resources)
 
+## Getting the PR Diff
+
+To see what changed in this PR, run:
+
+```bash
+git log --oneline --all
+```
+
+Identify the base branch (e.g., `origin/main`) and then run:
+
+```bash
+git diff origin/main...HEAD
+```
+
+Review only the lines shown in this diff output.
+
 ## Review Checklist
 
 Review the PR diff for:
