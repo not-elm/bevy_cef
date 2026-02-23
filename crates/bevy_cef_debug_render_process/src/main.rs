@@ -12,9 +12,10 @@ fn main() {
     };
     let _ = api_hash(sys::CEF_API_VERSION_LAST, 0);
     let mut app = RenderProcessAppBuilder::build();
-    execute_process(
+    let code = execute_process(
         Some(args.as_main_args()),
         Some(&mut app),
         std::ptr::null_mut(),
     );
+    std::process::exit(code);
 }
