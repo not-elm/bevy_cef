@@ -653,6 +653,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy_cef_render_process"
+version = "0.2.0-dev"
+dependencies = [
+ "bevy_cef_core",
+ "cef",
+ "cef-dll-sys",
+]
+
+[[package]]
 name = "bevy_color"
 version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
