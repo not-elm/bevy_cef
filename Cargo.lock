@@ -614,7 +614,7 @@ dependencies = [
 
 [[package]]
 name = "bevy_cef"
-version = "0.2.0-dev"
+version = "0.2.0"
 dependencies = [
  "async-channel",
  "bevy",
@@ -630,7 +630,7 @@ dependencies = [
 
 [[package]]
 name = "bevy_cef_bundle_app"
-version = "0.2.0-dev"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -639,7 +639,7 @@ dependencies = [
 
 [[package]]
 name = "bevy_cef_core"
-version = "0.2.0-dev"
+version = "0.2.0"
 dependencies = [
  "async-channel",
  "bevy",
@@ -654,7 +654,7 @@ dependencies = [
 
 [[package]]
 name = "bevy_cef_debug_render_process"
-version = "0.2.0-dev"
+version = "0.2.0"
 dependencies = [
  "bevy_cef_core",
  "cef",
@@ -663,7 +663,7 @@ dependencies = [
 
 [[package]]
 name = "bevy_cef_render_process"
-version = "0.2.0-dev"
+version = "0.2.0"
 dependencies = [
  "bevy_cef_core",
  "cef",

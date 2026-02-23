@@ -21,16 +21,6 @@ https://github.com/user-attachments/assets/54f476d0-8eda-4030-a3f6-dc4f2f54209f
 - **🎯 Navigation Controls** - Browser history, zoom, audio controls, and more
 - **🔒 Multi-Process Architecture** - Secure CEF multi-process design for stability
 
-## 📦 Installation
-
-Add to your `Cargo.toml`:
-
-```toml
-[dependencies]
-bevy = "0.16"
-bevy_cef = "0.1.0"
-```
-
 ### Platform Requirements
 
 On macOS, using CEF typically requires creating an app bundle.
@@ -82,11 +72,11 @@ cargo run --example simple --features debug
 
 ## 🌍 Platform Support
 
-| Platform | Status     | Notes                             |
-|----------|------------|-----------------------------------|
-| macOS    | ✅ Full     | Primary development platform      |
-| Windows  | ⚠️ Planned | CEF support ready, testing needed |
-| Linux    | ⚠️ Planned | CEF support ready, testing needed |
+| Platform | Status    | Notes                        |
+| -------- | --------- | ---------------------------- |
+| macOS    | ✅ Full    | Primary development platform |
+| Windows  | ⚠️ Planned | comming soon ...             |
+| Linux    | ⚠️ Planned |                              |
 
 ## 🤝 Contributing
 
@@ -107,10 +97,10 @@ We welcome contributions! Here's how you can help:
 
 ## Version Compatibility
 
-| Bevy   | bevy_cef | CEF  | Status        |
-|--------|----------|------|---------------|
-| 0.17 ~ | 0.2.0    | TODO | ⚠️ Unreleased |
-| 0.16   | 0.1.0    | 139  | ✅ Current     |
+| Bevy   | bevy_cef | CEF     |
+| ------ | -------- | ------- |
+| 0.18 ~ | 0.2.0    | 144.4.0 |
+| 0.16   | 0.1.0    | 139     |
 
 ## License
 
