@@ -49,9 +49,26 @@ Please follow the steps below to set it up.
 ```shell
 > cargo install export-cef-dir
 > export-cef-dir --force $HOME/.local/share
-> cargo install bevy_cef_debug_render_process 
-> cp $HOME/.cargo/bin/bevy_cef_debug_render_process "$HOME/.local/share/Chromium Embedded Framework.framework/Libraries/bevy_cef_debug_render_process"  
+> cargo install bevy_cef_debug_render_process
+> cp $HOME/.cargo/bin/bevy_cef_debug_render_process "$HOME/.local/share/Chromium Embedded Framework.framework/Libraries/bevy_cef_debug_render_process"
 ```
+
+### Bundling for Release (macOS)
+
+Install the bundling tools:
+
+```shell
+> cargo install bevy_cef_render_process
+> cargo install bevy_cef_bundle_app
+```
+
+Bundle CEF into your `.app`:
+
+```shell
+> bevy_cef_bundle_app --app path/to/YourApp.app --bundle-id-base com.example.yourapp
+```
+
+Run `bevy_cef_bundle_app --help` for additional options.
 
 ## Examples
 
