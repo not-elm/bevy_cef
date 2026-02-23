@@ -629,6 +629,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy_cef_bundle_app"
+version = "0.2.0-dev"
+dependencies = [
+ "anyhow",
+ "clap",
+ "plist",
+]
+
+[[package]]
 name = "bevy_cef_core"
 version = "0.2.0-dev"
 dependencies = [

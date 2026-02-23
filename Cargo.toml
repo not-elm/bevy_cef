@@ -46,6 +46,9 @@ async-channel = { version = "2.5" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1" }
 raw-window-handle = "0.6"
+clap = { version = "4", features = ["derive"] }
+anyhow = "1"
+plist = "1"
 
 [dependencies]
 bevy = { workspace = true }
