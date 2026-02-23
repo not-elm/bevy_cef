@@ -10,13 +10,13 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
-      pull-requests: write
     outputs:
       final_message: ${{ steps.run_codex.outputs.final-message }}
     steps:
       - uses: actions/checkout@v5
         with:
           ref: refs/pull/${{ github.event.pull_request.number }}/merge
+          fetch-depth: 0
 
       - name: Pre-fetch base and head refs
         run: |
