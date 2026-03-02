@@ -68,6 +68,7 @@ fn cef_initialize(args: &Args, cef_app: &mut cef::App) {
         // multi_threaded_message_loop: true as _,
         multi_threaded_message_loop: false as _,
         external_message_pump: true as _,
+        disable_signal_handlers: true as _,
         ..Default::default()
     };
     assert_eq!(
