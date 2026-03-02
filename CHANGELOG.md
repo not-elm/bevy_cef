@@ -1,5 +1,11 @@
 ## Unreleased
 
+### Bug Fixes
+
+- Set `disable_signal_handlers = true` in CEF settings to avoid crashes caused by signal handler conflicts on POSIX systems.
+
+## v0.2.0
+
 ### Breaking Changes
 
 - Support Bevy 0.18
