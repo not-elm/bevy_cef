@@ -1,0 +1,117 @@
+name: Publish
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@efa25f7f19611383d5b0ccf2d1c8914531636bf9 # master
+        with:
+          toolchain: stable
+
+      - name: Install alsa and udev
+        run: sudo apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev pkg-config
+
+      - name: Publish bevy_cef_core
+        run: |
+          for i in 1 2 3 4 5; do
+            output=$(cargo publish -p bevy_cef_core 2>&1) && exit 0
+            if echo "$output" | grep -q "already uploaded"; then
+              echo "Already published, skipping"
+              exit 0
+            fi
+            echo "Attempt $i failed, retrying in 30s..."
+            echo "$output"
+            if [ $i -lt 5 ]; then sleep 30; fi
+          done
+          echo "All attempts failed"
+          exit 1
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Publish bevy_cef_bundle_app
+        run: |
+          for i in 1 2 3 4 5; do
+            output=$(cargo publish -p bevy_cef_bundle_app 2>&1) && exit 0
+            if echo "$output" | grep -q "already uploaded"; then
+              echo "Already published, skipping"
+              exit 0
+            fi
+            echo "Attempt $i failed, retrying in 30s..."
+            echo "$output"
+            if [ $i -lt 5 ]; then sleep 30; fi
+          done
+          echo "All attempts failed"
+          exit 1
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Publish bevy_cef
+        run: |
+          for i in 1 2 3 4 5; do
+            output=$(cargo publish -p bevy_cef 2>&1) && exit 0
+            if echo "$output" | grep -q "already uploaded"; then
+              echo "Already published, skipping"
+              exit 0
+            fi
+            echo "Attempt $i failed, retrying in 30s..."
+            echo "$output"
+            if [ $i -lt 5 ]; then sleep 30; fi
+          done
+          echo "All attempts failed"
+          exit 1
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Publish bevy_cef_render_process
+        run: |
+          for i in 1 2 3 4 5; do
+            output=$(cargo publish -p bevy_cef_render_process 2>&1) && exit 0
+            if echo "$output" | grep -q "already uploaded"; then
+              echo "Already published, skipping"
+              exit 0
+            fi
+            echo "Attempt $i failed, retrying in 30s..."
+            echo "$output"
+            if [ $i -lt 5 ]; then sleep 30; fi
+          done
+          echo "All attempts failed"
+          exit 1
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Publish bevy_cef_debug_render_process
+        run: |
+          for i in 1 2 3 4 5; do
+            output=$(cargo publish -p bevy_cef_debug_render_process 2>&1) && exit 0
+            if echo "$output" | grep -q "already uploaded"; then
+              echo "Already published, skipping"
+              exit 0
+            fi
+            echo "Attempt $i failed, retrying in 30s..."
+            echo "$output"
+            if [ $i -lt 5 ]; then sleep 30; fi
+          done
+          echo "All attempts failed"
+          exit 1
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ github.ref_name }}"
+          if gh release view "$tag" > /dev/null 2>&1; then
+            echo "Release $tag already exists, skipping"
+          else
+            gh release create "$tag" --generate-notes
+          fi
