@@ -3,12 +3,8 @@ name: CI
 on:
   pull_request:
     paths:
-      - "**"
-      - "!*.md"
-      - "!docs/**"
-      - "!LICENSE"
-      - "!.github/workflows/**"
-      - ".github/workflows/ci.yml"
+      - "crates/**"
+      - "src/**"
 
 jobs:
   test:
