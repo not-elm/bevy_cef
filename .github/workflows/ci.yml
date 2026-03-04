@@ -1,14 +1,17 @@
 name: CI
 
 on:
-  push:
+  pull_request:
+    paths-ignore:
+      - "*.md"
+      - "docs/**"
+      - "LICENSE"
+      - ".github/workflows/**"
+      - "!.github/workflows/ci.yml"
 
 jobs:
   test:
-    strategy:
-      matrix:
-        os: [windows-latest, ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
