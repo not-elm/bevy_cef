@@ -30,7 +30,7 @@ jobs:
             fi
             echo "Attempt $i failed, retrying in 30s..."
             echo "$output"
-            sleep 30
+            if [ $i -lt 5 ]; then sleep 30; fi
           done
           echo "All attempts failed"
           exit 1
@@ -47,7 +47,7 @@ jobs:
             fi
             echo "Attempt $i failed, retrying in 30s..."
             echo "$output"
-            sleep 30
+            if [ $i -lt 5 ]; then sleep 30; fi
           done
           echo "All attempts failed"
           exit 1
@@ -64,7 +64,7 @@ jobs:
             fi
             echo "Attempt $i failed, retrying in 30s..."
             echo "$output"
-            sleep 30
+            if [ $i -lt 5 ]; then sleep 30; fi
           done
           echo "All attempts failed"
           exit 1
@@ -81,7 +81,7 @@ jobs:
             fi
             echo "Attempt $i failed, retrying in 30s..."
             echo "$output"
-            sleep 30
+            if [ $i -lt 5 ]; then sleep 30; fi
           done
           echo "All attempts failed"
           exit 1
@@ -98,7 +98,7 @@ jobs:
             fi
             echo "Attempt $i failed, retrying in 30s..."
             echo "$output"
-            sleep 30
+            if [ $i -lt 5 ]; then sleep 30; fi
           done
           echo "All attempts failed"
           exit 1
@@ -108,4 +108,10 @@ jobs:
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ github.ref_name }}" --generate-notes
+        run: |
+          tag="${{ github.ref_name }}"
+          if gh release view "$tag" > /dev/null 2>&1; then
+            echo "Release $tag already exists, skipping"
+          else
+            gh release create "$tag" --generate-notes
+          fi
