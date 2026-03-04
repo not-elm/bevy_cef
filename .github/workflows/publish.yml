@@ -33,30 +33,36 @@ jobs:
       - name: Publish bevy_cef
         run: |
           for i in 1 2 3 4 5; do
-            cargo publish -p bevy_cef && break
+            cargo publish -p bevy_cef && exit 0
             echo "Attempt $i failed, retrying in 30s..."
             sleep 30
           done
+          echo "All attempts failed"
+          exit 1
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
       - name: Publish bevy_cef_render_process
         run: |
           for i in 1 2 3 4 5; do
-            cargo publish -p bevy_cef_render_process && break
+            cargo publish -p bevy_cef_render_process && exit 0
             echo "Attempt $i failed, retrying in 30s..."
             sleep 30
           done
+          echo "All attempts failed"
+          exit 1
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
       - name: Publish bevy_cef_debug_render_process
         run: |
           for i in 1 2 3 4 5; do
-            cargo publish -p bevy_cef_debug_render_process && break
+            cargo publish -p bevy_cef_debug_render_process && exit 0
             echo "Attempt $i failed, retrying in 30s..."
             sleep 30
           done
+          echo "All attempts failed"
+          exit 1
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
