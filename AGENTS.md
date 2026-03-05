@@ -31,7 +31,7 @@
 - Include PR or issue references when relevant (e.g., `Support Bevy 0.17 (#11)`).
 - PRs should describe changes, testing performed, and target platform (macOS/Windows/Linux).
 - For webview or UI changes, include screenshots or short clips when possible.
-
+ 
 ## Platform & Configuration Notes
 - Primary development target is macOS; CEF framework should exist at `$HOME/.local/share/cef`.
 - Local assets are served as `cef://localhost/<file>`; prefer `CefWebviewUri::local("file.html")`.
