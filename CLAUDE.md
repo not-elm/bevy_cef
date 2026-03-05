@@ -64,7 +64,7 @@ make install
 ### Debug Tools Setup (macOS)
 Manual installation required before running with `debug` feature:
 ```bash
-cargo install export-cef-dir
+cargo install export-cef-dir --version 144.4.0
 export-cef-dir --force $HOME/.local/share
 cargo install bevy_cef_debug_render_process
 mv $HOME/.cargo/bin/bevy_cef_debug_render_process "$HOME/.local/share/Chromium Embedded Framework.framework/Libraries/bevy_cef_debug_render_process"

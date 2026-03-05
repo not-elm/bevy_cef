@@ -1,10 +1,4 @@
-.PHONY: fix install
-
-BIN := bevy_cef_debug_render_process
-CEF_LIB := $(HOME)/.local/share/Chromium Embedded Framework.framework/Libraries
-
-
-.PHONY: fix install
+.PHONY: fix install setup-windows
 
 BIN := bevy_cef_debug_render_process
 CEF_LIB := $(HOME)/.local/share/Chromium Embedded Framework.framework/Libraries
@@ -17,3 +11,7 @@ fix:
 install:
 	cargo install --path ./crates/bevy_cef_debug_render_process --force
 	mv "$(CARGO_BIN)/$(BIN)" "$(CEF_LIB)/$(BIN)"
+
+setup-windows:
+	cargo install export-cef-dir --version 144.4.0 --force
+	export-cef-dir --force "$(USERPROFILE)/.local/share/cef"

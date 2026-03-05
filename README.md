@@ -37,7 +37,7 @@ When using `debug`, you need to prepare a separate CEF framework and debug rende
 Please follow the steps below to set it up.
 
 ```shell
-> cargo install export-cef-dir
+> cargo install export-cef-dir --version 144.4.0
 > export-cef-dir --force $HOME/.local/share
 > cargo install bevy_cef_debug_render_process
 > cp $HOME/.cargo/bin/bevy_cef_debug_render_process "$HOME/.local/share/Chromium Embedded Framework.framework/Libraries/bevy_cef_debug_render_process"
