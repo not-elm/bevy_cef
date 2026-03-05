@@ -4,5 +4,8 @@ book/
 .DS_Store
 **/.DS_Store
 .claude/memo.md
+.claude/settings.local.json
 docs/plans/
+docs/discussions/
 .worktrees/
+
