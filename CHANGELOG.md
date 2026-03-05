@@ -1,3 +1,9 @@
+## Unreleased
+
+## Features
+
+- Suppport Windows platform.
+
 ## v0.2.1
 
 ### Bug Fixes
