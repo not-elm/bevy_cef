@@ -111,6 +111,24 @@ fn cef_shutdown(_: NonSend<RunOnMainThread>) {
     shutdown();
 }
 
+#[cfg(not(target_os = "macos"))]
+/// On non-macOS platforms, this detects if the current process is a CEF subprocess
+/// (renderer, GPU, utility) and exits immediately if so.
+/// On macOS, a separate render process binary is used, so this is a no-op
+fn early_exit_if_subprocess() {
+    let _ = api_hash(sys::CEF_API_VERSION_LAST, 0);
+    let args = Args::new();
+    let mut app = RenderProcessAppBuilder::build();
+    let ret = execute_process(
+        Some(args.as_main_args()),
+        Some(&mut app),
+        std::ptr::null_mut(),
+    );
+    if ret >= 0 {
+        std::process::exit(ret);
+    }
+}
+
 #[cfg(target_os = "macos")]
 mod macos {
     use core::sync::atomic::AtomicBool;
@@ -163,23 +181,5 @@ mod macos {
                 "Failed to add setHandlingSendEvent: to NSApplication"
             );
         }
-    }
-}
-
-#[cfg(not(target_os = "macos"))]
-/// On non-macOS platforms, this detects if the current process is a CEF subprocess
-/// (renderer, GPU, utility) and exits immediately if so.
-/// On macOS, a separate render process binary is used, so this is a no-op
-fn early_exit_if_subprocess() {
-    let _ = api_hash(sys::CEF_API_VERSION_LAST, 0);
-    let args = Args::new();
-    let mut app = RenderProcessAppBuilder::build();
-    let ret = execute_process(
-        Some(args.as_main_args()),
-        Some(&mut app),
-        std::ptr::null_mut(),
-    );
-    if ret >= 0 {
-        std::process::exit(ret);
     }
 }
