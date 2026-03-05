@@ -5,7 +5,7 @@ mod webview_material;
 pub use crate::common::*;
 use crate::system_param::pointer::WebviewPointer;
 use crate::webview::webview_sprite::WebviewSpritePlugin;
-use bevy::input::mouse::MouseWheel;
+use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
 use bevy::prelude::*;
 use bevy_cef_core::prelude::*;
 pub use webview_extend_material::*;
@@ -98,7 +98,14 @@ fn on_mouse_wheel(
             let Some(pos) = pointer.pointer_pos(webview, cursor_pos) else {
                 continue;
             };
-            browsers.send_mouse_wheel(&webview, pos, Vec2::new(event.x, event.y));
+            let delta = match event.unit {
+                MouseScrollUnit::Line => {
+                    // CEF expects pixel deltas; Chromium default: 3 lines × 40px = 120px per notch
+                    Vec2::new(event.x * 120.0, event.y * 120.0)
+                }
+                MouseScrollUnit::Pixel => Vec2::new(event.x, event.y),
+            };
+            browsers.send_mouse_wheel(&webview, pos, delta);
         }
     }
 }
