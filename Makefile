@@ -13,5 +13,5 @@ install-debug-render-process:
 	mv "$(CARGO_BIN)/$(BIN)" "$(CEF_LIB)/$(BIN)"
 
 setup-windows:
-	cargo install export-cef-dir --version 144.4.0 --force
+	cargo install export-cef-dir --force
 	export-cef-dir --force "$(USERPROFILE)/.local/share/cef"
