@@ -1,0 +1,132 @@
+fn main() {
+    #[cfg(target_os = "windows")]
+    windows::copy_cef_files();
+}
+
+#[cfg(target_os = "windows")]
+mod windows {
+    use std::env;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    const RUNTIME_EXTENSIONS: &[&str; 6] = &["dll", "lib", "pak", "dat", "bin", "json"];
+
+    pub fn copy_cef_files() {
+        println!("cargo:rerun-if-changed=build.rs");
+        println!("cargo:rerun-if-env-changed=USERPROFILE");
+
+        let target_dir = find_target_profile_dir();
+        let examples_dir = target_dir.join("examples");
+
+        let target_needs_copy = !target_dir.join("libcef.dll").exists();
+        let examples_needs_link = !examples_dir.join("libcef.dll").exists();
+
+        if !target_needs_copy && !examples_needs_link {
+            return;
+        }
+
+        let cef_dir = find_cef_dir();
+
+        if target_needs_copy {
+            println!(
+                "cargo:warning=Copying CEF files from {:?} to {:?}",
+                cef_dir, target_dir
+            );
+            copy_cef_runtime_files(&cef_dir, &target_dir);
+        }
+
+        if examples_needs_link {
+            println!(
+                "cargo:warning=Hard-linking CEF files into {:?}",
+                examples_dir
+            );
+            fs::create_dir_all(&examples_dir).unwrap();
+            link_cef_runtime_files(&target_dir, &examples_dir);
+        }
+    }
+
+    fn find_cef_dir() -> PathBuf {
+        let home = env::var("USERPROFILE").expect("USERPROFILE not set");
+        let cef_dir = PathBuf::from(home).join(".local/share/cef");
+        if !cef_dir.exists() {
+            panic!(
+                "CEF directory not found at {:?}. Run `make setup-windows` first.",
+                cef_dir
+            );
+        }
+        cef_dir
+    }
+
+    fn find_target_profile_dir() -> PathBuf {
+        let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
+        let mut dir = out_dir.as_path();
+        loop {
+            if dir.file_name().map(|n| n == "build").unwrap_or(false) {
+                return dir.parent().unwrap().to_path_buf();
+            }
+            dir = dir
+                .parent()
+                .expect("Could not find target profile directory from OUT_DIR");
+        }
+    }
+
+    fn is_runtime_file(path: &Path) -> bool {
+        let ext = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_lowercase();
+        RUNTIME_EXTENSIONS.contains(&ext.as_str())
+    }
+
+    fn copy_cef_runtime_files(src: &Path, dst: &Path) {
+        let entries = fs::read_dir(src).unwrap_or_else(|e| {
+            panic!("Failed to read CEF directory {:?}: {}", src, e);
+        });
+
+        for entry in entries {
+            let entry = entry.unwrap();
+            let path = entry.path();
+            let file_name = entry.file_name();
+
+            if path.is_dir() {
+                if file_name == "locales" {
+                    let dest_dir = dst.join(&file_name);
+                    fs::create_dir_all(&dest_dir).unwrap();
+                    copy_cef_runtime_files(&path, &dest_dir);
+                }
+                // Skip other directories (include/, cmake/, libcef_dll/)
+            } else if is_runtime_file(&path) {
+                let dest = dst.join(&file_name);
+                fs::copy(&path, &dest).unwrap_or_else(|e| {
+                    panic!("Failed to copy {:?} to {:?}: {}", path, dest, e);
+                });
+            }
+        }
+    }
+
+    fn link_cef_runtime_files(src: &Path, dst: &Path) {
+        let entries = fs::read_dir(src).unwrap_or_else(|e| {
+            panic!("Failed to read directory {:?}: {}", src, e);
+        });
+
+        for entry in entries {
+            let entry = entry.unwrap();
+            let path = entry.path();
+            let file_name = entry.file_name();
+
+            if path.is_dir() {
+                if file_name == "locales" {
+                    let dest_dir = dst.join(&file_name);
+                    fs::create_dir_all(&dest_dir).unwrap();
+                    link_cef_runtime_files(&path, &dest_dir);
+                }
+            } else if is_runtime_file(&path) {
+                let dest = dst.join(&file_name);
+                fs::hard_link(&path, &dest).unwrap_or_else(|e| {
+                    panic!("Failed to hard-link {:?} to {:?}: {}", path, dest, e);
+                });
+            }
+        }
+    }
+}
