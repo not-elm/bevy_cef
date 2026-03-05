@@ -10,7 +10,7 @@ fix-lint:
 
 install-debug-render-process:
 	cargo install --path ./crates/bevy_cef_debug_render_process --force
-	mv "$(CARGO_BIN)/$(BIN)" "$(CEF_LIB)/$(BIN)"
+	cp "$(CARGO_BIN)/$(BIN)" "$(CEF_LIB)/$(BIN)"
 
 setup-windows:
 	cargo install export-cef-dir --force
