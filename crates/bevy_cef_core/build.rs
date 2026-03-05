@@ -6,7 +6,9 @@ fn main() {
 #[cfg(target_os = "windows")]
 mod windows {
     use std::env;
+    use std::ffi::OsString;
     use std::fs;
+    use std::io::ErrorKind;
     use std::path::{Path, PathBuf};
 
     const RUNTIME_EXTENSIONS: &[&str; 6] = &["dll", "lib", "pak", "dat", "bin", "json"];
@@ -114,18 +116,33 @@ mod windows {
             let entry = entry.unwrap();
             let path = entry.path();
             let file_name = entry.file_name();
-
-            if path.is_dir() {
-                if file_name == "locales" {
-                    let dest_dir = dst.join(&file_name);
-                    fs::create_dir_all(&dest_dir).unwrap();
-                    link_cef_runtime_files(&path, &dest_dir);
+            match path.is_dir() {
+                true if file_name == "locales" => {
+                    link_locales_file(dst, path.as_path(), &file_name);
                 }
-            } else if is_runtime_file(&path) {
-                let dest = dst.join(&file_name);
-                fs::hard_link(&path, &dest).unwrap_or_else(|e| {
-                    panic!("Failed to hard-link {:?} to {:?}: {}", path, dest, e);
-                });
+                false if is_runtime_file(&path) => {
+                    link_runtime_file(dst, path.as_path(), &file_name);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn link_locales_file(dst: &Path, path: &Path, file_name: &OsString) {
+        let dest_dir = dst.join(file_name);
+        fs::create_dir_all(&dest_dir).unwrap();
+        link_cef_runtime_files(path, &dest_dir);
+    }
+
+    fn link_runtime_file(dst: &Path, path: &Path, file_name: &OsString) {
+        let dest = dst.join(file_name);
+        match fs::hard_link(path, &dest) {
+            Ok(_) => {}
+            Err(e) if e.kind() == ErrorKind::AlreadyExists => {
+                //Skip if already exists runtime files.
+            }
+            Err(e) => {
+                panic!("Failed to hard-link {:?} to {:?}: {}", path, dest, e);
             }
         }
     }
