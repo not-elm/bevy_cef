@@ -65,7 +65,7 @@ Run `bevy_cef_bundle_app --help` for additional options.
 ### Windows
 
 On Windows, you need to place CEF libraries in the same directory as the application executable.
-Please run the following command to install the CEF framework to `$HOME/.local/cef`.
+Please run the following command to install the CEF framework to local.
 When you build the project, the libraries will be automatically copied to the executable's direcotry.
 
 ```powershell
@@ -78,16 +78,17 @@ When you build the project, the libraries will be automatically copied to the ex
 See [`examples/`](./examples).
 
 On macOS, you need to enable `debug` feature enabled:
+
 ```shell
 cargo run --example simple --features debug
 ```
 
 ## 🌍 Platform Support
 
-| Platform | Status    | 
-| -------- | --------- | 
-| macOS    | ✅ Full    | 
-| Windows  | ✅ Full    | 
+| Platform | Status     |
+| -------- | ---------- |
+| macOS    | ✅ Full    |
+| Windows  | ✅ Full    |
 | Linux    | ⚠️ Planned |
 
 ## 🤝 Contributing
