@@ -17,9 +17,12 @@ mod windows {
         println!("cargo:rerun-if-changed=build.rs");
         println!("cargo:rerun-if-env-changed=USERPROFILE");
 
+        let Some(cef_dir) = find_cef_dir() else {
+            return;
+        };
+
         let target_dir = find_target_profile_dir();
         let examples_dir = target_dir.join("examples");
-        let cef_dir = find_cef_dir();
 
         println!("cargo:rerun-if-changed={}", cef_dir.display());
 
@@ -37,16 +40,17 @@ mod windows {
         link_cef_runtime_files(&target_dir, &examples_dir);
     }
 
-    fn find_cef_dir() -> PathBuf {
-        let home = env::var("USERPROFILE").expect("USERPROFILE not set");
+    fn find_cef_dir() -> Option<PathBuf> {
+        let home = env::var("USERPROFILE").ok()?;
         let cef_dir = PathBuf::from(home).join(".local/share/cef");
         if !cef_dir.exists() {
-            panic!(
-                "CEF directory not found at {:?}. Run `make setup-windows` first.",
+            println!(
+                "cargo:warning=CEF directory not found at {:?}. Run `make setup-windows` first. Skipping CEF file copy.",
                 cef_dir
             );
+            return None;
         }
-        cef_dir
+        Some(cef_dir)
     }
 
     fn find_target_profile_dir() -> PathBuf {
