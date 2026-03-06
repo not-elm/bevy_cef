@@ -24,8 +24,6 @@ mod windows {
         let target_dir = find_target_profile_dir();
         let examples_dir = target_dir.join("examples");
 
-        println!("cargo:rerun-if-changed={}", cef_dir.display());
-
         println!(
             "cargo:warning=Copying CEF files from {:?} to {:?}",
             cef_dir, target_dir
@@ -43,6 +41,7 @@ mod windows {
     fn find_cef_dir() -> Option<PathBuf> {
         let home = env::var("USERPROFILE").ok()?;
         let cef_dir = PathBuf::from(home).join(".local/share/cef");
+        println!("cargo:rerun-if-changed={}", cef_dir.display());
         if !cef_dir.exists() {
             println!(
                 "cargo:warning=CEF directory not found at {:?}. Run `make setup-windows` first. Skipping CEF file copy.",
