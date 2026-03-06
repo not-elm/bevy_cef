@@ -10,6 +10,7 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+      pull-requests: read
     outputs:
       final_message: ${{ steps.run_codex.outputs.final-message }}
     steps:
@@ -33,6 +34,10 @@ jobs:
           output-file: codex-output.md
           safety-strategy: drop-sudo
           sandbox: workspace-write
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO_FULL_NAME: ${{ github.repository }}
 
   post_review:
     runs-on: ubuntu-latest
