@@ -28,14 +28,9 @@ Review only the lines shown in this diff output.
 
 ## Check Prior Review Comments
 
-Before starting your review, fetch all existing PR discussion to avoid re-raising issues that have already been discussed:
+Before starting your review, read the file `prior-comments.txt` in the repository root. It contains all existing PR review bodies, inline review comments, and issue comments.
 
-```bash
-gh api "repos/$REPO_FULL_NAME/pulls/$PR_NUMBER/reviews" --jq '.[].body'
-gh api "repos/$REPO_FULL_NAME/issues/$PR_NUMBER/comments" --jq '.[].body'
-```
-
-Read all returned comments. If an issue you would raise has already been mentioned in any prior comment (whether by a reviewer or the PR author), **silently skip it** — do not include it in your review output.
+If an issue you would raise has already been mentioned in any prior comment (whether by a reviewer or the PR author), **silently skip it** — do not include it in your review output.
 
 ## Review Checklist
 
