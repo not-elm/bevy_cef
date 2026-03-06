@@ -13,12 +13,10 @@ exclude = ["assets/"]
 
 [workspace]
 resolver = "2"
-members = [
-    "crates/*",
-]
+members = ["crates/*"]
 
 [workspace.package]
-version = "0.2.1"
+version = "0.3.0"
 edition = "2024"
 license = "Apache-2.0 OR MIT"
 authors = ["notelm"]
@@ -40,8 +38,8 @@ bevy = { version = "0.18", default-features = false, features = [
 bevy_remote = "0.18"
 cef = { version = "144.4.0" }
 cef-dll-sys = { version = "144.4.0", features = ["sandbox"] }
-bevy_cef = { path = "." , version = "0.2.0" }
-bevy_cef_core = { path = "crates/bevy_cef_core", version = "0.2.0" }
+bevy_cef = { path = ".", version = "0.3.0" }
+bevy_cef_core = { path = "crates/bevy_cef_core", version = "0.3.0" }
 async-channel = { version = "2.5" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1" }
@@ -61,14 +59,18 @@ serde_json = { workspace = true }
 raw-window-handle = "0.6"
 
 [dev-dependencies]
-bevy = { workspace = true, default-features = true, features = ["file_watcher"]}
+bevy = { workspace = true, default-features = true, features = [
+    "file_watcher",
+] }
 bevy_cef = { path = ".", features = ["debug"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = { version = "0.2" }
 
 [lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("cargo-clippy"))'] }
+unexpected_cfgs = { level = "warn", check-cfg = [
+    'cfg(feature, values("cargo-clippy"))',
+] }
 
 [features]
 default = []
