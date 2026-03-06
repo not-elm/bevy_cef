@@ -3,10 +3,8 @@
 //! Please see [here](https://gist.github.com/coreh/1baf6f255d7e86e4be29874d00137d1d) for more about BRP.
 
 use bevy::prelude::*;
-use bevy::time::common_conditions::on_timer;
 use bevy_cef::prelude::*;
 use bevy_remote::{BrpResult, RemotePlugin};
-use std::time::Duration;
 
 fn main() {
     App::new()
@@ -18,10 +16,6 @@ fn main() {
         .add_systems(
             Startup,
             (ime, spawn_camera, spawn_directional_light, spawn_webview),
-        )
-        .add_systems(
-            Update,
-            show_devtool.run_if(on_timer(Duration::from_secs(1))),
         )
         .run();
 }
@@ -67,19 +61,5 @@ fn spawn_webview(
 fn ime(mut windows: Query<&mut bevy::prelude::Window>) {
     for mut window in windows.iter_mut() {
         window.ime_enabled = true;
-    }
-}
-
-fn show_devtool(
-    mut commands: Commands,
-    webviews: Query<Entity, With<WebviewSource>>,
-    mut initialized: Local<bool>,
-) {
-    if *initialized {
-        return;
-    }
-    *initialized = true;
-    for webview in webviews.iter() {
-        commands.trigger(RequestShowDevTool { webview });
     }
 }

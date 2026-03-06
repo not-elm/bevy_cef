@@ -21,7 +21,9 @@ https://github.com/user-attachments/assets/54f476d0-8eda-4030-a3f6-dc4f2f54209f
 - **🎯 Navigation Controls** - Browser history, zoom, audio controls, and more
 - **🔒 Multi-Process Architecture** - Secure CEF multi-process design for stability
 
-### Platform Requirements
+## Platform Requirements
+
+### Macos
 
 On macOS, using CEF typically requires creating an app bundle.
 For development, this library provides a `debug` feature flag.
@@ -31,7 +33,7 @@ Once enabled, you can run the app without needing the bundle.
 > Use this feature only during development; for releases, bundle the renderer process and the CEF framework inside the
 > app.
 
-### Installation debug tools(macOS)
+#### Installation debug tools
 
 When using `debug`, you need to prepare a separate CEF framework and debug render process.
 Please follow the steps below to set it up.
@@ -43,7 +45,7 @@ Please follow the steps below to set it up.
 > cp $HOME/.cargo/bin/bevy_cef_debug_render_process "$HOME/.local/share/Chromium Embedded Framework.framework/Libraries/bevy_cef_debug_render_process"
 ```
 
-### Bundling for Release (macOS)
+#### Bundling for Release
 
 Install the bundling tools:
 
@@ -60,6 +62,17 @@ Bundle CEF into your `.app`:
 
 Run `bevy_cef_bundle_app --help` for additional options.
 
+### Windows
+
+On Windows, you need to place CEF libraries in the same directory as the application executable.
+Please run the following command to install the CEF framework to local.
+When you build the project, the libraries will be automatically copied to the executable's direcotry.
+
+```powershell
+>	cargo install export-cef-dir --force
+>	export-cef-dir --force "$HOME/.local/share/cef"
+```
+
 ## Examples
 
 See [`examples/`](./examples).
@@ -72,11 +85,11 @@ cargo run --example simple --features debug
 
 ## 🌍 Platform Support
 
-| Platform | Status    | Notes                        |
-| -------- | --------- | ---------------------------- |
-| macOS    | ✅ Full    | Primary development platform |
-| Windows  | ⚠️ Planned | comming soon ...             |
-| Linux    | ⚠️ Planned |                              |
+| Platform | Status     |
+| -------- | ---------- |
+| macOS    | ✅ Full    |
+| Windows  | ✅ Full    |
+| Linux    | ⚠️ Planned |
 
 ## 🤝 Contributing
 

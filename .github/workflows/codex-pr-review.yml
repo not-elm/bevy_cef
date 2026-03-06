@@ -10,6 +10,7 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+      pull-requests: read
     outputs:
       final_message: ${{ steps.run_codex.outputs.final-message }}
     steps:
@@ -23,6 +24,20 @@ jobs:
           git fetch --no-tags origin \
             ${{ github.event.pull_request.base.ref }} \
             +refs/pull/${{ github.event.pull_request.number }}/head
+
+      - name: Fetch prior PR comments
+        run: |
+          echo "=== Review bodies ===" > prior-comments.txt
+          gh api --paginate "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews" \
+            --jq '.[] | .body // empty' >> prior-comments.txt || echo "WARNING: failed to fetch review bodies" >> prior-comments.txt
+          echo "=== Inline review comments ===" >> prior-comments.txt
+          gh api --paginate "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments" \
+            --jq '.[] | .body // empty' >> prior-comments.txt || echo "WARNING: failed to fetch inline review comments" >> prior-comments.txt
+          echo "=== Issue comments ===" >> prior-comments.txt
+          gh api --paginate "repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
+            --jq '.[] | .body // empty' >> prior-comments.txt || echo "WARNING: failed to fetch issue comments" >> prior-comments.txt
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Run Codex
         id: run_codex

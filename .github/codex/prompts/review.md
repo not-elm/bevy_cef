@@ -26,6 +26,12 @@ git diff origin/main...HEAD
 
 Review only the lines shown in this diff output.
 
+## Check Prior Review Comments
+
+Before starting your review, read the file `prior-comments.txt` in the repository root. It contains all existing PR review bodies, inline review comments, and issue comments.
+
+If an issue you would raise has already been mentioned in any prior comment (whether by a reviewer or the PR author), **silently skip it** — do not include it in your review output.
+
 ## Review Checklist
 
 Review the PR diff for:

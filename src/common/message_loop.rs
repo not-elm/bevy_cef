@@ -6,8 +6,9 @@ use cef::{Settings, api_hash, execute_process, initialize, shutdown, sys};
 
 /// Controls the CEF message loop.
 ///
-/// - Windows and Linux: Support [`multi_threaded_message_loop`](https://cef-builds.spotifycdn.com/docs/106.1/structcef__settings__t.html#a518ac90db93ca5133a888faa876c08e0), so it is used.
-/// - macOS: Calls [`CefDoMessageLoopWork`](https://cef-builds.spotifycdn.com/docs/106.1/cef__app_8h.html#a830ae43dcdffcf4e719540204cefdb61) every frame.
+/// Uses `external_message_pump` on all platforms and calls
+/// [`CefDoMessageLoopWork`](https://cef-builds.spotifycdn.com/docs/106.1/cef__app_8h.html#a830ae43dcdffcf4e719540204cefdb61)
+/// every frame.
 pub struct MessageLoopPlugin {
     pub config: CommandLineConfig,
     pub extensions: CefExtensions,
@@ -15,6 +16,9 @@ pub struct MessageLoopPlugin {
 
 impl Plugin for MessageLoopPlugin {
     fn build(&self, app: &mut App) {
+        #[cfg(not(target_os = "macos"))]
+        early_exit_if_subprocess();
+
         #[cfg(target_os = "macos")]
         load_cef_library(app);
 
@@ -24,12 +28,21 @@ impl Plugin for MessageLoopPlugin {
 
         let mut cef_app =
             BrowserProcessAppBuilder::build(tx, self.config.clone(), self.extensions.clone());
-        let ret = execute_process(
-            Some(args.as_main_args()),
-            Some(&mut cef_app),
-            std::ptr::null_mut(),
-        );
-        assert_eq!(ret, -1, "cannot execute browser process");
+
+        // On macOS, subprocess detection happens here because a separate render
+        // process binary is used. On other platforms, it must happen earlier via
+        // `bevy_cef::init()` before Bevy creates any windows.
+        #[cfg(target_os = "macos")]
+        {
+            let ret = execute_process(
+                Some(args.as_main_args()),
+                Some(&mut cef_app),
+                std::ptr::null_mut(),
+            );
+            if ret >= 0 {
+                std::process::exit(ret);
+            }
+        }
 
         cef_initialize(&args, &mut cef_app);
 
@@ -64,9 +77,6 @@ fn cef_initialize(args: &Args, cef_app: &mut cef::App) {
         #[cfg(any(all(target_os = "macos", feature = "debug"), target_os = "windows"))]
         no_sandbox: true as _,
         windowless_rendering_enabled: true as _,
-        // #[cfg(any(target_os = "windows", target_os = "linux"))]
-        // multi_threaded_message_loop: true as _,
-        multi_threaded_message_loop: false as _,
         external_message_pump: true as _,
         disable_signal_handlers: true as _,
         ..Default::default()
@@ -99,6 +109,24 @@ fn cef_do_message_loop_work(
 
 fn cef_shutdown(_: NonSend<RunOnMainThread>) {
     shutdown();
+}
+
+#[cfg(not(target_os = "macos"))]
+/// On non-macOS platforms, this detects if the current process is a CEF subprocess
+/// (renderer, GPU, utility) and exits immediately if so.
+/// On macOS, a separate render process binary is used, so this is a no-op
+fn early_exit_if_subprocess() {
+    let _ = api_hash(sys::CEF_API_VERSION_LAST, 0);
+    let args = Args::new();
+    let mut app = RenderProcessAppBuilder::build();
+    let ret = execute_process(
+        Some(args.as_main_args()),
+        Some(&mut app),
+        std::ptr::null_mut(),
+    );
+    if ret >= 0 {
+        std::process::exit(ret);
+    }
 }
 
 #[cfg(target_os = "macos")]

@@ -69,14 +69,18 @@ impl Browsers {
         let browser = browser_host_create_browser_sync(
             Some(&WindowInfo {
                 windowless_rendering_enabled: true as _,
-                external_begin_frame_enabled: false as _,
+                external_begin_frame_enabled: true as _,
                 #[cfg(target_os = "macos")]
                 parent_view: match _window_handle {
                     Some(RawWindowHandle::AppKit(handle)) => handle.ns_view.as_ptr(),
-                    Some(RawWindowHandle::Win32(handle)) => handle.hwnd.get() as _,
-                    Some(RawWindowHandle::Xlib(handle)) => handle.window as _,
-                    Some(RawWindowHandle::Wayland(handle)) => handle.surface.as_ptr(),
                     _ => std::ptr::null_mut(),
+                },
+                #[cfg(target_os = "windows")]
+                parent_window: match _window_handle {
+                    Some(RawWindowHandle::Win32(handle)) => {
+                        cef_dll_sys::HWND(handle.hwnd.get() as _)
+                    }
+                    _ => cef_dll_sys::HWND(std::ptr::null_mut()),
                 },
                 // shared_texture_enabled: true as _,
                 ..Default::default()
