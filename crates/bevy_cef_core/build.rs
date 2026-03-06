@@ -28,10 +28,7 @@ mod windows {
         );
         copy_cef_runtime_files(&cef_dir, &target_dir);
 
-        println!(
-            "cargo:warning=Copying CEF files into {:?}",
-            examples_dir
-        );
+        println!("cargo:warning=Copying CEF files into {:?}", examples_dir);
         fs::create_dir_all(&examples_dir).unwrap();
         copy_cef_runtime_files(&target_dir, &examples_dir);
     }
@@ -104,5 +101,4 @@ mod windows {
             }
         }
     }
-
 }
