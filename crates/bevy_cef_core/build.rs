@@ -19,32 +19,20 @@ mod windows {
 
         let target_dir = find_target_profile_dir();
         let examples_dir = target_dir.join("examples");
-
-        let target_needs_copy = !target_dir.join("libcef.dll").exists();
-        let examples_needs_link = !examples_dir.join("libcef.dll").exists();
-
-        if !target_needs_copy && !examples_needs_link {
-            return;
-        }
-
         let cef_dir = find_cef_dir();
 
-        if target_needs_copy {
-            println!(
-                "cargo:warning=Copying CEF files from {:?} to {:?}",
-                cef_dir, target_dir
-            );
-            copy_cef_runtime_files(&cef_dir, &target_dir);
-        }
+        println!(
+            "cargo:warning=Copying CEF files from {:?} to {:?}",
+            cef_dir, target_dir
+        );
+        copy_cef_runtime_files(&cef_dir, &target_dir);
 
-        if examples_needs_link {
-            println!(
-                "cargo:warning=Hard-linking CEF files into {:?}",
-                examples_dir
-            );
-            fs::create_dir_all(&examples_dir).unwrap();
-            link_cef_runtime_files(&target_dir, &examples_dir);
-        }
+        println!(
+            "cargo:warning=Hard-linking CEF files into {:?}",
+            examples_dir
+        );
+        fs::create_dir_all(&examples_dir).unwrap();
+        link_cef_runtime_files(&target_dir, &examples_dir);
     }
 
     fn find_cef_dir() -> PathBuf {
@@ -100,6 +88,9 @@ mod windows {
                 // Skip other directories (include/, cmake/, libcef_dll/)
             } else if is_runtime_file(&path) {
                 let dest = dst.join(&file_name);
+                if dest.exists() {
+                    continue;
+                }
                 fs::copy(&path, &dest).unwrap_or_else(|e| {
                     panic!("Failed to copy {:?} to {:?}: {}", path, dest, e);
                 });
@@ -141,8 +132,10 @@ mod windows {
             Err(e) if e.kind() == ErrorKind::AlreadyExists => {
                 //Skip if already exists runtime files.
             }
-            Err(e) => {
-                panic!("Failed to hard-link {:?} to {:?}: {}", path, dest, e);
+            Err(_) => {
+                fs::copy(path, &dest).unwrap_or_else(|e| {
+                    panic!("Failed to copy {:?} to {:?}: {}", path, dest, e);
+                });
             }
         }
     }

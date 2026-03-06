@@ -1,4 +1,4 @@
-.PHONY: fix-lint install-debug-render-proces setup-windows
+.PHONY: fix-lint install-debug-render-process setup-windows
 
 BIN := bevy_cef_debug_render_process
 CEF_LIB := $(HOME)/.local/share/Chromium Embedded Framework.framework/Libraries

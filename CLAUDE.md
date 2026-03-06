@@ -51,14 +51,17 @@ Navigation and DevTools events are `EntityEvent` types requiring explicit `webvi
 ## Development Commands
 
 ```bash
-# Fix and format code
-make fix
+# Lint and format code
+make fix-lint
 
 # Run examples (macOS requires debug feature)
 cargo run --example simple --features debug
 
-# Install debug render process tool
-make install
+# Install debug render process (macOS)
+make install-debug-render-process
+
+# Setup CEF on Windows (installs to $USERPROFILE/.local/share/cef)
+make setup-windows
 ```
 
 ### Debug Tools Setup (macOS)
@@ -67,8 +70,15 @@ Manual installation required before running with `debug` feature:
 cargo install export-cef-dir --version 144.4.0
 export-cef-dir --force $HOME/.local/share
 cargo install bevy_cef_debug_render_process
-mv $HOME/.cargo/bin/bevy_cef_debug_render_process "$HOME/.local/share/Chromium Embedded Framework.framework/Libraries/bevy_cef_debug_render_process"
+cp $HOME/.cargo/bin/bevy_cef_debug_render_process "$HOME/.local/share/Chromium Embedded Framework.framework/Libraries/bevy_cef_debug_render_process"
 ```
+
+### Windows Setup
+```powershell
+cargo install export-cef-dir --force
+export-cef-dir --force "$env:USERPROFILE/.local/share/cef"
+```
+The `build.rs` in `bevy_cef_core` automatically copies CEF runtime files (DLLs, PAKs, etc.) from `$USERPROFILE/.local/share/cef` to the target directory and hard-links them into the `examples/` output directory.
 
 ## Local Asset Loading
 
@@ -80,17 +90,26 @@ Local HTML/assets served via `cef://localhost/` scheme:
 
 No automated tests. Testing done through examples:
 - `cargo test --workspace --all-features` (for any future tests)
-- Examples: simple, js_emit, host_emit, brp, navigation, zoom_level, sprite, devtool, custom_material, preload_scripts, extensions
+- Examples: simple, inline_html, js_emit, host_emit, brp, navigation, zoom_level, sprite, devtool, custom_material, preload_scripts, extensions
 
 ## Platform Notes
 
-- Primary platform: macOS (uses `objc` crate for window handling)
-- CEF framework location: `$HOME/.local/share/Chromium Embedded Framework.framework`
-- Windows/Linux: Infrastructure ready but needs testing
-- Key resources (`Browsers`, library loaders) are `NonSend` - CEF is not thread-safe
+- macOS: Full support. Uses `objc` crate for window handling. CEF framework at `$HOME/.local/share/Chromium Embedded Framework.framework`
+- Windows: Full support. CEF files at `$USERPROFILE/.local/share/cef`, auto-copied by build.rs
+- Linux: Planned, not yet supported
+- Key resources (`Browsers`, library loaders) are `NonSend` — CEF is not thread-safe
 
 ## Workspace Structure
 
-- Root crate: `bevy_cef` (public API)
-- `crates/bevy_cef_core`: Core CEF integration logic
-- `crates/bevy_cef_debug_render_process`: Debug render process executable
+- Root crate: `bevy_cef` (public API, `src/`)
+- `crates/bevy_cef_core`: Core CEF integration logic (browser process, render process, IPC internals)
+- `crates/bevy_cef_debug_render_process`: Debug render process executable (development only)
+- `crates/bevy_cef_render_process`: Release render process executable
+- `crates/bevy_cef_bundle_app`: macOS `.app` bundling tool for release builds
+
+## Version Compatibility
+
+| Bevy   | bevy_cef | CEF     |
+| ------ | -------- | ------- |
+| 0.18 ~ | 0.2.0    | 144.4.0 |
+| 0.16   | 0.1.0    | 139     |

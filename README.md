@@ -68,7 +68,6 @@ On Windows, you need to place CEF libraries in the same directory as the applica
 Please run the following command to install the CEF framework to `$HOME/.local/cef`.
 When you build the project, the libraries will be automatically copied to the executable's direcotry.
 
-powershell
 ```powershell
 >	cargo install export-cef-dir --force
 >	export-cef-dir --force "$HOME/.local/share/cef"
@@ -79,6 +78,7 @@ powershell
 See [`examples/`](./examples).
 
 On macOS, you need to enable `debug` feature enabled:
+```shell
 cargo run --example simple --features debug
 ```
 
