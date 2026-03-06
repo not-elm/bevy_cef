@@ -21,6 +21,8 @@ mod windows {
         let examples_dir = target_dir.join("examples");
         let cef_dir = find_cef_dir();
 
+        println!("cargo:rerun-if-changed={}", cef_dir.display());
+
         println!(
             "cargo:warning=Copying CEF files from {:?} to {:?}",
             cef_dir, target_dir
@@ -89,7 +91,11 @@ mod windows {
             } else if is_runtime_file(&path) {
                 let dest = dst.join(&file_name);
                 if dest.exists() {
-                    continue;
+                    let src_modified = fs::metadata(&path).unwrap().modified().unwrap();
+                    let dst_modified = fs::metadata(&dest).unwrap().modified().unwrap();
+                    if dst_modified >= src_modified {
+                        continue;
+                    }
                 }
                 fs::copy(&path, &dest).unwrap_or_else(|e| {
                     panic!("Failed to copy {:?} to {:?}: {}", path, dest, e);
