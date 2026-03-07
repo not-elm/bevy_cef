@@ -35,6 +35,8 @@ impl Default for CommandLineConfig {
             switches: vec![
                 #[cfg(all(target_os = "macos", debug_assertions))]
                 "use-mock-keychain",
+                #[cfg(target_os = "linux")]
+                "disable-gpu-sandbox",
             ],
             switch_values: Vec::new(),
         }

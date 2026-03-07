@@ -62,6 +62,9 @@ make install-debug-render-process
 
 # Setup CEF on Windows (installs to $USERPROFILE/.local/share/cef)
 make setup-windows
+
+# Setup CEF on Linux (installs to $HOME/.local/share/cef)
+make setup-linux
 ```
 
 ### Debug Tools Setup (macOS)
@@ -96,7 +99,7 @@ No automated tests. Testing done through examples:
 
 - macOS: Full support. Uses `objc` crate for window handling. CEF framework at `$HOME/.local/share/Chromium Embedded Framework.framework`
 - Windows: Full support. CEF files at `$USERPROFILE/.local/share/cef`, auto-copied by build.rs
-- Linux: Planned, not yet supported
+- Linux: Full support. CEF files at `$HOME/.local/share/cef`, auto-copied by build.rs. Run examples with `LD_LIBRARY_PATH=$HOME/.local/share/cef`. X11 fully supported, Wayland experimental.
 - Key resources (`Browsers`, library loaders) are `NonSend` — CEF is not thread-safe
 
 ## Workspace Structure

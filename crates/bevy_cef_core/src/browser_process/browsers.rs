@@ -82,6 +82,12 @@ impl Browsers {
                     }
                     _ => cef_dll_sys::HWND(std::ptr::null_mut()),
                 },
+                #[cfg(target_os = "linux")]
+                parent_window: match _window_handle {
+                    Some(RawWindowHandle::Xlib(handle)) => handle.window as _,
+                    Some(RawWindowHandle::Xcb(handle)) => handle.window.get() as _,
+                    _ => 0, // Wayland or no window
+                },
                 // shared_texture_enabled: true as _,
                 ..Default::default()
             }),

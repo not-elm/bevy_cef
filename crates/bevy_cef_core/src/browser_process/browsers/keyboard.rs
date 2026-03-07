@@ -258,21 +258,27 @@ fn keycode_to_windows_vk(keycode: KeyCode) -> i32 {
 //     )
 // }
 
-/// Native key codes for different platforms based on MDN documentation
-/// [`Keyboard_event_key_values`](https://developer.mozilla.org/en-US/docs/Web/API/UI_Events/Keyboard_event_key_values)
+/// Native key codes for different platforms:
+/// - macOS: Virtual key codes from Carbon Events
+/// - Linux: XKB keycodes (evdev scancode + 8)
+/// - Windows: Virtual-Key codes
 fn to_native_key_code(keycode: &KeyCode) -> u32 {
     match keycode {
-        // Letters - Platform specific native codes
+        // Letters
         KeyCode::KeyA => {
             if cfg!(target_os = "macos") {
                 0x00
+            } else if cfg!(target_os = "linux") {
+                38
             } else {
                 0x41
-            } // Linux/default
+            }
         }
         KeyCode::KeyB => {
             if cfg!(target_os = "macos") {
                 0x0B
+            } else if cfg!(target_os = "linux") {
+                56
             } else {
                 0x42
             }
@@ -280,6 +286,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::KeyC => {
             if cfg!(target_os = "macos") {
                 0x08
+            } else if cfg!(target_os = "linux") {
+                54
             } else {
                 0x43
             }
@@ -287,6 +295,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::KeyD => {
             if cfg!(target_os = "macos") {
                 0x02
+            } else if cfg!(target_os = "linux") {
+                40
             } else {
                 0x44
             }
@@ -294,6 +304,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::KeyE => {
             if cfg!(target_os = "macos") {
                 0x0E
+            } else if cfg!(target_os = "linux") {
+                26
             } else {
                 0x45
             }
@@ -301,6 +313,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::KeyF => {
             if cfg!(target_os = "macos") {
                 0x03
+            } else if cfg!(target_os = "linux") {
+                41
             } else {
                 0x46
             }
@@ -308,6 +322,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::KeyG => {
             if cfg!(target_os = "macos") {
                 0x05
+            } else if cfg!(target_os = "linux") {
+                42
             } else {
                 0x47
             }
@@ -315,6 +331,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::KeyH => {
             if cfg!(target_os = "macos") {
                 0x04
+            } else if cfg!(target_os = "linux") {
+                43
             } else {
                 0x48
             }
@@ -322,6 +340,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::KeyI => {
             if cfg!(target_os = "macos") {
                 0x22
+            } else if cfg!(target_os = "linux") {
+                31
             } else {
                 0x49
             }
@@ -329,6 +349,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::KeyJ => {
             if cfg!(target_os = "macos") {
                 0x26
+            } else if cfg!(target_os = "linux") {
+                44
             } else {
                 0x4A
             }
@@ -336,6 +358,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::KeyK => {
             if cfg!(target_os = "macos") {
                 0x28
+            } else if cfg!(target_os = "linux") {
+                45
             } else {
                 0x4B
             }
@@ -343,6 +367,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::KeyL => {
             if cfg!(target_os = "macos") {
                 0x25
+            } else if cfg!(target_os = "linux") {
+                46
             } else {
                 0x4C
             }
@@ -350,6 +376,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::KeyM => {
             if cfg!(target_os = "macos") {
                 0x2E
+            } else if cfg!(target_os = "linux") {
+                58
             } else {
                 0x4D
             }
@@ -357,6 +385,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::KeyN => {
             if cfg!(target_os = "macos") {
                 0x2D
+            } else if cfg!(target_os = "linux") {
+                57
             } else {
                 0x4E
             }
@@ -364,6 +394,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::KeyO => {
             if cfg!(target_os = "macos") {
                 0x1F
+            } else if cfg!(target_os = "linux") {
+                32
             } else {
                 0x4F
             }
@@ -371,6 +403,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::KeyP => {
             if cfg!(target_os = "macos") {
                 0x23
+            } else if cfg!(target_os = "linux") {
+                33
             } else {
                 0x50
             }
@@ -378,6 +412,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::KeyQ => {
             if cfg!(target_os = "macos") {
                 0x0C
+            } else if cfg!(target_os = "linux") {
+                24
             } else {
                 0x51
             }
@@ -385,6 +421,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::KeyR => {
             if cfg!(target_os = "macos") {
                 0x0F
+            } else if cfg!(target_os = "linux") {
+                27
             } else {
                 0x52
             }
@@ -392,6 +430,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::KeyS => {
             if cfg!(target_os = "macos") {
                 0x01
+            } else if cfg!(target_os = "linux") {
+                39
             } else {
                 0x53
             }
@@ -399,6 +439,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::KeyT => {
             if cfg!(target_os = "macos") {
                 0x11
+            } else if cfg!(target_os = "linux") {
+                28
             } else {
                 0x54
             }
@@ -406,6 +448,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::KeyU => {
             if cfg!(target_os = "macos") {
                 0x20
+            } else if cfg!(target_os = "linux") {
+                30
             } else {
                 0x55
             }
@@ -413,6 +457,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::KeyV => {
             if cfg!(target_os = "macos") {
                 0x09
+            } else if cfg!(target_os = "linux") {
+                55
             } else {
                 0x56
             }
@@ -420,6 +466,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::KeyW => {
             if cfg!(target_os = "macos") {
                 0x0D
+            } else if cfg!(target_os = "linux") {
+                25
             } else {
                 0x57
             }
@@ -427,6 +475,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::KeyX => {
             if cfg!(target_os = "macos") {
                 0x07
+            } else if cfg!(target_os = "linux") {
+                53
             } else {
                 0x58
             }
@@ -434,6 +484,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::KeyY => {
             if cfg!(target_os = "macos") {
                 0x10
+            } else if cfg!(target_os = "linux") {
+                29
             } else {
                 0x59
             }
@@ -441,6 +493,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::KeyZ => {
             if cfg!(target_os = "macos") {
                 0x06
+            } else if cfg!(target_os = "linux") {
+                52
             } else {
                 0x5A
             }
@@ -450,6 +504,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::Digit0 => {
             if cfg!(target_os = "macos") {
                 0x1D
+            } else if cfg!(target_os = "linux") {
+                19
             } else {
                 0x30
             }
@@ -457,6 +513,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::Digit1 => {
             if cfg!(target_os = "macos") {
                 0x12
+            } else if cfg!(target_os = "linux") {
+                10
             } else {
                 0x31
             }
@@ -464,6 +522,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::Digit2 => {
             if cfg!(target_os = "macos") {
                 0x13
+            } else if cfg!(target_os = "linux") {
+                11
             } else {
                 0x32
             }
@@ -471,6 +531,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::Digit3 => {
             if cfg!(target_os = "macos") {
                 0x14
+            } else if cfg!(target_os = "linux") {
+                12
             } else {
                 0x33
             }
@@ -478,6 +540,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::Digit4 => {
             if cfg!(target_os = "macos") {
                 0x15
+            } else if cfg!(target_os = "linux") {
+                13
             } else {
                 0x34
             }
@@ -485,6 +549,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::Digit5 => {
             if cfg!(target_os = "macos") {
                 0x17
+            } else if cfg!(target_os = "linux") {
+                14
             } else {
                 0x35
             }
@@ -492,6 +558,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::Digit6 => {
             if cfg!(target_os = "macos") {
                 0x16
+            } else if cfg!(target_os = "linux") {
+                15
             } else {
                 0x36
             }
@@ -499,6 +567,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::Digit7 => {
             if cfg!(target_os = "macos") {
                 0x1A
+            } else if cfg!(target_os = "linux") {
+                16
             } else {
                 0x37
             }
@@ -506,6 +576,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::Digit8 => {
             if cfg!(target_os = "macos") {
                 0x1C
+            } else if cfg!(target_os = "linux") {
+                17
             } else {
                 0x38
             }
@@ -513,6 +585,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::Digit9 => {
             if cfg!(target_os = "macos") {
                 0x19
+            } else if cfg!(target_os = "linux") {
+                18
             } else {
                 0x39
             }
@@ -522,6 +596,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::F1 => {
             if cfg!(target_os = "macos") {
                 0x7A
+            } else if cfg!(target_os = "linux") {
+                67
             } else {
                 0x70
             }
@@ -529,6 +605,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::F2 => {
             if cfg!(target_os = "macos") {
                 0x78
+            } else if cfg!(target_os = "linux") {
+                68
             } else {
                 0x71
             }
@@ -536,6 +614,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::F3 => {
             if cfg!(target_os = "macos") {
                 0x63
+            } else if cfg!(target_os = "linux") {
+                69
             } else {
                 0x72
             }
@@ -543,6 +623,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::F4 => {
             if cfg!(target_os = "macos") {
                 0x76
+            } else if cfg!(target_os = "linux") {
+                70
             } else {
                 0x73
             }
@@ -550,6 +632,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::F5 => {
             if cfg!(target_os = "macos") {
                 0x60
+            } else if cfg!(target_os = "linux") {
+                71
             } else {
                 0x74
             }
@@ -557,6 +641,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::F6 => {
             if cfg!(target_os = "macos") {
                 0x61
+            } else if cfg!(target_os = "linux") {
+                72
             } else {
                 0x75
             }
@@ -564,6 +650,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::F7 => {
             if cfg!(target_os = "macos") {
                 0x62
+            } else if cfg!(target_os = "linux") {
+                73
             } else {
                 0x76
             }
@@ -571,6 +659,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::F8 => {
             if cfg!(target_os = "macos") {
                 0x64
+            } else if cfg!(target_os = "linux") {
+                74
             } else {
                 0x77
             }
@@ -578,6 +668,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::F9 => {
             if cfg!(target_os = "macos") {
                 0x65
+            } else if cfg!(target_os = "linux") {
+                75
             } else {
                 0x78
             }
@@ -585,6 +677,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::F10 => {
             if cfg!(target_os = "macos") {
                 0x6D
+            } else if cfg!(target_os = "linux") {
+                76
             } else {
                 0x79
             }
@@ -592,6 +686,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::F11 => {
             if cfg!(target_os = "macos") {
                 0x67
+            } else if cfg!(target_os = "linux") {
+                95
             } else {
                 0x7A
             }
@@ -599,6 +695,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::F12 => {
             if cfg!(target_os = "macos") {
                 0x6F
+            } else if cfg!(target_os = "linux") {
+                96
             } else {
                 0x7B
             }
@@ -608,6 +706,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::Enter => {
             if cfg!(target_os = "macos") {
                 0x24
+            } else if cfg!(target_os = "linux") {
+                36
             } else {
                 0x0D
             }
@@ -615,6 +715,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::Space => {
             if cfg!(target_os = "macos") {
                 0x31
+            } else if cfg!(target_os = "linux") {
+                65
             } else {
                 0x20
             }
@@ -622,6 +724,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::Backspace => {
             if cfg!(target_os = "macos") {
                 0x33
+            } else if cfg!(target_os = "linux") {
+                22
             } else {
                 0x08
             }
@@ -629,6 +733,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::Delete => {
             if cfg!(target_os = "macos") {
                 0x75
+            } else if cfg!(target_os = "linux") {
+                119
             } else {
                 0x2E
             }
@@ -636,6 +742,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::Tab => {
             if cfg!(target_os = "macos") {
                 0x30
+            } else if cfg!(target_os = "linux") {
+                23
             } else {
                 0x09
             }
@@ -643,6 +751,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::Escape => {
             if cfg!(target_os = "macos") {
                 0x35
+            } else if cfg!(target_os = "linux") {
+                9
             } else {
                 0x1B
             }
@@ -650,6 +760,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::Insert => {
             if cfg!(target_os = "macos") {
                 0x72
+            } else if cfg!(target_os = "linux") {
+                118
             } else {
                 0x2D
             }
@@ -657,6 +769,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::Home => {
             if cfg!(target_os = "macos") {
                 0x73
+            } else if cfg!(target_os = "linux") {
+                110
             } else {
                 0x24
             }
@@ -664,6 +778,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::End => {
             if cfg!(target_os = "macos") {
                 0x77
+            } else if cfg!(target_os = "linux") {
+                115
             } else {
                 0x23
             }
@@ -671,6 +787,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::PageUp => {
             if cfg!(target_os = "macos") {
                 0x74
+            } else if cfg!(target_os = "linux") {
+                112
             } else {
                 0x21
             }
@@ -678,6 +796,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::PageDown => {
             if cfg!(target_os = "macos") {
                 0x79
+            } else if cfg!(target_os = "linux") {
+                117
             } else {
                 0x22
             }
@@ -687,6 +807,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::ArrowLeft => {
             if cfg!(target_os = "macos") {
                 0x7B
+            } else if cfg!(target_os = "linux") {
+                113
             } else {
                 0x25
             }
@@ -694,6 +816,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::ArrowUp => {
             if cfg!(target_os = "macos") {
                 0x7E
+            } else if cfg!(target_os = "linux") {
+                111
             } else {
                 0x26
             }
@@ -701,6 +825,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::ArrowRight => {
             if cfg!(target_os = "macos") {
                 0x7C
+            } else if cfg!(target_os = "linux") {
+                114
             } else {
                 0x27
             }
@@ -708,6 +834,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::ArrowDown => {
             if cfg!(target_os = "macos") {
                 0x7D
+            } else if cfg!(target_os = "linux") {
+                116
             } else {
                 0x28
             }
@@ -717,6 +845,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::ShiftLeft => {
             if cfg!(target_os = "macos") {
                 0x38
+            } else if cfg!(target_os = "linux") {
+                50
             } else {
                 0xA0
             }
@@ -724,6 +854,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::ShiftRight => {
             if cfg!(target_os = "macos") {
                 0x3C
+            } else if cfg!(target_os = "linux") {
+                62
             } else {
                 0xA1
             }
@@ -731,6 +863,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::ControlLeft => {
             if cfg!(target_os = "macos") {
                 0x3B
+            } else if cfg!(target_os = "linux") {
+                37
             } else {
                 0xA2
             }
@@ -738,6 +872,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::ControlRight => {
             if cfg!(target_os = "macos") {
                 0x3E
+            } else if cfg!(target_os = "linux") {
+                105
             } else {
                 0xA3
             }
@@ -745,6 +881,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::AltLeft => {
             if cfg!(target_os = "macos") {
                 0x3A
+            } else if cfg!(target_os = "linux") {
+                64
             } else {
                 0xA4
             }
@@ -752,6 +890,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::AltRight => {
             if cfg!(target_os = "macos") {
                 0x3D
+            } else if cfg!(target_os = "linux") {
+                108
             } else {
                 0xA5
             }
@@ -759,6 +899,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::SuperLeft => {
             if cfg!(target_os = "macos") {
                 0x37
+            } else if cfg!(target_os = "linux") {
+                133
             } else {
                 0x5B
             }
@@ -766,6 +908,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::SuperRight => {
             if cfg!(target_os = "macos") {
                 0x36
+            } else if cfg!(target_os = "linux") {
+                134
             } else {
                 0x5C
             }
@@ -775,6 +919,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::CapsLock => {
             if cfg!(target_os = "macos") {
                 0x39
+            } else if cfg!(target_os = "linux") {
+                66
             } else {
                 0x14
             }
@@ -782,16 +928,26 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::NumLock => {
             if cfg!(target_os = "macos") {
                 0x47
+            } else if cfg!(target_os = "linux") {
+                77
             } else {
                 0x90
             }
         }
-        KeyCode::ScrollLock => 0x91,
+        KeyCode::ScrollLock => {
+            if cfg!(target_os = "linux") {
+                78
+            } else {
+                0x91
+            }
+        }
 
         // Punctuation
         KeyCode::Semicolon => {
             if cfg!(target_os = "macos") {
                 0x29
+            } else if cfg!(target_os = "linux") {
+                47
             } else {
                 0xBA
             }
@@ -799,6 +955,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::Equal => {
             if cfg!(target_os = "macos") {
                 0x18
+            } else if cfg!(target_os = "linux") {
+                21
             } else {
                 0xBB
             }
@@ -806,6 +964,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::Comma => {
             if cfg!(target_os = "macos") {
                 0x2B
+            } else if cfg!(target_os = "linux") {
+                59
             } else {
                 0xBC
             }
@@ -813,6 +973,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::Minus => {
             if cfg!(target_os = "macos") {
                 0x1B
+            } else if cfg!(target_os = "linux") {
+                20
             } else {
                 0xBD
             }
@@ -820,6 +982,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::Period => {
             if cfg!(target_os = "macos") {
                 0x2F
+            } else if cfg!(target_os = "linux") {
+                60
             } else {
                 0xBE
             }
@@ -827,6 +991,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::Slash => {
             if cfg!(target_os = "macos") {
                 0x2C
+            } else if cfg!(target_os = "linux") {
+                61
             } else {
                 0xBF
             }
@@ -834,6 +1000,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::Backquote => {
             if cfg!(target_os = "macos") {
                 0x32
+            } else if cfg!(target_os = "linux") {
+                49
             } else {
                 0xC0
             }
@@ -841,6 +1009,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::BracketLeft => {
             if cfg!(target_os = "macos") {
                 0x21
+            } else if cfg!(target_os = "linux") {
+                34
             } else {
                 0xDB
             }
@@ -848,6 +1018,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::Backslash => {
             if cfg!(target_os = "macos") {
                 0x2A
+            } else if cfg!(target_os = "linux") {
+                51
             } else {
                 0xDC
             }
@@ -855,6 +1027,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::BracketRight => {
             if cfg!(target_os = "macos") {
                 0x1E
+            } else if cfg!(target_os = "linux") {
+                35
             } else {
                 0xDD
             }
@@ -862,6 +1036,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::Quote => {
             if cfg!(target_os = "macos") {
                 0x27
+            } else if cfg!(target_os = "linux") {
+                48
             } else {
                 0xDE
             }
@@ -871,6 +1047,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::Numpad0 => {
             if cfg!(target_os = "macos") {
                 0x52
+            } else if cfg!(target_os = "linux") {
+                90
             } else {
                 0x60
             }
@@ -878,6 +1056,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::Numpad1 => {
             if cfg!(target_os = "macos") {
                 0x53
+            } else if cfg!(target_os = "linux") {
+                87
             } else {
                 0x61
             }
@@ -885,6 +1065,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::Numpad2 => {
             if cfg!(target_os = "macos") {
                 0x54
+            } else if cfg!(target_os = "linux") {
+                88
             } else {
                 0x62
             }
@@ -892,6 +1074,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::Numpad3 => {
             if cfg!(target_os = "macos") {
                 0x55
+            } else if cfg!(target_os = "linux") {
+                89
             } else {
                 0x63
             }
@@ -899,6 +1083,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::Numpad4 => {
             if cfg!(target_os = "macos") {
                 0x56
+            } else if cfg!(target_os = "linux") {
+                83
             } else {
                 0x64
             }
@@ -906,6 +1092,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::Numpad5 => {
             if cfg!(target_os = "macos") {
                 0x57
+            } else if cfg!(target_os = "linux") {
+                84
             } else {
                 0x65
             }
@@ -913,6 +1101,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::Numpad6 => {
             if cfg!(target_os = "macos") {
                 0x58
+            } else if cfg!(target_os = "linux") {
+                85
             } else {
                 0x66
             }
@@ -920,6 +1110,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::Numpad7 => {
             if cfg!(target_os = "macos") {
                 0x59
+            } else if cfg!(target_os = "linux") {
+                79
             } else {
                 0x67
             }
@@ -927,6 +1119,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::Numpad8 => {
             if cfg!(target_os = "macos") {
                 0x5B
+            } else if cfg!(target_os = "linux") {
+                80
             } else {
                 0x68
             }
@@ -934,6 +1128,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::Numpad9 => {
             if cfg!(target_os = "macos") {
                 0x5C
+            } else if cfg!(target_os = "linux") {
+                81
             } else {
                 0x69
             }
@@ -941,6 +1137,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::NumpadMultiply => {
             if cfg!(target_os = "macos") {
                 0x43
+            } else if cfg!(target_os = "linux") {
+                63
             } else {
                 0x6A
             }
@@ -948,6 +1146,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::NumpadAdd => {
             if cfg!(target_os = "macos") {
                 0x45
+            } else if cfg!(target_os = "linux") {
+                86
             } else {
                 0x6B
             }
@@ -955,6 +1155,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::NumpadSubtract => {
             if cfg!(target_os = "macos") {
                 0x4E
+            } else if cfg!(target_os = "linux") {
+                82
             } else {
                 0x6D
             }
@@ -962,6 +1164,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::NumpadDecimal => {
             if cfg!(target_os = "macos") {
                 0x41
+            } else if cfg!(target_os = "linux") {
+                91
             } else {
                 0x6E
             }
@@ -969,6 +1173,8 @@ fn to_native_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::NumpadDivide => {
             if cfg!(target_os = "macos") {
                 0x4B
+            } else if cfg!(target_os = "linux") {
+                106
             } else {
                 0x6F
             }

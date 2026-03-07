@@ -73,6 +73,36 @@ When you build the project, the libraries will be automatically copied to the ex
 >	export-cef-dir --force "$HOME/.local/share/cef"
 ```
 
+### Linux
+
+Install system dependencies (Ubuntu/Debian):
+
+```bash
+sudo apt-get install libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev \
+  pkg-config libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 \
+  libdrm2 libgbm1 libpango-1.0-0 libcairo2 libgtk-3-0 cmake ninja-build
+```
+
+Install the CEF framework:
+
+```bash
+make setup-linux
+```
+
+When you build the project, the CEF runtime files will be automatically copied to the executable's directory.
+To run examples, set `LD_LIBRARY_PATH` to point at the directory containing `libcef.so`:
+
+```bash
+LD_LIBRARY_PATH=$HOME/.local/share/cef cargo run --example simple
+```
+
+> [!NOTE]
+> **Known Limitations:**
+> - **Sandbox:** Disabled by default. Production use requires a SUID-root `chrome-sandbox` binary.
+> - **Wayland:** X11 is fully supported. Wayland is experimental (dialogs/context menus may not position correctly).
+> - **WSL2:** May need `CommandLineConfig::default().with_switch("disable-gpu")`.
+> - **LD_LIBRARY_PATH:** Required unless rpath is configured in your binary's `build.rs`.
+
 ## Examples
 
 See [`examples/`](./examples).
@@ -89,7 +119,7 @@ cargo run --example simple --features debug
 | -------- | ---------- |
 | macOS    | ✅ Full    |
 | Windows  | ✅ Full    |
-| Linux    | ⚠️ Planned |
+| Linux    | ✅ Full    |
 
 ## 🤝 Contributing
 

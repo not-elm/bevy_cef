@@ -1,4 +1,4 @@
-.PHONY: fix-lint install-debug-render-process setup-windows
+.PHONY: fix-lint install-debug-render-process setup-windows setup-linux
 
 BIN := bevy_cef_debug_render_process
 CEF_LIB := $(HOME)/.local/share/Chromium Embedded Framework.framework/Libraries
@@ -15,3 +15,7 @@ install-debug-render-process:
 setup-windows:
 	cargo install export-cef-dir --force
 	export-cef-dir --force "$(USERPROFILE)/.local/share/cef"
+
+setup-linux:
+	cargo install export-cef-dir --force
+	export-cef-dir --force "$(HOME)/.local/share/cef"

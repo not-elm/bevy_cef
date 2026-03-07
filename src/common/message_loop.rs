@@ -74,7 +74,11 @@ fn cef_initialize(args: &Args, cef_app: &mut cef::App) {
             .into(),
         #[cfg(all(target_os = "macos", feature = "debug"))]
         browser_subprocess_path: debug_render_process_path().to_str().unwrap().into(),
-        #[cfg(any(all(target_os = "macos", feature = "debug"), target_os = "windows"))]
+        #[cfg(any(
+            all(target_os = "macos", feature = "debug"),
+            target_os = "windows",
+            target_os = "linux"
+        ))]
         no_sandbox: true as _,
         windowless_rendering_enabled: true as _,
         external_message_pump: true as _,
