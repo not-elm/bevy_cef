@@ -1,5 +1,0 @@
-[book]
-authors = ["not-elm"]
-language = "en"
-src = "src"
-title = "bevy_cef"

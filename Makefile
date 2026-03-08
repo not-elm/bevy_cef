@@ -13,6 +13,7 @@ install-debug-render-process:
 	cp "$(CARGO_BIN)/$(BIN)" "$(CEF_LIB)/$(BIN)"
 
 setup-windows:
+	# For some reason, it crashes when the version is pinned.
 	cargo install export-cef-dir --force
 	export-cef-dir --force "$(USERPROFILE)/.local/share/cef"
 	cargo install --path ./crates/bevy_cef_render_process --root "$(USERPROFILE)/.local/share/cef" --force
