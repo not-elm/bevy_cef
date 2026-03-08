@@ -4,68 +4,87 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is `bevy_cef`, a Bevy plugin that integrates the Chromium Embedded Framework (CEF) into Bevy applications, allowing webviews to be rendered as 3D objects in the game world or as UI overlays.
+`bevy_cef` is a Bevy plugin integrating the Chromium Embedded Framework (CEF) into Bevy applications, rendering webviews as 3D mesh textures or 2D sprites with full interactivity and bidirectional JS↔Bevy communication.
 
 ## Architecture
 
 ### Multi-Process Design
-- **Browser Process**: Main application process running Bevy (`bevy_cef_core::browser_process`)
-- **Render Process**: Separate CEF render process (`bevy_cef_core::render_process`)
-- Communication through IPC channels and Bevy Remote Protocol (BRP)
+- **Browser Process**: Main Bevy app (`bevy_cef_core::browser_process`) — manages CEF initialization, browser instances, input forwarding
+- **Render Process**: Separate CEF executable (`bevy_cef_core::render_process`) — handles V8 JavaScript execution, sends events back via IPC
+- Communication through CEF process messages with named handlers (`PROCESS_MESSAGE_BRP`, `PROCESS_MESSAGE_HOST_EMIT`, `PROCESS_MESSAGE_JS_EMIT`)
+
+### Plugin Composition
+```
+CefPlugin (root — accepts CommandLineConfig, CefExtensions, root_cache_path)
+├── LocalHostPlugin (cef://localhost/ scheme for local assets)
+├── MessageLoopPlugin (CEF init + per-frame cef_do_message_loop_work())
+├── WebviewCoreComponentsPlugin (component registration)
+├── WebviewPlugin → MeshWebviewPlugin (lifecycle, materials, DevTools)
+├── IpcPlugin (IpcRawEventPlugin + HostEmitPlugin)
+├── KeyboardPlugin, SystemCursorIconPlugin, NavigationPlugin
+├── ZoomPlugin, AudioMutePlugin
+└── RemotePlugin (auto-added for BRP if not present)
+```
 
 ### Core Components
-- `CefWebviewUri`: URL specification (`CefWebviewUri::new("url")` or `CefWebviewUri::local("file.html")`)
-- `WebviewSize`: Rendering dimensions (default 800x800), controls texture resolution not 3D size
-- `WebviewExtendStandardMaterial`: Primary material for 3D mesh rendering
+- `WebviewSource`: URL spec enum — `WebviewSource::new("url")`, `WebviewSource::local("file.html")`, or `WebviewSource::inline("<h1>Hello</h1>")`; auto-requires `WebviewSize`, `ZoomLevel`, `AudioMuted`, `PreloadScripts`
+- `WebviewSize`: Texture resolution (default 800×800), not 3D mesh size
+- `WebviewExtendStandardMaterial`: Material for 3D mesh rendering
 - `WebviewSpriteMaterial`: Material for 2D sprite rendering
 - `HostWindow`: Optional parent window (defaults to PrimaryWindow)
-- `ZoomLevel`: f64 zoom control (0.0 = default)
-- `AudioMuted`: bool for audio control
-- `PreloadScripts`: Vec<String> of scripts to execute before page scripts
+- `ZoomLevel`: f64 zoom (0.0 = default)
+- `AudioMuted`: bool audio control
+- `PreloadScripts`: Vec<String> scripts executed before page scripts
 - `CefExtensions`: Custom JS extensions via `register_extension` (global to all webviews)
 
-### Plugin Architecture
-The main `CefPlugin` accepts `CommandLineConfig` for CEF command-line switches and `CefExtensions` for custom JavaScript APIs. Sub-plugins:
-- `LocalHostPlugin`: Serves local assets via `cef://localhost/` scheme
-- `MessageLoopPlugin`: CEF message loop integration (macOS uses `CefDoMessageLoopWork()`)
-- `WebviewCoreComponentsPlugin`: Core component registration
-- `WebviewPlugin`: Webview lifecycle and DevTools
-- `IpcPlugin`: IPC containing `IpcRawEventPlugin` and `HostEmitPlugin`
-- `KeyboardPlugin`, `SystemCursorIconPlugin`, `NavigationPlugin`, `ZoomPlugin`, `AudioMutePlugin`
-- `RemotePlugin`: Auto-added for BRP support if not present
+### Webview Lifecycle (spans multiple files)
+1. User adds `WebviewSource` component → auto-requires `WebviewSize`, `ZoomLevel`, `AudioMuted`, `PreloadScripts`
+2. System resolves `WebviewSource` → internal `ResolvedWebviewUri` (lazy, change detection); runtime changes trigger navigation without browser recreation
+3. `WebviewPlugin` detects new `ResolvedWebviewUri` → calls `Browsers::create_browser()`
+4. CEF renders offscreen → `TextureSender` delivers texture to Bevy
+5. `WebviewMaterialPlugin` applies texture to mesh/sprite material
+6. User input (mouse/keyboard) → observers → `Browsers` methods forward to CEF
 
 ### IPC System
 Three communication patterns:
-1. **JS Emit**: Webview → Bevy via `JsEmitEventPlugin<E>` where E: `DeserializeOwned + Send + Sync + 'static`
-   - Events wrapped in `Receive<E>` EntityEvent
-   - JavaScript: `window.cef.emit('event_name', data)`
-2. **Host Emit**: Bevy → Webview via `HostEmitEvent` (EntityEvent)
-   - JavaScript: `window.cef.listen('event_name', callback)`
-3. **BRP**: Bidirectional RPC via `bevy_remote`
-   - JavaScript: `await window.cef.brp({ method: 'method_name', params: {...} })`
+1. **JS Emit** (Webview → Bevy): `JsEmitEventPlugin<E>` where E: `DeserializeOwned + Send + Sync + 'static`
+   - JS: `window.cef.emit('event_name', data)` → V8 handler → process message → `IpcEventRaw` channel → deserialize → `Receive<E>` EntityEvent
+   - Events wrapped in `Receive<E>` EntityEvent on the webview entity
+2. **Host Emit** (Bevy → Webview): Trigger `HostEmitEvent` EntityEvent on webview entity
+   - JS: `window.cef.listen('event_name', callback)`
+3. **BRP** (Bidirectional RPC): `await window.cef.brp({ method: 'method_name', params: {...} })`
+   - Async via V8 promises, proxied through `bevy_remote`
 
 ### EntityEvent Pattern
-Navigation and DevTools events are `EntityEvent` types requiring explicit `webview: Entity` field:
+Navigation and DevTools use Bevy's trigger/observer pattern. These require explicit `webview: Entity`:
 - `HostEmitEvent`, `RequestGoBack`, `RequestGoForward`, `RequestShowDevTool`, `RequestCloseDevtool`
+
+### Key Non-Obvious Patterns
+- **NonSend resources**: `Browsers` and CEF library loaders are `NonSend` — CEF is not thread-safe
+- **Message loop**: Uses CEF's `external_message_pump` mode; `cef_do_message_loop_work()` called every Bevy frame in `Main` schedule
+- **Pointer interaction**: Custom `WebviewPointer` SystemParam converts screen-space pointer → webview UV via AABB/mesh bounds + camera transforms; alpha channel hit-testing for transparent pixels
+- **Localhost scheme**: Static assets via Bevy asset system; inline HTML via `cef://localhost/__inline__/{id}` with auto-cleanup on component remove
 
 ## Development Commands
 
 ```bash
-# Lint and format code
+# Lint and format (runs clippy --fix then cargo fmt)
 make fix-lint
 
-# Run examples (macOS requires debug feature)
-cargo run --example simple --features debug
+# Run examples — macOS requires debug feature, Windows does not
+cargo run --example simple --features debug   # macOS
+cargo run --example simple                     # Windows
 
 # Install debug render process (macOS)
 make install-debug-render-process
 
-# Setup CEF on Windows (installs to $USERPROFILE/.local/share/cef)
+# Setup CEF on Windows (installs CEF + render process binary into ~/.local/share/cef)
 make setup-windows
 ```
 
+**Note:** Workspace uses Rust edition 2024.
+
 ### Debug Tools Setup (macOS)
-Manual installation required before running with `debug` feature:
 ```bash
 cargo install export-cef-dir --version 144.4.0
 export-cef-dir --force $HOME/.local/share
@@ -77,14 +96,17 @@ cp $HOME/.cargo/bin/bevy_cef_debug_render_process "$HOME/.local/share/Chromium E
 ```powershell
 cargo install export-cef-dir --force
 export-cef-dir --force "$env:USERPROFILE/.local/share/cef"
+# Recommended: install dedicated render process to avoid window flash on subprocess launch
+cargo install bevy_cef_render_process
 ```
-The `build.rs` in `bevy_cef_core` automatically copies CEF runtime files (DLLs, PAKs, etc.) from `$USERPROFILE/.local/share/cef` to the target directory and hard-links them into the `examples/` output directory.
+The `build.rs` in `bevy_cef_core` automatically copies CEF runtime files (DLLs, PAKs, locales) and the render process binary from `$USERPROFILE/.local/share/cef` to the target directory.
 
-## Local Asset Loading
+If the render process binary is not installed, call `bevy_cef::prelude::early_exit_if_subprocess()` at the start of `main()` before any Bevy initialization to prevent subprocess window flash.
 
-Local HTML/assets served via `cef://localhost/` scheme:
-- Place assets in `assets/` directory
-- Reference as `CefWebviewUri::local("filename.html")`
+## Features
+
+- `debug`: Enables debug render process (macOS development — auto-links to local CEF framework)
+- `serialize`: Enables Bevy's serialization feature
 
 ## Testing
 
@@ -92,24 +114,23 @@ No automated tests. Testing done through examples:
 - `cargo test --workspace --all-features` (for any future tests)
 - Examples: simple, inline_html, js_emit, host_emit, brp, navigation, zoom_level, sprite, devtool, custom_material, preload_scripts, extensions
 
-## Platform Notes
-
-- macOS: Full support. Uses `objc` crate for window handling. CEF framework at `$HOME/.local/share/Chromium Embedded Framework.framework`
-- Windows: Full support. CEF files at `$USERPROFILE/.local/share/cef`, auto-copied by build.rs
-- Linux: Planned, not yet supported
-- Key resources (`Browsers`, library loaders) are `NonSend` — CEF is not thread-safe
-
 ## Workspace Structure
 
-- Root crate: `bevy_cef` (public API, `src/`)
-- `crates/bevy_cef_core`: Core CEF integration logic (browser process, render process, IPC internals)
-- `crates/bevy_cef_debug_render_process`: Debug render process executable (development only)
+- Root crate `bevy_cef` (`src/`): Public API, plugin composition, user-facing components
+- `crates/bevy_cef_core`: Core CEF integration (browser process, render process, IPC internals, V8 bridge)
 - `crates/bevy_cef_render_process`: Release render process executable
+- `crates/bevy_cef_debug_render_process`: Debug render process executable (development only)
 - `crates/bevy_cef_bundle_app`: macOS `.app` bundling tool for release builds
+
+## Platform Notes
+
+- **macOS**: Full support. Uses `objc` crate for window handling. CEF framework at `$HOME/.local/share/Chromium Embedded Framework.framework`
+- **Windows**: Full support. CEF at `$USERPROFILE/.local/share/cef`, auto-copied by build.rs. Separate render process binary recommended
+- **Linux**: Planned, not yet supported
 
 ## Version Compatibility
 
-| Bevy   | bevy_cef | CEF     |
-| ------ | -------- | ------- |
-| 0.18 ~ | 0.2.0    | 144.4.0 |
-| 0.16   | 0.1.0    | 139     |
+| Bevy   | bevy_cef  | CEF     |
+| ------ | --------- | ------- |
+| 0.18 ~ | 0.4.0-dev | 144.4.0 |
+| 0.16   | 0.1.0     | 139     |
