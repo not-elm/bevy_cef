@@ -12,6 +12,7 @@ use cef::{Settings, api_hash, execute_process, initialize, shutdown, sys};
 pub struct MessageLoopPlugin {
     pub config: CommandLineConfig,
     pub extensions: CefExtensions,
+    pub root_cache_path: Option<String>,
 }
 
 impl Plugin for MessageLoopPlugin {
@@ -44,7 +45,7 @@ impl Plugin for MessageLoopPlugin {
             }
         }
 
-        cef_initialize(&args, &mut cef_app);
+        cef_initialize(&args, &mut cef_app, self.root_cache_path.as_deref());
 
         app.insert_non_send_resource(cef_app);
         app.insert_non_send_resource(MessageLoopWorkingReceiver(rx));
@@ -65,7 +66,7 @@ fn load_cef_library(app: &mut App) {
     app.insert_non_send_resource(loader);
 }
 
-fn cef_initialize(args: &Args, cef_app: &mut cef::App) {
+fn cef_initialize(args: &Args, cef_app: &mut cef::App, root_cache_path: Option<&str>) {
     let settings = Settings {
         #[cfg(all(target_os = "macos", feature = "debug"))]
         framework_dir_path: debug_chromium_embedded_framework_dir_path()
@@ -76,6 +77,7 @@ fn cef_initialize(args: &Args, cef_app: &mut cef::App) {
         browser_subprocess_path: debug_render_process_path().to_str().unwrap().into(),
         #[cfg(any(all(target_os = "macos", feature = "debug"), target_os = "windows"))]
         no_sandbox: true as _,
+        root_cache_path: root_cache_path.unwrap_or_default().into(),
         windowless_rendering_enabled: true as _,
         external_message_pump: true as _,
         disable_signal_handlers: true as _,

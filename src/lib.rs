@@ -30,6 +30,10 @@ pub struct RunOnMainThread;
 pub struct CefPlugin {
     pub command_line_config: CommandLineConfig,
     pub extensions: CefExtensions,
+    /// Root directory for CEF runtime data (cache, profiles, etc.).
+    /// If empty, defaults to the executable's directory.
+    /// Should be set to a user-writable path (e.g. `~/.myapp/cef_data`).
+    pub root_cache_path: Option<String>,
 }
 
 impl Plugin for CefPlugin {
@@ -39,6 +43,7 @@ impl Plugin for CefPlugin {
             MessageLoopPlugin {
                 config: self.command_line_config.clone(),
                 extensions: self.extensions.clone(),
+                root_cache_path: self.root_cache_path.clone(),
             },
             WebviewCoreComponentsPlugin,
             WebviewPlugin,

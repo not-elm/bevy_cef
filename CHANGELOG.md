@@ -1,8 +1,14 @@
+## v0.4.1
+
+### Features
+
+- Added `root_cache_path` option to `CefPlugin` for configurable CEF cache directory.
+
 ## v0.3.0
 
-## Features
+### Features
 
-- Suppport Windows platform.
+- Support Windows platform.
 
 ## v0.2.1
 
