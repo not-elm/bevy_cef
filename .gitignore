@@ -12,3 +12,6 @@ book/
 docs/brainstorms/
 docs/plans/
 docs/discussions/
+website/node_modules/
+website/.docusaurus/
+website/build/
