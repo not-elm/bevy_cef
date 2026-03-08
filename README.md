@@ -66,21 +66,50 @@ Run `bevy_cef_bundle_app --help` for additional options.
 
 On Windows, you need to place CEF libraries in the same directory as the application executable.
 Please run the following command to install the CEF framework to local.
-When you build the project, the libraries will be automatically copied to the executable's direcotry.
+When you build the project, the libraries will be automatically copied to the executable's directory.
 
 ```powershell
->	cargo install export-cef-dir --force
->	export-cef-dir --force "$HOME/.local/share/cef"
+> cargo install export-cef-dir --force
+> export-cef-dir --force "$HOME/.local/share/cef"
+```
+
+#### Render process binary (recommended)
+
+Install the dedicated render process binary so that CEF launches it directly instead of re-using your main executable.
+This avoids the brief window flash that occurs when the main executable is re-launched as a subprocess.
+
+```powershell
+> cargo install bevy_cef_render_process
+```
+
+The `build.rs` script automatically copies the installed binary next to your executable during the build.
+
+#### Fallback
+
+If you do not install the render process binary, CEF will re-launch your main executable for its subprocesses.
+To prevent those subprocess instances from briefly showing a window, call `early_exit_if_subprocess()` at the very beginning of `main()` — **before** any Bevy initialization:
+
+```rust
+fn main() {
+    bevy_cef::prelude::early_exit_if_subprocess();
+    // ... Bevy App setup ...
+}
 ```
 
 ## Examples
 
 See [`examples/`](./examples).
 
-On macOS, you need to enable `debug` feature enabled:
+On macOS, you need to enable the `debug` feature:
 
 ```shell
 cargo run --example simple --features debug
+```
+
+On Windows, no extra feature flag is needed:
+
+```shell
+cargo run --example simple
 ```
 
 ## 🌍 Platform Support
