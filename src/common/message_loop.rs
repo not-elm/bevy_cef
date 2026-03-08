@@ -76,6 +76,11 @@ fn load_cef_library(app: &mut App) {
 
 #[cfg(target_os = "macos")]
 fn cef_initialize(args: &Args, cef_app: &mut cef::App, root_cache_path: Option<&str>) {
+    // Ensure the cache directory exists before CEF tries to use it.
+    if let Some(path) = root_cache_path {
+        let _ = std::fs::create_dir_all(path);
+    }
+
     let settings = Settings {
         #[cfg(feature = "debug")]
         framework_dir_path: debug_chromium_embedded_framework_dir_path()
@@ -99,7 +104,8 @@ fn cef_initialize(args: &Args, cef_app: &mut cef::App, root_cache_path: Option<&
             Some(cef_app),
             std::ptr::null_mut(),
         ),
-        1
+        1,
+        "cef_initialize failed: root_cache_path={root_cache_path:?}",
     );
 }
 
@@ -110,6 +116,11 @@ fn cef_initialize(
     root_cache_path: Option<&str>,
     render_process_binary: Option<&std::path::Path>,
 ) {
+    // Ensure the cache directory exists before CEF tries to use it.
+    if let Some(path) = root_cache_path {
+        let _ = std::fs::create_dir_all(path);
+    }
+
     let subprocess_path: String = render_process_binary
         .and_then(|p| p.to_str())
         .unwrap_or_default()
@@ -131,7 +142,8 @@ fn cef_initialize(
             Some(cef_app),
             std::ptr::null_mut(),
         ),
-        1
+        1,
+        "cef_initialize failed: root_cache_path={root_cache_path:?}, subprocess={subprocess_path:?}",
     );
 }
 
