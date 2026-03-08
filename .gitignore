@@ -12,6 +12,7 @@ book/
 docs/brainstorms/
 docs/plans/
 docs/discussions/
-website/node_modules/
-website/.docusaurus/
-website/build/
+docs/website/node_modules/
+docs/website/.docusaurus/
+docs/website/build/
+/website/

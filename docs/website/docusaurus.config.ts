@@ -31,7 +31,7 @@ const config: Config = {
         docs: {
           sidebarPath: './sidebars.ts',
           routeBasePath: '/',
-          editUrl: 'https://github.com/nickkro/bevy_cef/tree/main/website/',
+          editUrl: 'https://github.com/nickkro/bevy_cef/tree/main/docs/website/',
         },
         blog: false,
         theme: {
