@@ -18,7 +18,7 @@ pub struct MessageLoopPlugin {
 impl Plugin for MessageLoopPlugin {
     fn build(&self, app: &mut App) {
         #[cfg(not(target_os = "macos"))]
-        early_exit_if_subprocess();
+        let render_process_binary = render_process_path();
 
         #[cfg(target_os = "macos")]
         load_cef_library(app);
@@ -30,9 +30,9 @@ impl Plugin for MessageLoopPlugin {
         let mut cef_app =
             BrowserProcessAppBuilder::build(tx, self.config.clone(), self.extensions.clone());
 
-        // On macOS, subprocess detection happens here because a separate render
-        // process binary is used. On other platforms, it must happen earlier via
-        // `bevy_cef::init()` before Bevy creates any windows.
+        // On macOS and when a separate render process binary is available,
+        // execute_process is called here. For the browser process it returns -1
+        // and falls through; subprocesses exit immediately.
         #[cfg(target_os = "macos")]
         {
             let ret = execute_process(
@@ -45,6 +45,14 @@ impl Plugin for MessageLoopPlugin {
             }
         }
 
+        #[cfg(not(target_os = "macos"))]
+        cef_initialize(
+            &args,
+            &mut cef_app,
+            self.root_cache_path.as_deref(),
+            render_process_binary.as_deref(),
+        );
+        #[cfg(target_os = "macos")]
         cef_initialize(&args, &mut cef_app, self.root_cache_path.as_deref());
 
         app.insert_non_send_resource(cef_app);
@@ -66,16 +74,49 @@ fn load_cef_library(app: &mut App) {
     app.insert_non_send_resource(loader);
 }
 
+#[cfg(target_os = "macos")]
 fn cef_initialize(args: &Args, cef_app: &mut cef::App, root_cache_path: Option<&str>) {
     let settings = Settings {
-        #[cfg(all(target_os = "macos", feature = "debug"))]
+        #[cfg(feature = "debug")]
         framework_dir_path: debug_chromium_embedded_framework_dir_path()
             .to_str()
             .unwrap()
             .into(),
-        #[cfg(all(target_os = "macos", feature = "debug"))]
+        #[cfg(feature = "debug")]
         browser_subprocess_path: debug_render_process_path().to_str().unwrap().into(),
-        #[cfg(any(all(target_os = "macos", feature = "debug"), target_os = "windows"))]
+        #[cfg(feature = "debug")]
+        no_sandbox: true as _,
+        root_cache_path: root_cache_path.unwrap_or_default().into(),
+        windowless_rendering_enabled: true as _,
+        external_message_pump: true as _,
+        disable_signal_handlers: true as _,
+        ..Default::default()
+    };
+    assert_eq!(
+        initialize(
+            Some(args.as_main_args()),
+            Some(&settings),
+            Some(cef_app),
+            std::ptr::null_mut(),
+        ),
+        1
+    );
+}
+
+#[cfg(not(target_os = "macos"))]
+fn cef_initialize(
+    args: &Args,
+    cef_app: &mut cef::App,
+    root_cache_path: Option<&str>,
+    render_process_binary: Option<&std::path::Path>,
+) {
+    let subprocess_path: String = render_process_binary
+        .and_then(|p| p.to_str())
+        .unwrap_or_default()
+        .into();
+
+    let settings = Settings {
+        browser_subprocess_path: subprocess_path.as_str().into(),
         no_sandbox: true as _,
         root_cache_path: root_cache_path.unwrap_or_default().into(),
         windowless_rendering_enabled: true as _,
@@ -113,11 +154,30 @@ fn cef_shutdown(_: NonSend<RunOnMainThread>) {
     shutdown();
 }
 
-#[cfg(not(target_os = "macos"))]
+#[allow(clippy::needless_doctest_main)]
 /// On non-macOS platforms, this detects if the current process is a CEF subprocess
 /// (renderer, GPU, utility) and exits immediately if so.
-/// On macOS, a separate render process binary is used, so this is a no-op
-fn early_exit_if_subprocess() {
+///
+/// When no separate render process binary is installed, CEF re-launches the main
+/// executable as a subprocess. Call this function at the very beginning of `main()`
+/// — **before** any Bevy initialization — so that subprocess instances exit
+/// immediately without creating a visible window.
+///
+/// ```no_run
+/// fn main() {
+///     bevy_cef::prelude::early_exit_if_subprocess();
+///     // ... Bevy App setup ...
+/// }
+/// ```
+///
+/// If a dedicated render process binary (`bevy_cef_render_process`) is installed
+/// next to your executable, this function is unnecessary because CEF will launch
+/// that binary instead of re-using the main executable.
+///
+/// On macOS this function is not available; macOS always uses a separate render
+/// process binary.
+#[cfg(not(target_os = "macos"))]
+pub fn early_exit_if_subprocess() {
     let _ = api_hash(sys::CEF_API_VERSION_LAST, 0);
     let args = Args::new();
     let mut app = RenderProcessAppBuilder::build();

@@ -48,6 +48,20 @@ pub fn debug_render_process_path() -> PathBuf {
     debug_chromium_libraries_path().join("bevy_cef_debug_render_process")
 }
 
+/// Returns the path to the render process binary next to the current executable.
+///
+/// On Windows: `<exe_dir>/bevy_cef_render_process.exe`
+/// On macOS (release): `<exe_dir>/bevy_cef_render_process`
+pub fn render_process_path() -> Option<PathBuf> {
+    let exe_dir = std::env::current_exe().ok()?.parent()?.to_path_buf();
+    #[cfg(target_os = "windows")]
+    let binary_name = "bevy_cef_render_process.exe";
+    #[cfg(not(target_os = "windows"))]
+    let binary_name = "bevy_cef_render_process";
+    let path = exe_dir.join(binary_name);
+    if path.exists() { Some(path) } else { None }
+}
+
 pub trait IntoString {
     fn into_string(self) -> String;
 }
