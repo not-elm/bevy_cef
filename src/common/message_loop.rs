@@ -77,7 +77,8 @@ fn load_cef_library(app: &mut App) {
 #[cfg(target_os = "macos")]
 fn cef_initialize(args: &Args, cef_app: &mut cef::App, root_cache_path: Option<&str>) {
     // Ensure the cache directory exists before CEF tries to use it.
-    if let Some(path) = root_cache_path {
+    // Empty/whitespace paths are valid (CEF treats them as "use default"), so skip those.
+    if let Some(path) = root_cache_path.filter(|p| !p.trim().is_empty()) {
         std::fs::create_dir_all(path)
             .unwrap_or_else(|e| panic!("failed to create root_cache_path directory '{path}': {e}"));
     }
@@ -118,7 +119,8 @@ fn cef_initialize(
     render_process_binary: Option<&std::path::Path>,
 ) {
     // Ensure the cache directory exists before CEF tries to use it.
-    if let Some(path) = root_cache_path {
+    // Empty/whitespace paths are valid (CEF treats them as "use default"), so skip those.
+    if let Some(path) = root_cache_path.filter(|p| !p.trim().is_empty()) {
         std::fs::create_dir_all(path)
             .unwrap_or_else(|e| panic!("failed to create root_cache_path directory '{path}': {e}"));
     }
