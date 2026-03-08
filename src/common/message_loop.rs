@@ -78,7 +78,8 @@ fn load_cef_library(app: &mut App) {
 fn cef_initialize(args: &Args, cef_app: &mut cef::App, root_cache_path: Option<&str>) {
     // Ensure the cache directory exists before CEF tries to use it.
     if let Some(path) = root_cache_path {
-        let _ = std::fs::create_dir_all(path);
+        std::fs::create_dir_all(path)
+            .unwrap_or_else(|e| panic!("failed to create root_cache_path directory '{path}': {e}"));
     }
 
     let settings = Settings {
@@ -118,7 +119,8 @@ fn cef_initialize(
 ) {
     // Ensure the cache directory exists before CEF tries to use it.
     if let Some(path) = root_cache_path {
-        let _ = std::fs::create_dir_all(path);
+        std::fs::create_dir_all(path)
+            .unwrap_or_else(|e| panic!("failed to create root_cache_path directory '{path}': {e}"));
     }
 
     let subprocess_path: String = render_process_binary

@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'website/**'
+      - 'docs/website/**'
   workflow_dispatch:
 
 permissions:
@@ -31,16 +31,16 @@ jobs:
           version: 9
 
       - name: Install dependencies
-        working-directory: website
+        working-directory: docs/website
         run: pnpm install --frozen-lockfile
 
       - name: Build
-        working-directory: website
+        working-directory: docs/website
         run: pnpm build
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: website/build
+          path: docs/website/build
 
   deploy:
     needs: build
