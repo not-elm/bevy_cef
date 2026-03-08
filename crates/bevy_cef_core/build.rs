@@ -11,6 +11,8 @@ mod windows {
 
     const RUNTIME_EXTENSIONS: &[&str; 6] = &["dll", "lib", "pak", "dat", "bin", "json"];
 
+    const RENDER_PROCESS_BINARY: &str = "bevy_cef_render_process.exe";
+
     pub fn copy_cef_files() {
         println!("cargo:rerun-if-changed=build.rs");
         println!("cargo:rerun-if-env-changed=USERPROFILE");
@@ -27,10 +29,12 @@ mod windows {
             cef_dir, target_dir
         );
         copy_cef_runtime_files(&cef_dir, &target_dir);
+        copy_render_process_binary(&cef_dir, &target_dir);
 
         println!("cargo:warning=Copying CEF files into {:?}", examples_dir);
         fs::create_dir_all(&examples_dir).unwrap();
         copy_cef_runtime_files(&target_dir, &examples_dir);
+        copy_render_process_binary(&target_dir, &examples_dir);
     }
 
     fn find_cef_dir() -> Option<PathBuf> {
@@ -67,6 +71,40 @@ mod windows {
             .unwrap_or("")
             .to_lowercase();
         RUNTIME_EXTENSIONS.contains(&ext.as_str())
+    }
+
+    fn copy_render_process_binary(src: &Path, dst: &Path) {
+        // Check both the directory root and bin/ subdirectory
+        // (cargo install --root places binaries in <root>/bin/)
+        let binary = src.join(RENDER_PROCESS_BINARY);
+        let binary_in_bin = src.join("bin").join(RENDER_PROCESS_BINARY);
+        let binary = if binary.exists() {
+            binary
+        } else if binary_in_bin.exists() {
+            binary_in_bin
+        } else {
+            println!(
+                "cargo:warning=Render process binary not found at {:?}. \
+                 Run `cargo install bevy_cef_render_process` and copy to CEF directory, \
+                 or run `make setup-windows`. Window flash may occur on startup.",
+                binary
+            );
+            return;
+        };
+        let dest = dst.join(RENDER_PROCESS_BINARY);
+        if dest.exists() {
+            let src_modified = fs::metadata(&binary).unwrap().modified().unwrap();
+            let dst_modified = fs::metadata(&dest).unwrap().modified().unwrap();
+            if dst_modified >= src_modified {
+                return;
+            }
+        }
+        fs::copy(&binary, &dest).unwrap_or_else(|e| {
+            panic!(
+                "Failed to copy {:?} to {:?}: {}",
+                binary, dest, e
+            );
+        });
     }
 
     fn copy_cef_runtime_files(src: &Path, dst: &Path) {
