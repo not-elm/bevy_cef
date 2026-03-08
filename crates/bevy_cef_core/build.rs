@@ -100,10 +100,7 @@ mod windows {
             }
         }
         fs::copy(&binary, &dest).unwrap_or_else(|e| {
-            panic!(
-                "Failed to copy {:?} to {:?}: {}",
-                binary, dest, e
-            );
+            panic!("Failed to copy {:?} to {:?}: {}", binary, dest, e);
         });
     }
 

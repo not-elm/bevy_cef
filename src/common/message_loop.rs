@@ -154,6 +154,7 @@ fn cef_shutdown(_: NonSend<RunOnMainThread>) {
     shutdown();
 }
 
+#[allow(clippy::needless_doctest_main)]
 /// On non-macOS platforms, this detects if the current process is a CEF subprocess
 /// (renderer, GPU, utility) and exits immediately if so.
 ///
@@ -162,7 +163,7 @@ fn cef_shutdown(_: NonSend<RunOnMainThread>) {
 /// — **before** any Bevy initialization — so that subprocess instances exit
 /// immediately without creating a visible window.
 ///
-/// ```rust,no_run
+/// ```no_run
 /// fn main() {
 ///     bevy_cef::prelude::early_exit_if_subprocess();
 ///     // ... Bevy App setup ...
