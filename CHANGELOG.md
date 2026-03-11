@@ -1,3 +1,10 @@
+## 0.4.1
+
+### Bug Fixes
+
+- Fixed failed localhost asset loads returning a crash instead of a proper error response, and re-enabled CEF signal handlers.
+- Hide console window for render process binaries (`bevy_cef_render_process`, `bevy_cef_debug_render_process`) on Windows release builds.
+
 ## v0.4.0
 
 ### Features
