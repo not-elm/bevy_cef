@@ -136,7 +136,7 @@ fn cef_initialize(
         root_cache_path: root_cache_path.unwrap_or_default().into(),
         windowless_rendering_enabled: true as _,
         external_message_pump: true as _,
-        disable_signal_handlers: true as _,
+        disable_signal_handlers: false as _,
         ..Default::default()
     };
     assert_eq!(
