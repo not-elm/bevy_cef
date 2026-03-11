@@ -127,6 +127,7 @@ fn responser(
     mut commands: Commands,
     mut handle_stores: Local<HashSet<Handle<CefResponse>>>,
     responses: Res<Assets<CefResponse>>,
+    asset_server: Res<AssetServer>,
     handles: Query<(Entity, &CefResponseHandle, &Responser)>,
 ) {
     for (entity, handle, responser) in handles.iter() {
@@ -134,6 +135,17 @@ fn responser(
             let _ = responser.0.send_blocking(response.clone());
             commands.entity(entity).despawn();
             handle_stores.insert(handle.0.clone());
+        } else if matches!(
+            asset_server.load_state(&handle.0),
+            bevy::asset::LoadState::Failed(_)
+        ) {
+            error!("cef://localhost/ asset load failed: {:?}", handle.0.path());
+            let _ = responser.0.send_blocking(CefResponse {
+                mime_type: "text/plain".to_string(),
+                status_code: 404,
+                data: b"Asset load failed".to_vec(),
+            });
+            commands.entity(entity).despawn();
         }
     }
 }
