@@ -614,7 +614,7 @@ dependencies = [
 
 [[package]]
 name = "bevy_cef"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "async-channel",
  "bevy",
@@ -630,7 +630,7 @@ dependencies = [
 
 [[package]]
 name = "bevy_cef_bundle_app"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -639,7 +639,7 @@ dependencies = [
 
 [[package]]
 name = "bevy_cef_core"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "async-channel",
  "bevy",
@@ -654,7 +654,7 @@ dependencies = [
 
 [[package]]
 name = "bevy_cef_debug_render_process"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "bevy_cef_core",
  "cef",
@@ -663,7 +663,7 @@ dependencies = [
 
 [[package]]
 name = "bevy_cef_render_process"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "bevy_cef_core",
  "cef",
@@ -1948,9 +1948,9 @@ dependencies = [
 
 [[package]]
 name = "cef"
-version = "144.4.0+144.0.13"
+version = "145.6.1+145.0.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "42320c2356f3fe4ed3f875b8fc93cbbabd1be3c59fcc0a8eb1e5b5c25616ac28"
+checksum = "549537e80f5655f48678e6496282cdea6f2b34b66d0e729d3517d7c7ec78954b"
 dependencies = [
  "anyhow",
  "cargo_metadata",
@@ -1968,9 +1968,9 @@ dependencies = [
 
 [[package]]
 name = "cef-dll-sys"
-version = "144.4.0+144.0.13"
+version = "145.6.1+145.0.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d802abd4ac0b8c12be11b6af24100c6e21543c265867ad53067268048bc7e3a"
+checksum = "687f31c0937d9914d3e5887b94c6194bd8e3e533026cef2cc3ae7b4fe5245b6d"
 dependencies = [
  "anyhow",
  "cmake",
