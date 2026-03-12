@@ -39,7 +39,7 @@ When using `debug`, you need to prepare a separate CEF framework and debug rende
 Please follow the steps below to set it up.
 
 ```shell
-> cargo install export-cef-dir
+> cargo install export-cef-dir@145.6.1+145.0.28
 > export-cef-dir --force $HOME/.local/share
 > cargo install bevy_cef_debug_render_process
 > cp $HOME/.cargo/bin/bevy_cef_debug_render_process "$HOME/.local/share/Chromium Embedded Framework.framework/Libraries/bevy_cef_debug_render_process"
@@ -69,7 +69,7 @@ Please run the following command to install the CEF framework to local.
 When you build the project, the libraries will be automatically copied to the executable's directory.
 
 ```powershell
-> cargo install export-cef-dir --force
+> cargo install export-cef-dir@145.6.1+145.0.28 --force
 > export-cef-dir --force "$HOME/.local/share/cef"
 ```
 
@@ -141,7 +141,8 @@ We welcome contributions! Here's how you can help:
 
 | Bevy   | bevy_cef | CEF     |
 | ------ | -------- | ------- |
-| 0.18 ~ | 0.2.0    | 144.4.0 |
+| 0.18 ~ | 0.5.0    | 145.6.1+145.0.28 | 
+| 0.18   | 0.2.0    | 144.4.0 |
 | 0.16   | 0.1.0    | 139     |
 
 ## License
