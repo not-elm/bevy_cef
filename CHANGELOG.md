@@ -1,3 +1,9 @@
+## v0.5.1
+
+### Bug Fixes
+
+- Fixed keyboard input by distinguishing RAWKEYDOWN from CHAR events — non-character keys (F-keys, arrows, modifiers, etc.) now correctly send RAWKEYDOWN, while character keys send CHAR with the proper character code.
+
 ## 0.4.1
 
 ### Bug Fixes
