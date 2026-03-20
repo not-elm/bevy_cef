@@ -40,19 +40,30 @@ pub fn create_cef_key_event(
     key_event: &KeyboardInput,
 ) -> Option<cef::KeyEvent> {
     let key_type = match key_event.state {
-        ButtonState::Pressed if is_not_character_key_code(&key_event.key_code) => {
+        // Windows: non-character keys use RAWKEYDOWN for correct command handling
+        // macOS: all keys use CHAR (RAWKEYDOWN causes rapid repeat issues)
+        ButtonState::Pressed
+            if cfg!(target_os = "windows")
+                && is_not_character_key_code(&key_event.key_code) =>
+        {
             cef_key_event_type_t::KEYEVENT_RAWKEYDOWN
         }
         ButtonState::Pressed => cef_key_event_type_t::KEYEVENT_CHAR,
         ButtonState::Released => cef_key_event_type_t::KEYEVENT_KEYUP,
     };
-    let character = key_event
-        .text
-        .as_ref()
-        .and_then(|text| text.chars().next())
-        .unwrap_or('\0') as u16;
+    let character = if key_type == cef_key_event_type_t::KEYEVENT_CHAR {
+        key_event
+            .text
+            .as_ref()
+            .and_then(|text| text.chars().next())
+            .unwrap_or('\0') as u16
+    } else {
+        0
+    };
 
-    let windows_key_code = if key_type == cef_key_event_type_t::KEYEVENT_CHAR {
+    let windows_key_code = if cfg!(target_os = "windows")
+        && key_type == cef_key_event_type_t::KEYEVENT_CHAR
+    {
         character as i32
     } else {
         keycode_to_windows_vk(key_event.key_code)
