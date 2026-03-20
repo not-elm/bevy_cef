@@ -46,13 +46,17 @@ pub fn create_cef_key_event(
         ButtonState::Pressed => cef_key_event_type_t::KEYEVENT_CHAR,
         ButtonState::Released => cef_key_event_type_t::KEYEVENT_KEYUP,
     };
-    let windows_key_code = keycode_to_windows_vk(key_event.key_code);
-
     let character = key_event
         .text
         .as_ref()
         .and_then(|text| text.chars().next())
         .unwrap_or('\0') as u16;
+
+    let windows_key_code = if key_type == cef_key_event_type_t::KEYEVENT_CHAR {
+        character as i32
+    } else {
+        keycode_to_windows_vk(key_event.key_code)
+    };
 
     Some(cef::KeyEvent::from(cef_key_event_t {
         size: core::mem::size_of::<cef_key_event_t>(),
