@@ -40,9 +40,9 @@ pub fn create_cef_key_event(
     key_event: &KeyboardInput,
 ) -> Option<cef::KeyEvent> {
     let key_type = match key_event.state {
-        // ButtonState::Pressed if input.just_pressed(key_event.key_code) => {
-        //     cef_key_event_type_t::KEYEVENT_RAWKEYDOWN
-        // }
+        ButtonState::Pressed if is_not_character_key_code(&key_event.key_code) => {
+            cef_key_event_type_t::KEYEVENT_RAWKEYDOWN
+        }
         ButtonState::Pressed => cef_key_event_type_t::KEYEVENT_CHAR,
         ButtonState::Released => cef_key_event_type_t::KEYEVENT_KEYUP,
     };
@@ -67,57 +67,57 @@ pub fn create_cef_key_event(
     }))
 }
 
-// fn is_not_character_key_code(keycode: &KeyCode) -> bool {
-//     match keycode {
-//         // Function keys are not character keys
-//         KeyCode::F1
-//         | KeyCode::F2
-//         | KeyCode::F3
-//         | KeyCode::F4
-//         | KeyCode::F5
-//         | KeyCode::F6
-//         | KeyCode::F7
-//         | KeyCode::F8
-//         | KeyCode::F9
-//         | KeyCode::F10
-//         | KeyCode::F11
-//         | KeyCode::F12 => true,
-//
-//         // Navigation keys are not character keys
-//         KeyCode::ArrowLeft
-//         | KeyCode::ArrowUp
-//         | KeyCode::ArrowRight
-//         | KeyCode::ArrowDown
-//         | KeyCode::Home
-//         | KeyCode::End
-//         | KeyCode::PageUp
-//         | KeyCode::PageDown => true,
-//
-//         // Modifier keys are not character keys
-//         KeyCode::ShiftLeft
-//         | KeyCode::ShiftRight
-//         | KeyCode::ControlLeft
-//         | KeyCode::ControlRight
-//         | KeyCode::AltLeft
-//         | KeyCode::AltRight
-//         | KeyCode::SuperLeft
-//         | KeyCode::SuperRight => true,
-//
-//         // Lock keys are not character keys
-//         KeyCode::CapsLock | KeyCode::NumLock | KeyCode::ScrollLock => true,
-//
-//         // Special control keys are not character keys
-//         KeyCode::Escape
-//         | KeyCode::Tab
-//         | KeyCode::Enter
-//         | KeyCode::Backspace
-//         | KeyCode::Delete
-//         | KeyCode::Insert => true,
-//
-//         // All other keys (letters, numbers, punctuation, space, numpad) are character keys
-//         _ => false,
-//     }
-// }
+fn is_not_character_key_code(keycode: &KeyCode) -> bool {
+    match keycode {
+        // Function keys are not character keys
+        KeyCode::F1
+        | KeyCode::F2
+        | KeyCode::F3
+        | KeyCode::F4
+        | KeyCode::F5
+        | KeyCode::F6
+        | KeyCode::F7
+        | KeyCode::F8
+        | KeyCode::F9
+        | KeyCode::F10
+        | KeyCode::F11
+        | KeyCode::F12 => true,
+
+        // Navigation keys are not character keys
+        KeyCode::ArrowLeft
+        | KeyCode::ArrowUp
+        | KeyCode::ArrowRight
+        | KeyCode::ArrowDown
+        | KeyCode::Home
+        | KeyCode::End
+        | KeyCode::PageUp
+        | KeyCode::PageDown => true,
+
+        // Modifier keys are not character keys
+        KeyCode::ShiftLeft
+        | KeyCode::ShiftRight
+        | KeyCode::ControlLeft
+        | KeyCode::ControlRight
+        | KeyCode::AltLeft
+        | KeyCode::AltRight
+        | KeyCode::SuperLeft
+        | KeyCode::SuperRight => true,
+
+        // Lock keys are not character keys
+        KeyCode::CapsLock | KeyCode::NumLock | KeyCode::ScrollLock => true,
+
+        // Special control keys are not character keys
+        KeyCode::Escape
+        | KeyCode::Tab
+        | KeyCode::Enter
+        | KeyCode::Backspace
+        | KeyCode::Delete
+        | KeyCode::Insert => true,
+
+        // All other keys (letters, numbers, punctuation, space, numpad) are character keys
+        _ => false,
+    }
+}
 
 fn keycode_to_windows_vk(keycode: KeyCode) -> i32 {
     match keycode {
@@ -240,23 +240,6 @@ fn keycode_to_windows_vk(keycode: KeyCode) -> i32 {
         _ => 0,
     }
 }
-
-// fn is_special_key(keycode: &KeyCode) -> bool {
-//     matches!(
-//         keycode,
-//         KeyCode::Enter
-//             | KeyCode::Space
-//             | KeyCode::Backspace
-//             | KeyCode::Delete
-//             | KeyCode::Tab
-//             | KeyCode::Escape
-//             | KeyCode::Insert
-//             | KeyCode::Home
-//             | KeyCode::End
-//             | KeyCode::PageUp
-//             | KeyCode::PageDown
-//     )
-// }
 
 /// Native key codes for different platforms based on MDN documentation
 /// [`Keyboard_event_key_values`](https://developer.mozilla.org/en-US/docs/Web/API/UI_Events/Keyboard_event_key_values)
