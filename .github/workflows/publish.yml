@@ -21,7 +21,7 @@ jobs:
         run: |
           for i in 1 2 3 4 5; do
             output=$(cargo publish -p bevy_cef_core 2>&1) && exit 0
-            if echo "$output" | grep -q "already uploaded"; then
+            if echo "$output" | grep -q "already exists"; then
               echo "Already published, skipping"
               exit 0
             fi
@@ -38,7 +38,7 @@ jobs:
         run: |
           for i in 1 2 3 4 5; do
             output=$(cargo publish -p bevy_cef_bundle_app 2>&1) && exit 0
-            if echo "$output" | grep -q "already uploaded"; then
+            if echo "$output" | grep -q "already exists"; then
               echo "Already published, skipping"
               exit 0
             fi
@@ -55,7 +55,7 @@ jobs:
         run: |
           for i in 1 2 3 4 5; do
             output=$(cargo publish -p bevy_cef 2>&1) && exit 0
-            if echo "$output" | grep -q "already uploaded"; then
+            if echo "$output" | grep -q "already exists"; then
               echo "Already published, skipping"
               exit 0
             fi
@@ -72,7 +72,7 @@ jobs:
         run: |
           for i in 1 2 3 4 5; do
             output=$(cargo publish -p bevy_cef_render_process 2>&1) && exit 0
-            if echo "$output" | grep -q "already uploaded"; then
+            if echo "$output" | grep -q "already exists"; then
               echo "Already published, skipping"
               exit 0
             fi
@@ -89,7 +89,7 @@ jobs:
         run: |
           for i in 1 2 3 4 5; do
             output=$(cargo publish -p bevy_cef_debug_render_process 2>&1) && exit 0
-            if echo "$output" | grep -q "already uploaded"; then
+            if echo "$output" | grep -q "already exists"; then
               echo "Already published, skipping"
               exit 0
             fi
