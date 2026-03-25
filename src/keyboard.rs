@@ -1,7 +1,7 @@
 use crate::common::WebviewSource;
 use bevy::input::keyboard::KeyboardInput;
 use bevy::prelude::*;
-use bevy_cef_core::prelude::{Browsers, create_cef_key_event, keyboard_modifiers};
+use bevy_cef_core::prelude::{Browsers, create_cef_key_events, keyboard_modifiers};
 use serde::{Deserialize, Serialize};
 
 /// The plugin to handle keyboard inputs.
@@ -80,11 +80,11 @@ fn send_key_event(
             is_ime_commiting.0 = false;
             continue;
         }
-        let Some(key_event) = create_cef_key_event(modifiers, &input, event) else {
-            continue;
-        };
-        for webview in webviews.iter() {
-            browsers.send_key(&webview, key_event.clone());
+        let key_events = create_cef_key_events(modifiers, &input, event);
+        for key_event in key_events {
+            for webview in webviews.iter() {
+                browsers.send_key(&webview, key_event.clone());
+            }
         }
     }
 }

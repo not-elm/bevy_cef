@@ -1,3 +1,11 @@
+## v0.5.2
+
+### Bug Fixes
+
+- Fixed keyboard event handling for CEF WebViews on Windows:
+  - Skip sending CHAR events with NUL character when IME finalizes with `text: None`, which previously caused CEF to suppress the preceding RAWKEYDOWN's DOM keydown dispatch.
+  - Use Chromium-format scan codes for `native_key_code` instead of VK codes, fixing empty `KeyboardEvent.code` in JavaScript.
+
 ## v0.5.1
 
 ### Bug Fixes
