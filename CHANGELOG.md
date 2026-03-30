@@ -1,3 +1,9 @@
+## v0.5.3
+
+### Bug Fixes
+
+- Fixed IME composition cancel via BackSpace deleting extra committed characters on Windows. When pressing BackSpace during IME candidate selection, the IME emits `Commit("")` followed by a raw BackSpace key event in the same frame. The BackSpace is now suppressed alongside the existing Enter suppression after IME commit. Also improved empty preedit handling to use `ime_cancel_composition()` instead of `set_ime_composition("")`.
+
 ## v0.5.2
 
 ### Bug Fixes
