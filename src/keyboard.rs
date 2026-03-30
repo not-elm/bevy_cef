@@ -11,7 +11,9 @@ pub(super) struct KeyboardPlugin;
 
 impl Plugin for KeyboardPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<IsImeCommiting>().add_systems(
+        app.init_resource::<IsImeCommiting>()
+            .init_resource::<IsImeComposing>()
+            .add_systems(
             Update,
             (
                 // Workaround for bevy_winit not calling `set_ime_allowed` on initial window
@@ -65,19 +67,34 @@ enum ImeActivationState {
 #[reflect(Default, Serialize, Deserialize)]
 struct IsImeCommiting(bool);
 
+/// Tracks whether CEF has an active IME composition.
+///
+/// Set to `true` when `ImeSetComposition(non-empty)` is called, cleared only on
+/// `ImeCancelComposition()` or `ImeCommitText()`. Critically, empty `Preedit` does NOT clear this
+/// flag — this avoids the same-frame ordering problem where `ime_event` processes `Preedit { "" }`
+/// before `send_key_event` processes the BackSpace that caused it.
+#[derive(Resource, Default, Serialize, Deserialize, Reflect)]
+#[reflect(Default, Serialize, Deserialize)]
+struct IsImeComposing(bool);
+
 fn send_key_event(
     mut er: MessageReader<KeyboardInput>,
     mut is_ime_commiting: ResMut<IsImeCommiting>,
+    mut is_ime_composing: ResMut<IsImeComposing>,
     input: Res<ButtonInput<KeyCode>>,
     browsers: NonSend<Browsers>,
     webviews: Query<Entity, With<WebviewSource>>,
 ) {
     let modifiers = keyboard_modifiers(&input);
     for event in er.read() {
-        if event.key_code == KeyCode::Enter && is_ime_commiting.0 {
-            // If the IME is committing, we don't want to send the Enter key event.
-            // This is to prevent sending the Enter key event when the IME is committing.
+        if (event.key_code == KeyCode::Enter || event.key_code == KeyCode::Backspace)
+            && is_ime_commiting.0
+        {
             is_ime_commiting.0 = false;
+            continue;
+        }
+        if event.key_code == KeyCode::Backspace && is_ime_composing.0 {
+            is_ime_composing.0 = false;
             continue;
         }
         let key_events = create_cef_key_events(modifiers, &input, event);
@@ -92,19 +109,27 @@ fn send_key_event(
 fn ime_event(
     mut er: MessageReader<Ime>,
     mut is_ime_commiting: ResMut<IsImeCommiting>,
+    mut is_ime_composing: ResMut<IsImeComposing>,
     browsers: NonSend<Browsers>,
 ) {
     for event in er.read() {
         match event {
             Ime::Preedit { value, cursor, .. } => {
-                browsers.set_ime_composition(value, cursor.map(|(_, e)| e as u32))
+                if value.is_empty() {
+                    browsers.ime_cancel_composition();
+                } else {
+                    browsers.set_ime_composition(value, cursor.map(|(_, e)| e as u32));
+                    is_ime_composing.0 = true;
+                }
             }
             Ime::Commit { value, .. } => {
                 browsers.set_ime_commit_text(value);
                 is_ime_commiting.0 = true;
+                is_ime_composing.0 = false;
             }
             Ime::Disabled { .. } => {
                 browsers.ime_cancel_composition();
+                is_ime_composing.0 = false;
             }
             _ => {}
         }
