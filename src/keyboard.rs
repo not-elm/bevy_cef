@@ -14,16 +14,16 @@ impl Plugin for KeyboardPlugin {
         app.init_resource::<IsImeCommiting>()
             .init_resource::<IsImeComposing>()
             .add_systems(
-            Update,
-            (
-                // Workaround for bevy_winit not calling `set_ime_allowed` on initial window
-                // creation when `Window::ime_enabled` is `true` from the start.
-                activate_ime,
-                ime_event.run_if(on_message::<Ime>),
-                send_key_event.run_if(on_message::<KeyboardInput>),
-            )
-                .chain(),
-        );
+                Update,
+                (
+                    // Workaround for bevy_winit not calling `set_ime_allowed` on initial window
+                    // creation when `Window::ime_enabled` is `true` from the start.
+                    activate_ime,
+                    ime_event.run_if(on_message::<Ime>),
+                    send_key_event.run_if(on_message::<KeyboardInput>),
+                )
+                    .chain(),
+            );
     }
 }
 
