@@ -4,6 +4,9 @@ use bevy_cef_core::prelude::*;
 use serde::de::DeserializeOwned;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
+use std::time::Instant;
+
+use crate::diagnostics::CefIpcDiagnostics;
 
 #[derive(Debug, EntityEvent)]
 pub struct Receive<M: Sync + Send + 'static> {
@@ -49,13 +52,18 @@ impl<E: DeserializeOwned> Default for JsEmitEventPlugin<E> {
 fn receive_events<E: DeserializeOwned + Send + Sync + 'static>(
     mut commands: Commands,
     receiver: ResMut<IpcEventRawReceiver>,
+    mut diagnostics: Option<ResMut<CefIpcDiagnostics>>,
 ) {
     while let Ok(event) = receiver.0.try_recv() {
+        let start = Instant::now();
         if let Ok(payload) = serde_json::from_str::<E>(&event.payload) {
             commands.trigger(Receive {
                 webview: event.webview,
                 payload,
             });
+        }
+        if let Some(ref mut diag) = diagnostics {
+            diag.last_processing_time = Some(start.elapsed());
         }
     }
 }
