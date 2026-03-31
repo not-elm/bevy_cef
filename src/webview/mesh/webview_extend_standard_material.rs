@@ -51,7 +51,7 @@ fn render_standard_materials(
                 images.get_mut(handle.id())
             }
         {
-            update_webview_image(&texture, image);
+            update_webview_image(texture, image);
         }
     }
 }

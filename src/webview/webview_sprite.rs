@@ -36,7 +36,7 @@ fn render(
         if let Ok(sprite) = webviews.get(texture.webview)
             && let Some(image) = images.get_mut(sprite.image.id())
         {
-            update_webview_image(&texture, image);
+            update_webview_image(texture, image);
         }
     }
 }
