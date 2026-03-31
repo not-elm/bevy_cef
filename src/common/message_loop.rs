@@ -3,6 +3,14 @@ use bevy::prelude::*;
 use bevy_cef_core::prelude::*;
 use cef::args::Args;
 use cef::{Settings, api_hash, execute_process, initialize, shutdown, sys};
+use std::time::Instant;
+
+/// Records the wall-clock duration of the last `cef_do_message_loop_work()` call.
+///
+/// Only written when `CefDiagnosticsPlugin` is added.
+/// Read and reset by `cef_diagnostics_system`.
+#[derive(Resource, Default)]
+pub struct CefMessageLoopDuration(pub Option<std::time::Duration>);
 
 /// Controls the CEF message loop.
 ///
@@ -155,12 +163,17 @@ fn cef_do_message_loop_work(
     receiver: NonSend<MessageLoopWorkingReceiver>,
     mut timer: Local<Option<MessageLoopTimer>>,
     mut max_delay_timer: Local<MessageLoopWorkingMaxDelayTimer>,
+    mut duration: Option<ResMut<CefMessageLoopDuration>>,
 ) {
     while let Ok(t) = receiver.try_recv() {
         timer.replace(t);
     }
     if timer.as_ref().map(|t| t.is_finished()).unwrap_or(false) || max_delay_timer.is_finished() {
+        let start = Instant::now();
         cef::do_message_loop_work();
+        if let Some(ref mut d) = duration {
+            d.0 = Some(start.elapsed());
+        }
         *max_delay_timer = MessageLoopWorkingMaxDelayTimer::default();
         timer.take();
     }
