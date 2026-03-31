@@ -9,6 +9,8 @@ mod system_param;
 mod webview;
 mod zoom;
 
+pub mod diagnostics;
+
 use crate::common::{LocalHostPlugin, MessageLoopPlugin, WebviewCoreComponentsPlugin};
 use crate::cursor_icon::SystemCursorIconPlugin;
 use crate::keyboard::KeyboardPlugin;

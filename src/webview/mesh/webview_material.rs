@@ -3,6 +3,8 @@ use bevy::prelude::*;
 use bevy::render::render_resource::{AsBindGroup, Extent3d, TextureDimension, TextureFormat};
 use bevy_cef_core::prelude::*;
 
+use crate::diagnostics::CefTextureDiagnostics;
+
 const WEBVIEW_UTIL_SHADER_HANDLE: Handle<Shader> =
     uuid_handle!("6c7cb871-4208-4407-9c25-306c6f069e2b");
 
@@ -34,8 +36,19 @@ pub struct WebviewMaterial {
 
 impl Material for WebviewMaterial {}
 
-fn send_render_textures(mut ew: MessageWriter<RenderTextureMessage>, browsers: NonSend<Browsers>) {
+fn send_render_textures(
+    mut ew: MessageWriter<RenderTextureMessage>,
+    browsers: NonSend<Browsers>,
+    mut diagnostics: Option<ResMut<CefTextureDiagnostics>>,
+) {
+    if let Some(ref mut diag) = diagnostics {
+        diag.total_buffer_bytes = 0;
+    }
     while let Ok(texture) = browsers.try_receive_texture() {
+        if let Some(ref mut diag) = diagnostics {
+            diag.last_transfer_time = Some(texture.created_at.elapsed());
+            diag.total_buffer_bytes += texture.buffer.len() as u64;
+        }
         ew.write(texture);
     }
 }
