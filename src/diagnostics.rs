@@ -70,27 +70,16 @@ impl CefDiagnosticsPlugin {
 
 impl Plugin for CefDiagnosticsPlugin {
     fn build(&self, app: &mut App) {
-        app.register_diagnostic(
-            Diagnostic::new(Self::MESSAGE_LOOP_TIME).with_suffix("ms"),
-        )
-        .register_diagnostic(
-            Diagnostic::new(Self::TEXTURE_TRANSFER_TIME).with_suffix("ms"),
-        )
-        .register_diagnostic(
-            Diagnostic::new(Self::IPC_PROCESSING_TIME).with_suffix("ms"),
-        )
-        .register_diagnostic(
-            Diagnostic::new(Self::TEXTURE_BUFFER_MEMORY).with_suffix("bytes"),
-        )
-        .register_diagnostic(Diagnostic::new(Self::WEBVIEW_COUNT))
-        .init_resource::<CefMessageLoopDuration>()
-        .init_resource::<CefTextureDiagnostics>()
-        .init_resource::<CefIpcDiagnostics>()
-        .init_resource::<CefWebviewCount>()
-        .add_systems(
-            Update,
-            (update_webview_count, cef_diagnostics_system),
-        );
+        app.register_diagnostic(Diagnostic::new(Self::MESSAGE_LOOP_TIME).with_suffix("ms"))
+            .register_diagnostic(Diagnostic::new(Self::TEXTURE_TRANSFER_TIME).with_suffix("ms"))
+            .register_diagnostic(Diagnostic::new(Self::IPC_PROCESSING_TIME).with_suffix("ms"))
+            .register_diagnostic(Diagnostic::new(Self::TEXTURE_BUFFER_MEMORY).with_suffix("bytes"))
+            .register_diagnostic(Diagnostic::new(Self::WEBVIEW_COUNT))
+            .init_resource::<CefMessageLoopDuration>()
+            .init_resource::<CefTextureDiagnostics>()
+            .init_resource::<CefIpcDiagnostics>()
+            .init_resource::<CefWebviewCount>()
+            .add_systems(Update, (update_webview_count, cef_diagnostics_system));
     }
 }
 
@@ -120,8 +109,9 @@ fn cef_diagnostics_system(
     if texture.total_buffer_bytes > 0 {
         let bytes = texture.total_buffer_bytes;
         texture.total_buffer_bytes = 0;
-        diagnostics
-            .add_measurement(&CefDiagnosticsPlugin::TEXTURE_BUFFER_MEMORY, || bytes as f64);
+        diagnostics.add_measurement(&CefDiagnosticsPlugin::TEXTURE_BUFFER_MEMORY, || {
+            bytes as f64
+        });
     }
 
     if let Some(duration) = ipc.last_processing_time.take() {
@@ -130,6 +120,7 @@ fn cef_diagnostics_system(
         });
     }
 
-    diagnostics
-        .add_measurement(&CefDiagnosticsPlugin::WEBVIEW_COUNT, || webview_count.0 as f64);
+    diagnostics.add_measurement(&CefDiagnosticsPlugin::WEBVIEW_COUNT, || {
+        webview_count.0 as f64
+    });
 }
