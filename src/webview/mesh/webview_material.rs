@@ -8,13 +8,17 @@ use crate::diagnostics::CefTextureDiagnostics;
 const WEBVIEW_UTIL_SHADER_HANDLE: Handle<Shader> =
     uuid_handle!("6c7cb871-4208-4407-9c25-306c6f069e2b");
 
+/// System set for the texture sending system. Used for ordering diagnostics collection.
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct SendRenderTexturesSet;
+
 pub(super) struct WebviewMaterialPlugin;
 
 impl Plugin for WebviewMaterialPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(MaterialPlugin::<WebviewMaterial>::default())
             .add_message::<RenderTextureMessage>()
-            .add_systems(Update, send_render_textures);
+            .add_systems(Update, send_render_textures.in_set(SendRenderTexturesSet));
         load_internal_asset!(
             app,
             WEBVIEW_UTIL_SHADER_HANDLE,

@@ -7,7 +7,7 @@ use crate::common::CefMessageLoopDuration;
 
 /// Intermediate resource for texture transfer diagnostics.
 ///
-/// Written by `send_render_textures`, read and reset by `cef_diagnostics_system`.
+/// Written and reset by `send_render_textures`, read by `cef_diagnostics_system`.
 #[derive(Resource, Default)]
 pub struct CefTextureDiagnostics {
     pub last_transfer_time: Option<Duration>,
@@ -79,7 +79,14 @@ impl Plugin for CefDiagnosticsPlugin {
             .init_resource::<CefTextureDiagnostics>()
             .init_resource::<CefIpcDiagnostics>()
             .init_resource::<CefWebviewCount>()
-            .add_systems(Update, (update_webview_count, cef_diagnostics_system));
+            .add_systems(
+                Update,
+                (
+                    update_webview_count,
+                    cef_diagnostics_system
+                        .after(crate::webview::mesh::SendRenderTexturesSet),
+                ),
+            );
     }
 }
 
@@ -107,10 +114,8 @@ fn cef_diagnostics_system(
     }
 
     if texture.total_buffer_bytes > 0 {
-        let bytes = texture.total_buffer_bytes;
-        texture.total_buffer_bytes = 0;
         diagnostics.add_measurement(&CefDiagnosticsPlugin::TEXTURE_BUFFER_MEMORY, || {
-            bytes as f64
+            texture.total_buffer_bytes as f64
         });
     }
 
