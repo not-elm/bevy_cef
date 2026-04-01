@@ -231,10 +231,10 @@ fn cef_do_message_loop_work(
         // delay_ms=0 requests from causing excessive pump calls.
         const MIN_PUMP_INTERVAL: std::time::Duration = std::time::Duration::from_millis(4);
         let now = std::time::Instant::now();
-        if let Some(last) = *last_execution {
-            if now.duration_since(last) < MIN_PUMP_INTERVAL {
-                return;
-            }
+        if let Some(last) = *last_execution
+            && now.duration_since(last) < MIN_PUMP_INTERVAL
+        {
+            return;
         }
         *last_execution = Some(now);
         cef::do_message_loop_work();

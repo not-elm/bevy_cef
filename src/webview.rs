@@ -2,7 +2,6 @@ use crate::common::localhost::responser::{InlineHtmlId, InlineHtmlStore};
 use crate::common::{
     HostWindow, IpcEventRawSender, ResolvedWebviewUri, WebviewSize, WebviewSource,
 };
-use std::time::{Duration, Instant};
 use crate::cursor_icon::SystemCursorIconSender;
 use crate::prelude::PreloadScripts;
 use crate::webview::mesh::MeshWebviewPlugin;
@@ -16,6 +15,7 @@ use bevy_remote::BrpSender;
 #[allow(deprecated)]
 use raw_window_handle::HasRawWindowHandle;
 use serde::{Deserialize, Serialize};
+use std::time::{Duration, Instant};
 
 #[cfg(target_os = "windows")]
 use crate::common::CommandChannelReceiver;
@@ -186,10 +186,10 @@ fn send_external_begin_frame(
     mut last_frame_time: Local<Option<Instant>>,
 ) {
     let now = Instant::now();
-    if let Some(last) = *last_frame_time {
-        if now.duration_since(last) < EXTERNAL_BEGIN_FRAME_INTERVAL {
-            return;
-        }
+    if let Some(last) = *last_frame_time
+        && now.duration_since(last) < EXTERNAL_BEGIN_FRAME_INTERVAL
+    {
+        return;
     }
     *last_frame_time = Some(now);
     hosts.send_external_begin_frame();
