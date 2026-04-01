@@ -5,7 +5,7 @@
 //! sending [`CefCommand`]s through an `async_channel`, which are drained each
 //! tick via [`drain_commands`].
 
-#![cfg(target_os = "windows")]
+// Module is already gated by #[cfg(target_os = "windows")] in browser_process.rs
 
 use std::cell::RefCell;
 use std::sync::{Arc, Mutex};
@@ -24,6 +24,7 @@ use cef_dll_sys::{cef_event_flags_t, cef_mouse_button_type_t};
 #[allow(deprecated)]
 use raw_window_handle::RawWindowHandle;
 
+use crate::browser_process::ClientHandlerBuilder;
 use crate::browser_process::browsers::devtool_render_handler::DevToolRenderHandlerBuilder;
 use crate::browser_process::browsers::{
     WebviewBrowser, make_underlines_for, modifiers_from_mouse_buttons,
@@ -32,12 +33,11 @@ use crate::browser_process::cef_command::CefCommand;
 use crate::browser_process::client_handler::{BrpHandler, IpcEventRaw, JsEmitEventHandler};
 use crate::browser_process::display_handler::{DisplayHandlerBuilder, SystemCursorIconSenderInner};
 use crate::browser_process::localhost::{LocalSchemaHandlerBuilder, Requester};
-use crate::browser_process::request_context_handler::RequestContextHandlerBuilder;
 use crate::browser_process::renderer_handler::{
     RenderHandlerBuilder, RenderTextureMessage, SharedViewSize, TextureSender,
 };
-use crate::browser_process::ClientHandlerBuilder;
-use crate::prelude::{IntoString, INIT_SCRIPT_KEY, PROCESS_MESSAGE_HOST_EMIT};
+use crate::browser_process::request_context_handler::RequestContextHandlerBuilder;
+use crate::prelude::{INIT_SCRIPT_KEY, IntoString, PROCESS_MESSAGE_HOST_EMIT};
 use crate::util::{HOST_CEF, SCHEME_CEF};
 
 // ---------------------------------------------------------------------------
@@ -139,10 +139,9 @@ impl BrowsersCefSide {
                 self.set_audio_muted(&webview, muted);
             }
             CefCommand::Reload => self.reload(),
-            CefCommand::SetImeComposition {
-                text,
-                cursor_utf16,
-            } => self.set_ime_composition(&text, cursor_utf16),
+            CefCommand::SetImeComposition { text, cursor_utf16 } => {
+                self.set_ime_composition(&text, cursor_utf16)
+            }
             CefCommand::ImeCancelComposition => self.ime_cancel_composition(),
             CefCommand::ImeFinishComposition { keep_selection } => {
                 self.ime_finish_composition(keep_selection);
@@ -528,7 +527,7 @@ impl BrowsersCefSide {
 // ---------------------------------------------------------------------------
 
 thread_local! {
-    static CEF_BROWSERS: RefCell<Option<BrowsersCefSide>> = RefCell::new(None);
+    static CEF_BROWSERS: RefCell<Option<BrowsersCefSide>> = const { RefCell::new(None) };
 }
 
 /// Initialise the thread-local [`BrowsersCefSide`] on the CEF UI thread.

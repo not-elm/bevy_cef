@@ -47,36 +47,22 @@ pub enum CefCommand {
     },
 
     /// Close and remove the browser for the given entity.
-    Close {
-        entity: Entity,
-    },
+    Close { entity: Entity },
 
     /// Navigate a webview to a new URL.
-    Navigate {
-        entity: Entity,
-        url: String,
-    },
+    Navigate { entity: Entity, url: String },
 
     /// Navigate backwards.
-    GoBack {
-        entity: Entity,
-    },
+    GoBack { entity: Entity },
 
     /// Navigate forwards.
-    GoForward {
-        entity: Entity,
-    },
+    GoForward { entity: Entity },
 
     /// Reload the current page.
-    ReloadWebview {
-        entity: Entity,
-    },
+    ReloadWebview { entity: Entity },
 
     /// Resize the webview texture.
-    Resize {
-        entity: Entity,
-        size: Vec2,
-    },
+    Resize { entity: Entity, size: Vec2 },
 
     /// Forward a mouse-move event.
     SendMouseMove {
@@ -115,26 +101,16 @@ pub enum CefCommand {
     },
 
     /// Show DevTools for the given webview.
-    ShowDevTool {
-        webview: Entity,
-    },
+    ShowDevTool { webview: Entity },
 
     /// Close DevTools for the given webview.
-    CloseDevTools {
-        webview: Entity,
-    },
+    CloseDevTools { webview: Entity },
 
     /// Set the zoom level for a webview.
-    SetZoomLevel {
-        webview: Entity,
-        zoom_level: f64,
-    },
+    SetZoomLevel { webview: Entity, zoom_level: f64 },
 
     /// Set audio muted state for a webview.
-    SetAudioMuted {
-        webview: Entity,
-        muted: bool,
-    },
+    SetAudioMuted { webview: Entity, muted: bool },
 
     /// Reload all browsers.
     Reload,
@@ -149,14 +125,10 @@ pub enum CefCommand {
     ImeCancelComposition,
 
     /// Finish IME composition.
-    ImeFinishComposition {
-        keep_selection: bool,
-    },
+    ImeFinishComposition { keep_selection: bool },
 
     /// Commit IME text.
-    SetImeCommitText {
-        text: String,
-    },
+    SetImeCommitText { text: String },
 
     /// Send external begin frame to all browsers.
     SendExternalBeginFrame,
@@ -230,7 +202,9 @@ impl BrowsersProxy {
     }
 
     pub fn go_back(&self, entity: &Entity) {
-        let _ = self.tx.send_blocking(CefCommand::GoBack { entity: *entity });
+        let _ = self
+            .tx
+            .send_blocking(CefCommand::GoBack { entity: *entity });
     }
 
     pub fn go_forward(&self, entity: &Entity) {
@@ -320,9 +294,9 @@ impl BrowsersProxy {
     }
 
     pub fn close_devtools(&self, webview: &Entity) {
-        let _ = self.tx.send_blocking(CefCommand::CloseDevTools {
-            webview: *webview,
-        });
+        let _ = self
+            .tx
+            .send_blocking(CefCommand::CloseDevTools { webview: *webview });
     }
 
     // -- Settings -------------------------------------------------------------
