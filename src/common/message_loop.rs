@@ -71,11 +71,17 @@ impl Plugin for MessageLoopPlugin {
         // On Windows, CEF runs its own message loop thread (multi_threaded_message_loop).
         // We insert a BrowsersProxy and CommandChannelReceiver instead of the
         // external-pump timer infrastructure.
+        // We also create the texture delivery channel here so the receiver side
+        // is available to Bevy systems, and the sender can be passed to
+        // `init_cef_browsers()` on the CEF UI thread.
         #[cfg(target_os = "windows")]
         {
             let (cmd_tx, cmd_rx) = async_channel::unbounded::<CefCommand>();
+            let (tex_tx, tex_rx) = async_channel::unbounded::<RenderTextureMessage>();
             app.insert_resource(BrowsersProxy::new(cmd_tx));
             app.insert_resource(CommandChannelReceiver(cmd_rx));
+            app.insert_resource(TextureReceiverRes(tex_rx));
+            app.insert_resource(TextureSenderRes(tex_tx));
         }
 
         // On non-Windows platforms, use the external message pump.
@@ -189,6 +195,24 @@ fn cef_initialize(
 #[cfg(target_os = "windows")]
 #[derive(Resource)]
 pub struct CommandChannelReceiver(pub async_channel::Receiver<CefCommand>);
+
+/// Holds the receiver end of the texture delivery channel on Windows.
+///
+/// On macOS/Linux the receiver lives inside `NonSend<Browsers>`, but on Windows
+/// `Browsers` is not initialised on Bevy's main thread.  This resource makes
+/// the receiver available to the `send_render_textures` system.
+#[cfg(target_os = "windows")]
+#[derive(Resource)]
+pub struct TextureReceiverRes(pub async_channel::Receiver<RenderTextureMessage>);
+
+/// Holds the sender end of the texture delivery channel on Windows.
+///
+/// This is inserted as a Bevy resource so that it can later be passed to
+/// `init_cef_browsers()` on the CEF UI thread to wire up the
+/// `BrowsersCefSide` texture delivery path.
+#[cfg(target_os = "windows")]
+#[derive(Resource)]
+pub struct TextureSenderRes(pub async_channel::Sender<RenderTextureMessage>);
 
 #[cfg(not(target_os = "windows"))]
 fn cef_do_message_loop_work(

@@ -11,8 +11,14 @@ pub(super) struct WebviewMaterialPlugin;
 impl Plugin for WebviewMaterialPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(MaterialPlugin::<WebviewMaterial>::default())
-            .add_message::<RenderTextureMessage>()
-            .add_systems(Update, send_render_textures);
+            .add_message::<RenderTextureMessage>();
+
+        #[cfg(not(target_os = "windows"))]
+        app.add_systems(Update, send_render_textures);
+
+        #[cfg(target_os = "windows")]
+        app.add_systems(Update, send_render_textures_win);
+
         load_internal_asset!(
             app,
             WEBVIEW_UTIL_SHADER_HANDLE,
@@ -34,8 +40,19 @@ pub struct WebviewMaterial {
 
 impl Material for WebviewMaterial {}
 
+#[cfg(not(target_os = "windows"))]
 fn send_render_textures(mut ew: MessageWriter<RenderTextureMessage>, browsers: NonSend<Browsers>) {
     while let Ok(texture) = browsers.try_receive_texture() {
+        ew.write(texture);
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn send_render_textures_win(
+    mut ew: MessageWriter<RenderTextureMessage>,
+    texture_rx: Res<crate::common::TextureReceiverRes>,
+) {
+    while let Ok(texture) = texture_rx.0.try_recv() {
         ew.write(texture);
     }
 }
