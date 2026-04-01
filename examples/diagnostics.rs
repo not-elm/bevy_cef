@@ -1,7 +1,7 @@
 //! # CEF Diagnostics Example
 //!
 //! Demonstrates how to use [`CefDiagnosticsPlugin`] to monitor bevy_cef's
-//! runtime performance through Bevy's standard diagnostics system.
+//! runtime performance via an on-screen overlay.
 //!
 //! ## Running this example
 //!
@@ -16,71 +16,37 @@
 //! ## What is `CefDiagnosticsPlugin`?
 //!
 //! An opt-in plugin that registers 5 performance metrics into Bevy's
-//! [`DiagnosticsStore`]. It does NOT include FPS — add
-//! [`FrameTimeDiagnosticsPlugin`] separately if you want that.
+//! [`DiagnosticsStore`]. This example displays the 3 timing metrics as an
+//! on-screen overlay using Bevy UI text nodes:
 //!
-//! ## Metrics
+//! | Metric | Description |
+//! |--------|-------------|
+//! | `cef/message_loop_time` | Wall-clock duration of CEF's `cef_do_message_loop_work()` per frame |
+//! | `cef/texture_transfer_time` | Time from CEF `on_paint` to Bevy channel receive |
+//! | `cef/ipc_processing_time` | Bevy-side IPC event deserialization + trigger queue time |
 //!
-//! | Metric | Unit | Description |
-//! |--------|------|-------------|
-//! | `cef/message_loop_time` | ms | Wall-clock duration of CEF's `cef_do_message_loop_work()` per frame. High values indicate CEF is doing significant work (layout, JS execution, etc.). |
-//! | `cef/texture_transfer_time` | ms | Time from CEF's `on_paint` callback to when Bevy receives the texture via async channel. Includes channel latency and frame scheduling. |
-//! | `cef/ipc_processing_time` | ms | Bevy-side time to deserialize an IPC event and queue the EntityEvent trigger. Only recorded when JS→Bevy events are actually received. |
-//! | `cef/texture_buffer_memory` | bytes | Total texture buffer bytes received in the current frame. For an 800×800 BGRA webview, each frame is ~2.56MB. Scales linearly with webview count and resolution. |
-//! | `cef/webview_count` | count | Number of active CEF browser instances. Useful for correlating performance with webview count. |
-//!
-//! ## Two ways to read diagnostics
-//!
-//! ### 1. Automatic console output (easiest)
-//!
-//! Add [`LogDiagnosticsPlugin`] — it prints all registered diagnostics to the
-//! console every second. This is the approach used in this example.
-//!
-//! ```rust,no_run
-//! app.add_plugins(LogDiagnosticsPlugin::default());
-//! ```
-//!
-//! ### 2. Programmatic access via `DiagnosticsStore`
-//!
-//! Read metrics directly in a system. This example includes a custom system
-//! `log_cef_diagnostics` that demonstrates this approach.
+//! Two additional metrics (`cef/texture_buffer_memory`, `cef/webview_count`)
+//! are quasi-static and omitted from the overlay. Access them programmatically:
 //!
 //! ```rust,ignore
-//! fn my_system(diagnostics: Res<DiagnosticsStore>) {
-//!     if let Some(d) = diagnostics.get(&CefDiagnosticsPlugin::TEXTURE_TRANSFER_TIME) {
-//!         // d.value()    — latest raw measurement
-//!         // d.average()  — simple moving average over history window
-//!         // d.smoothed() — exponential moving average (less noisy)
+//! fn my_system(store: Res<DiagnosticsStore>) {
+//!     if let Some(d) = store.get(&CefDiagnosticsPlugin::TEXTURE_BUFFER_MEMORY) {
+//!         if let Some(bytes) = d.smoothed() { /* use bytes */ }
 //!     }
 //! }
 //! ```
 //!
-//! ## How it works internally
+//! ## How it works
 //!
-//! ```text
-//! ┌─────────────────────────┐     ┌──────────────────────────────┐
-//! │   Measurement Points    │     │   Diagnostics Collection     │
-//! │                         │     │                              │
-//! │  on_paint (CEF)         │────►│  send_render_textures()      │
-//! │    → Instant::now()     │     │    → CefTextureDiagnostics   │
-//! │    → RenderTextureMsg   │     │                              │
-//! │                         │     │  cef_diagnostics_system()    │
-//! │  cef_do_message_loop()  │────►│    → reads all resources     │
-//! │    → CefMsgLoopDuration │     │    → Diagnostics::add_...()  │
-//! │                         │     │    → resets for next frame   │
-//! │  receive_events<E>()    │────►│                              │
-//! │    → CefIpcDiagnostics  │     │  LogDiagnosticsPlugin        │
-//! │                         │     │    → prints every 1 second   │
-//! └─────────────────────────┘     └──────────────────────────────┘
-//! ```
+//! 1. `CefDiagnosticsPlugin` records metrics into intermediate resources each frame
+//! 2. A collection system feeds them into Bevy's `DiagnosticsStore`
+//! 3. This example spawns a UI text node and updates it every second from the store
 //!
-//! When `CefDiagnosticsPlugin` is NOT added, existing systems skip diagnostics
-//! recording via `Option<ResMut<...>>` checks — the only overhead is a single
-//! `Instant::now()` (~25ns) per texture creation.
+//! The overlay uses `.smoothed()` (exponential moving average) for stable readings.
+//! Text update overhead is ~0.1ms per 1-second cycle — negligible relative to the
+//! sub-millisecond CEF metrics being measured.
 
-use bevy::diagnostic::{
-    DiagnosticsStore, FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin,
-};
+use bevy::diagnostic::DiagnosticsStore;
 use bevy::prelude::*;
 use bevy_cef::diagnostics::CefDiagnosticsPlugin;
 use bevy_cef::prelude::*;
@@ -90,19 +56,13 @@ fn main() {
         .add_plugins((
             DefaultPlugins,
             CefPlugin::default(),
-            // CEF performance metrics (5 diagnostics)
             CefDiagnosticsPlugin,
-            // FPS / frame time (Bevy standard)
-            FrameTimeDiagnosticsPlugin::default(),
-            // Prints all diagnostics to the console every second
-            LogDiagnosticsPlugin::default(),
         ))
         .add_systems(
             Startup,
-            (spawn_camera, spawn_directional_light, spawn_webview),
+            (spawn_camera, spawn_directional_light, spawn_webview, spawn_overlay),
         )
-        // Custom system: demonstrates programmatic access to CEF diagnostics
-        .add_systems(Update, log_cef_diagnostics)
+        .add_systems(Update, update_overlay)
         .run();
 }
 
@@ -132,39 +92,64 @@ fn spawn_webview(
     ));
 }
 
-/// Demonstrates reading CEF diagnostics programmatically via [`DiagnosticsStore`].
-///
-/// This system logs a compact summary every 2 seconds. In a real application you
-/// might use these values to drive a debug UI overlay, trigger alerts, or feed an
-/// external monitoring system.
-fn log_cef_diagnostics(diagnostics: Res<DiagnosticsStore>, time: Res<Time>, mut timer: Local<f64>) {
+// --- Overlay ---
+
+/// Marker component for the overlay text node.
+#[derive(Component)]
+struct DiagnosticsOverlayText;
+
+fn spawn_overlay(mut commands: Commands) {
+    commands
+        .spawn(Node {
+            position_type: PositionType::Absolute,
+            left: Val::Px(10.0),
+            top: Val::Px(10.0),
+            padding: UiRect::all(Val::Px(8.0)),
+            ..default()
+        })
+        .insert(BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.7)))
+        .insert(GlobalZIndex(i32::MAX - 100))
+        .with_child((
+            Text::new("CEF Diagnostics\n---"),
+            TextFont {
+                font_size: 14.0,
+                ..default()
+            },
+            TextColor(Color::srgba(0.0, 1.0, 0.0, 1.0)),
+            DiagnosticsOverlayText,
+        ));
+}
+
+fn update_overlay(
+    diagnostics: Res<DiagnosticsStore>,
+    mut query: Query<&mut Text, With<DiagnosticsOverlayText>>,
+    time: Res<Time>,
+    mut timer: Local<f64>,
+) {
     *timer += time.delta_secs_f64();
-    if *timer < 2.0 {
+    if *timer < 1.0 {
         return;
     }
     *timer = 0.0;
 
     let msg_loop = diagnostics
         .get(&CefDiagnosticsPlugin::MESSAGE_LOOP_TIME)
-        .and_then(|d| d.smoothed());
+        .and_then(|d| d.smoothed())
+        .unwrap_or(0.0);
 
     let texture = diagnostics
         .get(&CefDiagnosticsPlugin::TEXTURE_TRANSFER_TIME)
-        .and_then(|d| d.smoothed());
+        .and_then(|d| d.smoothed())
+        .unwrap_or(0.0);
 
-    let memory = diagnostics
-        .get(&CefDiagnosticsPlugin::TEXTURE_BUFFER_MEMORY)
-        .and_then(|d| d.smoothed());
+    let ipc = diagnostics
+        .get(&CefDiagnosticsPlugin::IPC_PROCESSING_TIME)
+        .and_then(|d| d.smoothed())
+        .unwrap_or(0.0);
 
-    let webviews = diagnostics
-        .get(&CefDiagnosticsPlugin::WEBVIEW_COUNT)
-        .and_then(|d| d.value());
-
-    info!(
-        "[CEF Diagnostics] msg_loop={:.2}ms, texture_transfer={:.2}ms, buffer={:.0} bytes, webviews={}",
-        msg_loop.unwrap_or(0.0),
-        texture.unwrap_or(0.0),
-        memory.unwrap_or(0.0),
-        webviews.unwrap_or(0.0) as u32,
-    );
+    for mut text in &mut query {
+        **text = format!(
+            "CEF Diagnostics\nMessage Loop:     {msg_loop:.2} ms\nTexture Transfer: {texture:.2} ms\nIPC Processing:   {ipc:.2} ms"
+        );
+    }
 }
