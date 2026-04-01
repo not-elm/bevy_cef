@@ -51,8 +51,7 @@ fn render_standard_materials(
                 images.get_mut(handle.id())
             }
         {
-            //OPTIMIZE: Avoid cloning the texture.
-            update_webview_image(texture.clone(), image);
+            update_webview_image(texture, image);
         }
     }
 }
