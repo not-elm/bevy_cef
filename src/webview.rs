@@ -2,6 +2,7 @@ use crate::common::localhost::responser::{InlineHtmlId, InlineHtmlStore};
 use crate::common::{
     HostWindow, IpcEventRawSender, ResolvedWebviewUri, WebviewSize, WebviewSource,
 };
+use std::time::{Duration, Instant};
 use crate::cursor_icon::SystemCursorIconSender;
 use crate::prelude::PreloadScripts;
 use crate::webview::mesh::MeshWebviewPlugin;
@@ -176,8 +177,21 @@ fn added_webview(webviews: Query<Entity, Added<ResolvedWebviewUri>>) -> bool {
     !webviews.is_empty()
 }
 
+/// Target interval for external begin frame calls (~60fps).
+const EXTERNAL_BEGIN_FRAME_INTERVAL: Duration = Duration::from_millis(1000 / 60);
+
 #[cfg(not(target_os = "windows"))]
-fn send_external_begin_frame(mut hosts: NonSendMut<Browsers>) {
+fn send_external_begin_frame(
+    mut hosts: NonSendMut<Browsers>,
+    mut last_frame_time: Local<Option<Instant>>,
+) {
+    let now = Instant::now();
+    if let Some(last) = *last_frame_time {
+        if now.duration_since(last) < EXTERNAL_BEGIN_FRAME_INTERVAL {
+            return;
+        }
+    }
+    *last_frame_time = Some(now);
     hosts.send_external_begin_frame();
 }
 
