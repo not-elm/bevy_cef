@@ -1,6 +1,8 @@
 mod app;
 mod browser_process_handler;
 mod browsers;
+#[cfg(target_os = "windows")]
+pub mod cef_command;
 mod client_handler;
 mod command_line_config;
 mod context_menu_handler;
