@@ -3,7 +3,7 @@ use crate::browser_process::ClientHandlerBuilder;
 use crate::browser_process::client_handler::{IpcEventRaw, JsEmitEventHandler};
 use crate::prelude::IntoString;
 use crate::prelude::*;
-use async_channel::{Sender, TryRecvError};
+use async_channel::Sender;
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 use bevy_remote::BrpMessage;
@@ -31,23 +31,13 @@ pub struct WebviewBrowser {
     pub client: Browser,
     pub host: BrowserHost,
     pub size: SharedViewSize,
+    pub view_slot: SharedTexture,
+    pub popup_slot: SharedTexture,
 }
 
+#[derive(Default)]
 pub struct Browsers {
     browsers: HashMap<Entity, WebviewBrowser>,
-    sender: TextureSender,
-    receiver: TextureReceiver,
-}
-
-impl Default for Browsers {
-    fn default() -> Self {
-        let (sender, receiver) = async_channel::unbounded::<RenderTextureMessage>();
-        Browsers {
-            browsers: HashMap::default(),
-            sender,
-            receiver,
-        }
-    }
 }
 
 impl Browsers {
@@ -66,6 +56,8 @@ impl Browsers {
     ) {
         let mut context = Self::request_context(requester);
         let size = Rc::new(Cell::new(webview_size));
+        let view_slot: SharedTexture = Rc::new(Cell::new(None));
+        let popup_slot: SharedTexture = Rc::new(Cell::new(None));
         let browser = browser_host_create_browser_sync(
             Some(&WindowInfo {
                 windowless_rendering_enabled: true as _,
@@ -88,6 +80,8 @@ impl Browsers {
             Some(&mut self.client_handler(
                 webview,
                 size.clone(),
+                view_slot.clone(),
+                popup_slot.clone(),
                 ipc_event_sender,
                 brp_sender,
                 system_cursor_icon_sender,
@@ -106,6 +100,8 @@ impl Browsers {
             host,
             client: browser,
             size,
+            view_slot,
+            popup_slot,
         };
 
         self.browsers.insert(webview, webview_browser);
@@ -222,9 +218,13 @@ impl Browsers {
         }
     }
 
-    #[inline]
-    pub fn try_receive_texture(&self) -> core::result::Result<RenderTextureMessage, TryRecvError> {
-        self.receiver.try_recv()
+    /// Drains the latest texture from each webview's view and popup slots.
+    pub fn try_receive_textures(&self) -> impl Iterator<Item = RenderTextureMessage> + '_ {
+        self.browsers.values().flat_map(|b| {
+            [b.view_slot.take(), b.popup_slot.take()]
+                .into_iter()
+                .flatten()
+        })
     }
 
     /// Shows the DevTools for the specified webview.
@@ -415,17 +415,21 @@ impl Browsers {
         context
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn client_handler(
         &self,
         webview: Entity,
         size: SharedViewSize,
+        view_slot: SharedTexture,
+        popup_slot: SharedTexture,
         ipc_event_sender: Sender<IpcEventRaw>,
         brp_sender: Sender<BrpMessage>,
         system_cursor_icon_sender: SystemCursorIconSenderInner,
     ) -> Client {
         ClientHandlerBuilder::new(RenderHandlerBuilder::build(
             webview,
-            self.sender.clone(),
+            view_slot,
+            popup_slot,
             size.clone(),
         ))
         .with_display_handler(DisplayHandlerBuilder::build(system_cursor_icon_sender))

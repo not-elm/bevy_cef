@@ -35,7 +35,7 @@ pub struct WebviewMaterial {
 impl Material for WebviewMaterial {}
 
 fn send_render_textures(mut ew: MessageWriter<RenderTextureMessage>, browsers: NonSend<Browsers>) {
-    while let Ok(texture) = browsers.try_receive_texture() {
+    for texture in browsers.try_receive_textures() {
         ew.write(texture);
     }
 }
