@@ -15,7 +15,7 @@ use bevy_remote::BrpSender;
 #[allow(deprecated)]
 use raw_window_handle::HasRawWindowHandle;
 use serde::{Deserialize, Serialize};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 #[cfg(target_os = "windows")]
 use crate::common::CommandChannelReceiver;
@@ -26,7 +26,9 @@ mod mesh;
 mod webview_sprite;
 
 pub mod prelude {
-    pub use crate::webview::{RequestCloseDevtool, RequestShowDevTool, WebviewPlugin, mesh::*};
+    pub use crate::webview::{
+        BeginFrameInterval, RequestCloseDevtool, RequestShowDevTool, WebviewPlugin, mesh::*,
+    };
 }
 
 /// A Trigger event to request showing the developer tools in a webview.
@@ -73,6 +75,26 @@ pub struct RequestShowDevTool {
 pub struct RequestCloseDevtool {
     #[event_target]
     pub webview: Entity,
+}
+
+/// Controls the interval between CEF external begin frame calls.
+///
+/// Defaults to ~30fps. Users can override by inserting this resource:
+/// ```rust,no_run
+/// use bevy::prelude::*;
+/// use bevy_cef::prelude::*;
+///
+/// App::new()
+///     .add_plugins(CefPlugin::default())
+///     .insert_resource(BeginFrameInterval(Duration::from_millis(1000 / 60)));
+/// ```
+#[derive(Resource)]
+pub struct BeginFrameInterval(pub Duration);
+
+impl Default for BeginFrameInterval {
+    fn default() -> Self {
+        Self(Duration::from_millis(1000 / 30))
+    }
 }
 
 pub struct WebviewPlugin;
@@ -122,16 +144,20 @@ impl Plugin for WebviewPlugin {
         // Platform-conditional systems for create_webview, navigate, resize, devtools
         #[cfg(not(target_os = "windows"))]
         {
-            app.add_systems(
-                Update,
-                (
-                    resize.run_if(any_resized),
-                    create_webview.run_if(added_webview),
-                    navigate_on_source_change,
-                ),
-            )
-            .add_observer(apply_request_show_devtool)
-            .add_observer(apply_request_close_devtool);
+            app.init_non_send_resource::<Browsers>()
+                .init_resource::<BeginFrameInterval>()
+                .add_plugins((MeshWebviewPlugin,))
+                .add_systems(Main, send_external_begin_frame)
+                .add_systems(
+                    Update,
+                    (
+                        resize.run_if(any_resized),
+                        create_webview.run_if(added_webview),
+                        navigate_on_source_change,
+                    ),
+                )
+                .add_observer(apply_request_show_devtool)
+                .add_observer(apply_request_close_devtool);
         }
         #[cfg(target_os = "windows")]
         {
@@ -183,16 +209,18 @@ const EXTERNAL_BEGIN_FRAME_INTERVAL: Duration = Duration::from_millis(1000 / 60)
 #[cfg(not(target_os = "windows"))]
 fn send_external_begin_frame(
     mut hosts: NonSendMut<Browsers>,
-    mut last_frame_time: Local<Option<Instant>>,
+    time: Res<Time>,
+    interval: Res<BeginFrameInterval>,
+    mut timer: Local<Option<Timer>>,
 ) {
-    let now = Instant::now();
-    if let Some(last) = *last_frame_time
-        && now.duration_since(last) < EXTERNAL_BEGIN_FRAME_INTERVAL
-    {
-        return;
+    if interval.is_changed() || timer.is_none() {
+        *timer = Some(Timer::new(interval.0, TimerMode::Repeating));
     }
-    *last_frame_time = Some(now);
-    hosts.send_external_begin_frame();
+    let timer = timer.as_mut().unwrap();
+    timer.tick(time.delta());
+    if timer.just_finished() {
+        hosts.send_external_begin_frame();
+    }
 }
 
 #[cfg(not(target_os = "windows"))]
