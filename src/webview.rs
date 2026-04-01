@@ -18,6 +18,8 @@ use serde::{Deserialize, Serialize};
 
 #[cfg(target_os = "windows")]
 use crate::common::CommandChannelReceiver;
+#[cfg(target_os = "windows")]
+use crate::common::TextureSenderRes;
 
 mod mesh;
 mod webview_sprite;
@@ -91,6 +93,28 @@ impl Plugin for WebviewPlugin {
         // Register conditional drain system that posts CefPostTask(TID_UI).
         #[cfg(target_os = "windows")]
         {
+            // Initialise the thread-local BrowsersCefSide on the CEF UI thread
+            // with the texture sender so that created browsers can deliver
+            // rendered frames back to Bevy.
+            let texture_sender = app.world().resource::<TextureSenderRes>().0.clone();
+            {
+                use cef::rc::Rc;
+                use cef::{ImplTask, Task, WrapTask};
+
+                cef::wrap_task! {
+                    struct InitCefBrowsersTask {
+                        sender: async_channel::Sender<RenderTextureMessage>,
+                    }
+                    impl Task {
+                        fn execute(&self) {
+                            bevy_cef_core::prelude::init_cef_browsers(self.sender.clone());
+                        }
+                    }
+                }
+                let mut task = InitCefBrowsersTask::new(texture_sender);
+                cef::post_task(cef::ThreadId::UI, Some(&mut task));
+            }
+
             app.add_systems(Main, post_drain_task.run_if(win_commands_pending));
         }
 
