@@ -172,7 +172,7 @@ impl BrowsersCefSide {
         let browser = browser_host_create_browser_sync(
             Some(&WindowInfo {
                 windowless_rendering_enabled: true as _,
-                external_begin_frame_enabled: true as _,
+                external_begin_frame_enabled: false as _,
                 #[allow(deprecated)]
                 parent_window: match _window_handle {
                     Some(RawWindowHandle::Win32(handle)) => {

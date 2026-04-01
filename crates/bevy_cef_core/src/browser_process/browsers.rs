@@ -70,7 +70,10 @@ impl Browsers {
         let browser = browser_host_create_browser_sync(
             Some(&WindowInfo {
                 windowless_rendering_enabled: true as _,
+                #[cfg(not(target_os = "windows"))]
                 external_begin_frame_enabled: true as _,
+                #[cfg(target_os = "windows")]
+                external_begin_frame_enabled: false as _,
                 #[cfg(target_os = "macos")]
                 parent_view: match _window_handle {
                     Some(RawWindowHandle::AppKit(handle)) => handle.ns_view.as_ptr(),
