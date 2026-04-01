@@ -18,7 +18,7 @@ use cef_dll_sys::{cef_event_flags_t, cef_mouse_button_type_t};
 #[allow(deprecated)]
 use raw_window_handle::RawWindowHandle;
 
-mod devtool_render_handler;
+pub(crate) mod devtool_render_handler;
 mod keyboard;
 
 use crate::browser_process::browsers::devtool_render_handler::DevToolRenderHandlerBuilder;
