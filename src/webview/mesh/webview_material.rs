@@ -48,7 +48,7 @@ fn send_render_textures(
     if let Some(ref mut diag) = diagnostics {
         diag.total_buffer_bytes = 0;
     }
-    while let Ok(texture) = browsers.try_receive_texture() {
+    for texture in browsers.try_receive_textures() {
         if let Some(ref mut diag) = diagnostics {
             diag.last_transfer_time = Some(texture.created_at.elapsed());
             diag.total_buffer_bytes += texture.buffer.len() as u64;

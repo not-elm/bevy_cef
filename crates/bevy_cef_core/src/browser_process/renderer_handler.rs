@@ -1,4 +1,3 @@
-use async_channel::{Receiver, Sender};
 use bevy::prelude::*;
 use cef::rc::{Rc, RcImpl};
 use cef::*;
@@ -7,9 +6,13 @@ use std::cell::Cell;
 use std::os::raw::c_int;
 use std::time::Instant;
 
-pub type TextureSender = Sender<RenderTextureMessage>;
-
-pub type TextureReceiver = Receiver<RenderTextureMessage>;
+/// A shared slot holding the latest texture for a single paint element type.
+///
+/// Uses `Rc<Cell<Option<T>>>` instead of a channel because both producer (`on_paint`)
+/// and consumer (`send_render_textures`) run on the same thread (CEF UI thread =
+/// Bevy main thread under `external_message_pump` mode). This eliminates all
+/// synchronization overhead and naturally provides "latest frame wins" semantics.
+pub type SharedTexture = std::rc::Rc<Cell<Option<RenderTextureMessage>>>;
 
 /// The texture structure passed from [`CefRenderHandler::OnPaint`](https://cef-builds.spotifycdn.com/docs/106.1/classCefRenderHandler.html#a6547d5c9dd472e6b84706dc81d3f1741).
 #[derive(Debug, Clone, PartialEq, Message)]
@@ -44,20 +47,23 @@ pub type SharedViewSize = std::rc::Rc<Cell<Vec2>>;
 pub struct RenderHandlerBuilder {
     object: *mut RcImpl<sys::cef_render_handler_t, Self>,
     webview: Entity,
-    texture_sender: TextureSender,
+    view_slot: SharedTexture,
+    popup_slot: SharedTexture,
     size: SharedViewSize,
 }
 
 impl RenderHandlerBuilder {
     pub fn build(
         webview: Entity,
-        texture_sender: TextureSender,
+        view_slot: SharedTexture,
+        popup_slot: SharedTexture,
         size: SharedViewSize,
     ) -> RenderHandler {
         RenderHandler::new(Self {
             object: std::ptr::null_mut(),
             webview,
-            texture_sender,
+            view_slot,
+            popup_slot,
             size,
         })
     }
@@ -88,7 +94,8 @@ impl Clone for RenderHandlerBuilder {
         Self {
             object,
             webview: self.webview,
-            texture_sender: self.texture_sender.clone(),
+            view_slot: self.view_slot.clone(),
+            popup_slot: self.popup_slot.clone(),
             size: self.size.clone(),
         }
     }
@@ -127,7 +134,11 @@ impl ImplRenderHandler for RenderHandlerBuilder {
             },
             created_at: Instant::now(),
         };
-        let _ = self.texture_sender.send_blocking(texture);
+        let slot = match ty {
+            RenderPaintElementType::Popup => &self.popup_slot,
+            RenderPaintElementType::View => &self.view_slot,
+        };
+        slot.set(Some(texture));
     }
 
     #[inline]
