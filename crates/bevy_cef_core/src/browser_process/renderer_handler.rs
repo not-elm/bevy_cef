@@ -3,7 +3,6 @@ use bevy::prelude::*;
 use cef::rc::{Rc, RcImpl};
 use cef::*;
 use cef_dll_sys::cef_paint_element_type_t;
-use std::cell::Cell;
 use std::os::raw::c_int;
 
 pub type TextureSender = Sender<RenderTextureMessage>;
@@ -33,7 +32,10 @@ pub enum RenderPaintElementType {
     Popup,
 }
 
-pub type SharedViewSize = std::rc::Rc<Cell<Vec2>>;
+#[cfg(not(target_os = "windows"))]
+pub type SharedViewSize = std::rc::Rc<std::cell::Cell<Vec2>>;
+#[cfg(target_os = "windows")]
+pub type SharedViewSize = std::sync::Arc<std::sync::Mutex<Vec2>>;
 
 /// ## Reference
 ///
@@ -94,7 +96,10 @@ impl Clone for RenderHandlerBuilder {
 impl ImplRenderHandler for RenderHandlerBuilder {
     fn view_rect(&self, _browser: Option<&mut Browser>, rect: Option<&mut cef::Rect>) {
         if let Some(rect) = rect {
+            #[cfg(not(target_os = "windows"))]
             let size = self.size.get();
+            #[cfg(target_os = "windows")]
+            let size = *self.size.lock().unwrap();
             rect.width = size.x as _;
             rect.height = size.y as _;
         }

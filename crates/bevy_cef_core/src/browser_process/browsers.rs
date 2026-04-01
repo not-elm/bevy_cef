@@ -17,8 +17,6 @@ use cef::{
 use cef_dll_sys::{cef_event_flags_t, cef_mouse_button_type_t};
 #[allow(deprecated)]
 use raw_window_handle::RawWindowHandle;
-use std::cell::Cell;
-use std::rc::Rc;
 
 mod devtool_render_handler;
 mod keyboard;
@@ -65,7 +63,10 @@ impl Browsers {
         _window_handle: Option<RawWindowHandle>,
     ) {
         let mut context = Self::request_context(requester);
-        let size = Rc::new(Cell::new(webview_size));
+        #[cfg(not(target_os = "windows"))]
+        let size: SharedViewSize = std::rc::Rc::new(std::cell::Cell::new(webview_size));
+        #[cfg(target_os = "windows")]
+        let size: SharedViewSize = std::sync::Arc::new(std::sync::Mutex::new(webview_size));
         let browser = browser_host_create_browser_sync(
             Some(&WindowInfo {
                 windowless_rendering_enabled: true as _,
@@ -207,7 +208,12 @@ impl Browsers {
 
     pub fn resize(&self, webview: &Entity, size: Vec2) {
         if let Some(browser) = self.browsers.get(webview) {
+            #[cfg(not(target_os = "windows"))]
             browser.size.set(size);
+            #[cfg(target_os = "windows")]
+            {
+                *browser.size.lock().unwrap() = size;
+            }
             browser.host.was_resized();
         }
     }
