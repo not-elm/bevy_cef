@@ -41,6 +41,18 @@ pub struct Browsers {
 }
 
 impl Browsers {
+    /// Returns the number of active browser instances.
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.browsers.len()
+    }
+
+    /// Returns `true` if there are no active browser instances.
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.browsers.is_empty()
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn create_browser(
         &mut self,

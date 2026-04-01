@@ -9,6 +9,8 @@ mod system_param;
 mod webview;
 mod zoom;
 
+pub mod diagnostics;
+
 use crate::common::{LocalHostPlugin, MessageLoopPlugin, WebviewCoreComponentsPlugin};
 use crate::cursor_icon::SystemCursorIconPlugin;
 use crate::keyboard::KeyboardPlugin;
@@ -20,6 +22,7 @@ use bevy_cef_core::prelude::{CefExtensions, CommandLineConfig};
 use bevy_remote::RemotePlugin;
 
 pub mod prelude {
+    pub use crate::diagnostics::CefDiagnosticsPlugin;
     pub use crate::{CefPlugin, RunOnMainThread, common::*, navigation::*, webview::prelude::*};
     pub use bevy_cef_core::prelude::{CefExtensions, CommandLineConfig};
 }

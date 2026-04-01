@@ -3,8 +3,14 @@ use bevy::prelude::*;
 use bevy::render::render_resource::{AsBindGroup, Extent3d, TextureDimension, TextureFormat};
 use bevy_cef_core::prelude::*;
 
+use crate::diagnostics::CefTextureDiagnostics;
+
 const WEBVIEW_UTIL_SHADER_HANDLE: Handle<Shader> =
     uuid_handle!("6c7cb871-4208-4407-9c25-306c6f069e2b");
+
+/// System set for the texture sending system. Used for ordering diagnostics collection.
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct SendRenderTexturesSet;
 
 pub(super) struct WebviewMaterialPlugin;
 
@@ -12,7 +18,7 @@ impl Plugin for WebviewMaterialPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(MaterialPlugin::<WebviewMaterial>::default())
             .add_message::<RenderTextureMessage>()
-            .add_systems(Update, send_render_textures);
+            .add_systems(Update, send_render_textures.in_set(SendRenderTexturesSet));
         load_internal_asset!(
             app,
             WEBVIEW_UTIL_SHADER_HANDLE,
@@ -34,8 +40,19 @@ pub struct WebviewMaterial {
 
 impl Material for WebviewMaterial {}
 
-fn send_render_textures(mut ew: MessageWriter<RenderTextureMessage>, browsers: NonSend<Browsers>) {
+fn send_render_textures(
+    mut ew: MessageWriter<RenderTextureMessage>,
+    browsers: NonSend<Browsers>,
+    mut diagnostics: Option<ResMut<CefTextureDiagnostics>>,
+) {
+    if let Some(ref mut diag) = diagnostics {
+        diag.total_buffer_bytes = 0;
+    }
     for texture in browsers.try_receive_textures() {
+        if let Some(ref mut diag) = diagnostics {
+            diag.last_transfer_time = Some(texture.created_at.elapsed());
+            diag.total_buffer_bytes += texture.buffer.len() as u64;
+        }
         ew.write(texture);
     }
 }

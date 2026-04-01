@@ -16,7 +16,7 @@ use bevy_remote::BrpSender;
 use raw_window_handle::HasRawWindowHandle;
 use serde::{Deserialize, Serialize};
 
-mod mesh;
+pub(crate) mod mesh;
 mod webview_sprite;
 
 pub mod prelude {
