@@ -1,27 +1,41 @@
+#[cfg(not(target_os = "windows"))]
 use crate::browser_process::BrpHandler;
+#[cfg(not(target_os = "windows"))]
 use crate::browser_process::ClientHandlerBuilder;
+#[cfg(not(target_os = "windows"))]
 use crate::browser_process::client_handler::{IpcEventRaw, JsEmitEventHandler};
 use crate::prelude::IntoString;
 use crate::prelude::*;
-use async_channel::{Sender, TryRecvError};
+#[cfg(not(target_os = "windows"))]
+use async_channel::Sender;
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
+#[cfg(not(target_os = "windows"))]
 use bevy_remote::BrpMessage;
 use cef::{
-    Browser, BrowserHost, BrowserSettings, CefString, Client, CompositionUnderline,
-    DictionaryValue, ImplBrowser, ImplBrowserHost, ImplDictionaryValue, ImplFrame, ImplListValue,
-    ImplProcessMessage, ImplRequestContext, MouseButtonType, ProcessId, Range, RequestContext,
-    RequestContextSettings, WindowInfo, browser_host_create_browser_sync, dictionary_value_create,
+    Browser, BrowserHost, BrowserSettings, CompositionUnderline, ImplBrowser, ImplBrowserHost,
+    ImplFrame, ImplListValue, ImplProcessMessage, MouseButtonType, ProcessId, Range, WindowInfo,
     process_message_create,
 };
+#[cfg(not(target_os = "windows"))]
+use cef::{
+    CefString, Client, DictionaryValue, ImplDictionaryValue, ImplRequestContext, RequestContext,
+    RequestContextSettings, browser_host_create_browser_sync, dictionary_value_create,
+};
 use cef_dll_sys::{cef_event_flags_t, cef_mouse_button_type_t};
+#[cfg(not(target_os = "windows"))]
 #[allow(deprecated)]
 use raw_window_handle::RawWindowHandle;
+#[cfg(not(target_os = "windows"))]
+use std::cell::Cell;
+#[cfg(not(target_os = "windows"))]
+use std::rc::Rc;
 
 pub(crate) mod devtool_render_handler;
 mod keyboard;
 
 use crate::browser_process::browsers::devtool_render_handler::DevToolRenderHandlerBuilder;
+#[cfg(not(target_os = "windows"))]
 use crate::browser_process::display_handler::{DisplayHandlerBuilder, SystemCursorIconSenderInner};
 pub use keyboard::*;
 
@@ -29,26 +43,19 @@ pub struct WebviewBrowser {
     pub client: Browser,
     pub host: BrowserHost,
     pub size: SharedViewSize,
+    #[cfg(not(target_os = "windows"))]
+    pub view_slot: SharedTexture,
+    #[cfg(not(target_os = "windows"))]
+    pub popup_slot: SharedTexture,
 }
 
+#[derive(Default)]
 pub struct Browsers {
     browsers: HashMap<Entity, WebviewBrowser>,
-    sender: TextureSender,
-    receiver: TextureReceiver,
-}
-
-impl Default for Browsers {
-    fn default() -> Self {
-        let (sender, receiver) = async_channel::unbounded::<RenderTextureMessage>();
-        Browsers {
-            browsers: HashMap::default(),
-            sender,
-            receiver,
-        }
-    }
 }
 
 impl Browsers {
+    #[cfg(not(target_os = "windows"))]
     #[allow(clippy::too_many_arguments)]
     pub fn create_browser(
         &mut self,
@@ -63,35 +70,25 @@ impl Browsers {
         _window_handle: Option<RawWindowHandle>,
     ) {
         let mut context = Self::request_context(requester);
-        #[cfg(not(target_os = "windows"))]
-        let size: SharedViewSize = std::rc::Rc::new(std::cell::Cell::new(webview_size));
-        #[cfg(target_os = "windows")]
-        let size: SharedViewSize = std::sync::Arc::new(std::sync::Mutex::new(webview_size));
+        let size: SharedViewSize = Rc::new(Cell::new(webview_size));
+        let view_slot: SharedTexture = Rc::new(Cell::new(None));
+        let popup_slot: SharedTexture = Rc::new(Cell::new(None));
         let browser = browser_host_create_browser_sync(
             Some(&WindowInfo {
                 windowless_rendering_enabled: true as _,
-                #[cfg(not(target_os = "windows"))]
                 external_begin_frame_enabled: true as _,
-                #[cfg(target_os = "windows")]
-                external_begin_frame_enabled: false as _,
                 #[cfg(target_os = "macos")]
                 parent_view: match _window_handle {
                     Some(RawWindowHandle::AppKit(handle)) => handle.ns_view.as_ptr(),
                     _ => std::ptr::null_mut(),
                 },
-                #[cfg(target_os = "windows")]
-                parent_window: match _window_handle {
-                    Some(RawWindowHandle::Win32(handle)) => {
-                        cef_dll_sys::HWND(handle.hwnd.get() as _)
-                    }
-                    _ => cef_dll_sys::HWND(std::ptr::null_mut()),
-                },
-                // shared_texture_enabled: true as _,
                 ..Default::default()
             }),
             Some(&mut self.client_handler(
                 webview,
                 size.clone(),
+                view_slot.clone(),
+                popup_slot.clone(),
                 ipc_event_sender,
                 brp_sender,
                 system_cursor_icon_sender,
@@ -110,6 +107,8 @@ impl Browsers {
             host,
             client: browser,
             size,
+            view_slot,
+            popup_slot,
         };
 
         self.browsers.insert(webview, webview_browser);
@@ -231,9 +230,14 @@ impl Browsers {
         }
     }
 
-    #[inline]
-    pub fn try_receive_texture(&self) -> core::result::Result<RenderTextureMessage, TryRecvError> {
-        self.receiver.try_recv()
+    /// Drains the latest texture from each webview's view and popup slots.
+    #[cfg(not(target_os = "windows"))]
+    pub fn try_receive_textures(&self) -> impl Iterator<Item = RenderTextureMessage> + '_ {
+        self.browsers.values().flat_map(|b| {
+            [b.view_slot.take(), b.popup_slot.take()]
+                .into_iter()
+                .flatten()
+        })
     }
 
     /// Shows the DevTools for the specified webview.
@@ -409,6 +413,7 @@ impl Browsers {
         }
     }
 
+    #[cfg(not(target_os = "windows"))]
     fn request_context(requester: Requester) -> Option<RequestContext> {
         let mut context = cef::request_context_create_context(
             Some(&RequestContextSettings::default()),
@@ -424,17 +429,22 @@ impl Browsers {
         context
     }
 
+    #[cfg(not(target_os = "windows"))]
+    #[allow(clippy::too_many_arguments)]
     fn client_handler(
         &self,
         webview: Entity,
         size: SharedViewSize,
+        view_slot: SharedTexture,
+        popup_slot: SharedTexture,
         ipc_event_sender: Sender<IpcEventRaw>,
         brp_sender: Sender<BrpMessage>,
         system_cursor_icon_sender: SystemCursorIconSenderInner,
     ) -> Client {
         ClientHandlerBuilder::new(RenderHandlerBuilder::build(
             webview,
-            self.sender.clone(),
+            view_slot,
+            popup_slot,
             size.clone(),
         ))
         .with_display_handler(DisplayHandlerBuilder::build(system_cursor_icon_sender))
@@ -459,6 +469,7 @@ impl Browsers {
             .and_then(|b| b.client.focused_frame().is_some().then_some(b))
     }
 
+    #[cfg(not(target_os = "windows"))]
     fn create_extra_info(scripts: &[String]) -> Option<DictionaryValue> {
         if scripts.is_empty() {
             return None;
