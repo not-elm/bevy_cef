@@ -40,10 +40,6 @@ use crate::browser_process::request_context_handler::RequestContextHandlerBuilde
 use crate::prelude::{INIT_SCRIPT_KEY, IntoString, PROCESS_MESSAGE_HOST_EMIT};
 use crate::util::{HOST_CEF, SCHEME_CEF};
 
-// ---------------------------------------------------------------------------
-// BrowsersCefSide
-// ---------------------------------------------------------------------------
-
 /// CEF-thread counterpart of `Browsers`.
 ///
 /// This struct is intentionally `!Send` because it holds raw CEF browser
@@ -490,10 +486,6 @@ impl BrowsersCefSide {
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// Thread-local storage + public API
-// ---------------------------------------------------------------------------
 
 thread_local! {
     static CEF_BROWSERS: RefCell<Option<BrowsersCefSide>> = const { RefCell::new(None) };

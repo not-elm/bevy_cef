@@ -260,10 +260,6 @@ fn apply_request_close_devtool(trigger: On<RequestCloseDevtool>, browsers: NonSe
     browsers.close_devtools(&trigger.webview);
 }
 
-// ---------------------------------------------------------------------------
-// Windows: BrowsersProxy variants
-// ---------------------------------------------------------------------------
-
 #[cfg(target_os = "windows")]
 fn win_commands_pending(proxy: Res<BrowsersProxy>) -> bool {
     !proxy.is_empty()

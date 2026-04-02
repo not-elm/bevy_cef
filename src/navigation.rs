@@ -77,10 +77,6 @@ fn apply_request_reload(trigger: On<RequestReload>, browsers: NonSend<Browsers>)
     browsers.reload_webview(&trigger.webview);
 }
 
-// ---------------------------------------------------------------------------
-// Windows: BrowsersProxy variants
-// ---------------------------------------------------------------------------
-
 #[cfg(target_os = "windows")]
 fn apply_request_go_back_win(trigger: On<RequestGoBack>, proxy: Res<BrowsersProxy>) {
     proxy.go_back(&trigger.webview);

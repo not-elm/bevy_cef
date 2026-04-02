@@ -140,10 +140,6 @@ fn on_mouse_wheel(
     }
 }
 
-// ---------------------------------------------------------------------------
-// Windows: BrowsersProxy variants
-// ---------------------------------------------------------------------------
-
 #[cfg(target_os = "windows")]
 fn setup_observers_win(
     mut commands: Commands,

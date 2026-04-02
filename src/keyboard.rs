@@ -155,10 +155,6 @@ fn ime_event(
     }
 }
 
-// ---------------------------------------------------------------------------
-// Windows: BrowsersProxy variants
-// ---------------------------------------------------------------------------
-
 #[cfg(target_os = "windows")]
 fn send_key_event_win(
     mut er: MessageReader<KeyboardInput>,

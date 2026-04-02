@@ -90,10 +90,6 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// Prerequisites
-// ---------------------------------------------------------------------------
-
 /// Verify that the `.app` bundle, CEF framework, and helper binary exist.
 fn verify_prerequisites(args: &Args) -> Result<()> {
     ensure!(
@@ -118,10 +114,6 @@ fn verify_prerequisites(args: &Args) -> Result<()> {
     );
     Ok(())
 }
-
-// ---------------------------------------------------------------------------
-// Architecture check
-// ---------------------------------------------------------------------------
 
 /// Run `lipo -archs` and return the set of architectures.
 fn lipo_archs(path: &Path) -> Result<HashSet<String>> {
@@ -183,10 +175,6 @@ fn check_architectures(args: &Args, bin_name: &str) -> Result<()> {
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// bin-name resolution
-// ---------------------------------------------------------------------------
-
 /// Resolve the binary name: use `--bin-name` if provided, otherwise read
 /// `CFBundleExecutable` from the app's `Info.plist`.
 fn resolve_bin_name(args: &Args) -> Result<String> {
@@ -202,10 +190,6 @@ fn resolve_bin_name(args: &Args) -> Result<String> {
         .map(String::from)
         .context("CFBundleExecutable not found in Info.plist; use --bin-name")
 }
-
-// ---------------------------------------------------------------------------
-// Info.plist merge
-// ---------------------------------------------------------------------------
 
 /// Read a plist file as a `plist::Dictionary`.
 fn read_plist_dict(path: &Path) -> Result<plist::Dictionary> {
@@ -292,10 +276,6 @@ fn version_less_than(a: &str, b: &str) -> bool {
     parse(a) < parse(b)
 }
 
-// ---------------------------------------------------------------------------
-// Clean old CEF files
-// ---------------------------------------------------------------------------
-
 /// Remove previously bundled CEF framework and helper apps to prevent stale
 /// files from lingering after a CEF version update.
 fn clean_old_cef_files(args: &Args, bin_name: &str) -> Result<()> {
@@ -325,10 +305,6 @@ fn clean_old_cef_files(args: &Args, bin_name: &str) -> Result<()> {
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// CEF framework copy
-// ---------------------------------------------------------------------------
-
 /// Copy the CEF framework into `Contents/Frameworks/`.
 fn copy_cef_framework(args: &Args) -> Result<()> {
     let dest = args.app.join("Contents/Frameworks");
@@ -347,10 +323,6 @@ fn copy_cef_framework(args: &Args) -> Result<()> {
     println!("Copied CEF framework to {}", dest.display());
     Ok(())
 }
-
-// ---------------------------------------------------------------------------
-// Helper apps
-// ---------------------------------------------------------------------------
 
 /// Create the four helper app bundles.
 fn create_helper_apps(args: &Args, bin_name: &str) -> Result<()> {
@@ -411,10 +383,6 @@ fn build_helper_plist(name: &str, bundle_id: &str) -> plist::Dictionary {
     dict
 }
 
-// ---------------------------------------------------------------------------
-// xattr
-// ---------------------------------------------------------------------------
-
 /// Strip extended attributes from the entire app bundle.
 fn strip_xattrs(args: &Args) -> Result<()> {
     run_cmd(
@@ -425,10 +393,6 @@ fn strip_xattrs(args: &Args) -> Result<()> {
     println!("Stripped extended attributes");
     Ok(())
 }
-
-// ---------------------------------------------------------------------------
-// Codesign
-// ---------------------------------------------------------------------------
 
 /// Codesign the entire bundle in inside-out order, then verify.
 fn codesign_bundle(args: &Args, bin_name: &str) -> Result<()> {
@@ -491,10 +455,6 @@ fn codesign(identity: &str, path: &Path) -> Result<()> {
         &format!("codesign {}", path.display()),
     )
 }
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 /// Run a command, checking for success.
 fn run_cmd(program: &str, args: &[&str], description: &str) -> Result<()> {
