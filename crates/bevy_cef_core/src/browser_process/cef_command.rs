@@ -130,8 +130,6 @@ pub enum CefCommand {
     /// Commit IME text.
     SetImeCommitText { text: String },
 
-    /// Send external begin frame to all browsers.
-    SendExternalBeginFrame,
 }
 
 /// A `Send + Sync` Bevy [`Resource`] that enqueues [`CefCommand`]s for the CEF
@@ -346,9 +344,4 @@ impl BrowsersProxy {
         });
     }
 
-    // -- Frame ----------------------------------------------------------------
-
-    pub fn send_external_begin_frame(&self) {
-        let _ = self.tx.send_blocking(CefCommand::SendExternalBeginFrame);
-    }
 }

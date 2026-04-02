@@ -147,7 +147,6 @@ impl BrowsersCefSide {
                 self.ime_finish_composition(keep_selection);
             }
             CefCommand::SetImeCommitText { text } => self.set_ime_commit_text(&text),
-            CefCommand::SendExternalBeginFrame => self.send_external_begin_frame(),
         }
     }
 
@@ -447,14 +446,6 @@ impl BrowsersCefSide {
             browser
                 .host
                 .ime_commit_text(Some(&text.into()), Some(&replacement_range), 0);
-        }
-    }
-
-    // -- external begin frame -----------------------------------------------
-
-    fn send_external_begin_frame(&self) {
-        for browser in self.browsers.values() {
-            browser.host.send_external_begin_frame();
         }
     }
 
