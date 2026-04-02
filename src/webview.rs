@@ -86,7 +86,7 @@ pub struct RequestCloseDevtool {
 ///
 /// App::new()
 ///     .add_plugins(CefPlugin::default())
-///     .insert_resource(BeginFrameInterval(Duration::from_millis(1000 / 60)));
+///     .insert_resource(BeginFrameInterval(core::time::Duration::from_millis(1000 / 60)));
 /// ```
 #[derive(Resource)]
 pub struct BeginFrameInterval(pub Duration);
