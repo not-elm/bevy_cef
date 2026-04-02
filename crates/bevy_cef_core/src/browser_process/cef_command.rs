@@ -129,7 +129,6 @@ pub enum CefCommand {
 
     /// Commit IME text.
     SetImeCommitText { text: String },
-
 }
 
 /// A `Send + Sync` Bevy [`Resource`] that enqueues [`CefCommand`]s for the CEF
@@ -343,5 +342,4 @@ impl BrowsersProxy {
             text: text.to_owned(),
         });
     }
-
 }
