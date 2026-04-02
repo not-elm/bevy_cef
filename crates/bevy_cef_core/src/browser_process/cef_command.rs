@@ -157,8 +157,6 @@ impl BrowsersProxy {
         &self.tx
     }
 
-    // -- Browser lifecycle ----------------------------------------------------
-
     #[allow(clippy::too_many_arguments, deprecated)]
     pub fn create_browser(
         &self,
@@ -189,8 +187,6 @@ impl BrowsersProxy {
         let _ = self.tx.send_blocking(CefCommand::Close { entity: *entity });
     }
 
-    // -- Navigation -----------------------------------------------------------
-
     pub fn navigate(&self, entity: &Entity, url: &str) {
         let _ = self.tx.send_blocking(CefCommand::Navigate {
             entity: *entity,
@@ -216,16 +212,12 @@ impl BrowsersProxy {
             .send_blocking(CefCommand::ReloadWebview { entity: *entity });
     }
 
-    // -- Resize ---------------------------------------------------------------
-
     pub fn resize(&self, entity: &Entity, size: Vec2) {
         let _ = self.tx.send_blocking(CefCommand::Resize {
             entity: *entity,
             size,
         });
     }
-
-    // -- Input forwarding -----------------------------------------------------
 
     pub fn send_mouse_move(
         &self,
@@ -272,8 +264,6 @@ impl BrowsersProxy {
         });
     }
 
-    // -- IPC ------------------------------------------------------------------
-
     pub fn emit_event(&self, webview: &Entity, id: impl Into<String>, event: &serde_json::Value) {
         let _ = self.tx.send_blocking(CefCommand::EmitEvent {
             webview: *webview,
@@ -281,8 +271,6 @@ impl BrowsersProxy {
             event: event.clone(),
         });
     }
-
-    // -- DevTools -------------------------------------------------------------
 
     pub fn show_devtool(&self, webview: &Entity) {
         let _ = self
@@ -295,8 +283,6 @@ impl BrowsersProxy {
             .tx
             .send_blocking(CefCommand::CloseDevTools { webview: *webview });
     }
-
-    // -- Settings -------------------------------------------------------------
 
     pub fn set_zoom_level(&self, webview: &Entity, zoom_level: f64) {
         let _ = self.tx.send_blocking(CefCommand::SetZoomLevel {
@@ -312,13 +298,9 @@ impl BrowsersProxy {
         });
     }
 
-    // -- Reload all -----------------------------------------------------------
-
     pub fn reload(&self) {
         let _ = self.tx.send_blocking(CefCommand::Reload);
     }
-
-    // -- IME ------------------------------------------------------------------
 
     pub fn set_ime_composition(&self, text: &str, cursor_utf16: Option<u32>) {
         let _ = self.tx.send_blocking(CefCommand::SetImeComposition {

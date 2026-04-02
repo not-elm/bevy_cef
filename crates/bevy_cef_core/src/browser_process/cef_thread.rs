@@ -73,8 +73,6 @@ impl BrowsersCefSide {
         }
     }
 
-    // -- command dispatch ---------------------------------------------------
-
     fn execute(&mut self, cmd: CefCommand) {
         match cmd {
             CefCommand::CreateBrowser {
@@ -150,8 +148,6 @@ impl BrowsersCefSide {
         }
     }
 
-    // -- browser lifecycle --------------------------------------------------
-
     #[allow(clippy::too_many_arguments)]
     fn create_browser(
         &mut self,
@@ -212,8 +208,6 @@ impl BrowsersCefSide {
         }
     }
 
-    // -- navigation ---------------------------------------------------------
-
     fn navigate(&self, entity: &Entity, url: &str) {
         if let Some(browser) = self.browsers.get(entity)
             && let Some(frame) = browser.client.main_frame()
@@ -247,16 +241,12 @@ impl BrowsersCefSide {
         }
     }
 
-    // -- resize -------------------------------------------------------------
-
     fn resize(&self, entity: &Entity, size: Vec2) {
         if let Some(browser) = self.browsers.get(entity) {
             *browser.size.lock().unwrap() = size;
             browser.host.was_resized();
         }
     }
-
-    // -- input forwarding ---------------------------------------------------
 
     fn send_mouse_move(
         &self,
@@ -328,8 +318,6 @@ impl BrowsersCefSide {
         }
     }
 
-    // -- IPC ----------------------------------------------------------------
-
     fn emit_event(&self, webview: &Entity, id: impl Into<String>, event: &serde_json::Value) {
         if let Some(mut process_message) =
             process_message_create(Some(&PROCESS_MESSAGE_HOST_EMIT.into()))
@@ -345,8 +333,6 @@ impl BrowsersCefSide {
             );
         };
     }
-
-    // -- DevTools -----------------------------------------------------------
 
     fn show_devtool(&self, webview: &Entity) {
         let Some(browser) = self.browsers.get(webview) else {
@@ -366,8 +352,6 @@ impl BrowsersCefSide {
         }
     }
 
-    // -- settings -----------------------------------------------------------
-
     fn set_zoom_level(&self, webview: &Entity, zoom_level: f64) {
         if let Some(browser) = self.browsers.get(webview) {
             browser.host.set_zoom_level(zoom_level);
@@ -380,8 +364,6 @@ impl BrowsersCefSide {
         }
     }
 
-    // -- reload all ---------------------------------------------------------
-
     fn reload(&self) {
         for browser in self.browsers.values() {
             if let Some(frame) = browser.client.main_frame() {
@@ -391,8 +373,6 @@ impl BrowsersCefSide {
             }
         }
     }
-
-    // -- IME ----------------------------------------------------------------
 
     fn set_ime_composition(&self, text: &str, cursor_utf16: Option<u32>) {
         let underlines = make_underlines_for(text, cursor_utf16.map(|i| (i, i)));
@@ -448,8 +428,6 @@ impl BrowsersCefSide {
                 .ime_commit_text(Some(&text.into()), Some(&replacement_range), 0);
         }
     }
-
-    // -- helpers ------------------------------------------------------------
 
     fn request_context(requester: Requester) -> Option<RequestContext> {
         let mut context = cef::request_context_create_context(
