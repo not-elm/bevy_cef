@@ -13,6 +13,9 @@ use std::os::raw::c_int;
 /// synchronization overhead and naturally provides "latest frame wins" semantics.
 pub type SharedTexture = std::rc::Rc<Cell<Option<RenderTextureMessage>>>;
 
+#[cfg(target_os = "windows")]
+pub type TextureSender = async_channel::Sender<RenderTextureMessage>;
+
 /// The texture structure passed from [`CefRenderHandler::OnPaint`](https://cef-builds.spotifycdn.com/docs/106.1/classCefRenderHandler.html#a6547d5c9dd472e6b84706dc81d3f1741).
 #[derive(Debug, Clone, PartialEq, Message)]
 pub struct RenderTextureMessage {
@@ -36,7 +39,10 @@ pub enum RenderPaintElementType {
     Popup,
 }
 
-pub type SharedViewSize = std::rc::Rc<Cell<Vec2>>;
+#[cfg(not(target_os = "windows"))]
+pub type SharedViewSize = std::rc::Rc<std::cell::Cell<Vec2>>;
+#[cfg(target_os = "windows")]
+pub type SharedViewSize = std::sync::Arc<std::sync::Mutex<Vec2>>;
 
 /// ## Reference
 ///
@@ -44,12 +50,17 @@ pub type SharedViewSize = std::rc::Rc<Cell<Vec2>>;
 pub struct RenderHandlerBuilder {
     object: *mut RcImpl<sys::cef_render_handler_t, Self>,
     webview: Entity,
+    #[cfg(not(target_os = "windows"))]
     view_slot: SharedTexture,
+    #[cfg(not(target_os = "windows"))]
     popup_slot: SharedTexture,
+    #[cfg(target_os = "windows")]
+    texture_sender: TextureSender,
     size: SharedViewSize,
 }
 
 impl RenderHandlerBuilder {
+    #[cfg(not(target_os = "windows"))]
     pub fn build(
         webview: Entity,
         view_slot: SharedTexture,
@@ -61,6 +72,20 @@ impl RenderHandlerBuilder {
             webview,
             view_slot,
             popup_slot,
+            size,
+        })
+    }
+
+    #[cfg(target_os = "windows")]
+    pub fn build(
+        webview: Entity,
+        texture_sender: TextureSender,
+        size: SharedViewSize,
+    ) -> RenderHandler {
+        RenderHandler::new(Self {
+            object: std::ptr::null_mut(),
+            webview,
+            texture_sender,
             size,
         })
     }
@@ -91,8 +116,12 @@ impl Clone for RenderHandlerBuilder {
         Self {
             object,
             webview: self.webview,
+            #[cfg(not(target_os = "windows"))]
             view_slot: self.view_slot.clone(),
+            #[cfg(not(target_os = "windows"))]
             popup_slot: self.popup_slot.clone(),
+            #[cfg(target_os = "windows")]
+            texture_sender: self.texture_sender.clone(),
             size: self.size.clone(),
         }
     }
@@ -101,7 +130,10 @@ impl Clone for RenderHandlerBuilder {
 impl ImplRenderHandler for RenderHandlerBuilder {
     fn view_rect(&self, _browser: Option<&mut Browser>, rect: Option<&mut cef::Rect>) {
         if let Some(rect) = rect {
+            #[cfg(not(target_os = "windows"))]
             let size = self.size.get();
+            #[cfg(target_os = "windows")]
+            let size = *self.size.lock().unwrap();
             rect.width = size.x as _;
             rect.height = size.y as _;
         }
@@ -130,11 +162,20 @@ impl ImplRenderHandler for RenderHandlerBuilder {
                 std::slice::from_raw_parts(buffer, (width * height * 4) as usize).to_vec()
             },
         };
-        let slot = match ty {
-            RenderPaintElementType::Popup => &self.popup_slot,
-            RenderPaintElementType::View => &self.view_slot,
-        };
-        slot.set(Some(texture));
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            let slot = match ty {
+                RenderPaintElementType::Popup => &self.popup_slot,
+                RenderPaintElementType::View => &self.view_slot,
+            };
+            slot.set(Some(texture));
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            let _ = self.texture_sender.send_blocking(texture);
+        }
     }
 
     #[inline]
