@@ -3,7 +3,6 @@
 //! Mirrors the `DisplayHandlerBuilder` pattern (`display_handler.rs`).
 
 use async_channel::Sender;
-use bevy::log::info;
 use bevy::prelude::Entity;
 use cef::rc::{Rc, RcImpl};
 use cef::{Browser, DraggableRegion, Frame, ImplDragHandler, WrapDragHandler, sys};
@@ -67,15 +66,6 @@ impl ImplDragHandler for DragHandlerBuilder {
         regions: Option<&[DraggableRegion]>,
     ) {
         let regions_vec = regions.unwrap_or(&[]).to_vec();
-        info!(
-            "[OSR SPIKE] on_draggable_regions_changed fired: entity={:?}, count={}, regions={:?}",
-            self.webview,
-            regions_vec.len(),
-            regions_vec
-                .iter()
-                .map(|r| (r.bounds.x, r.bounds.y, r.bounds.width, r.bounds.height, r.draggable))
-                .collect::<Vec<_>>()
-        );
         let _ = self.sender.send_blocking((self.webview, regions_vec));
     }
 
