@@ -15,8 +15,17 @@ impl Plugin for DragPlugin {
         app.insert_resource(DraggableRegionSender(tx))
             .insert_resource(DraggableRegionReceiver(rx))
             .init_resource::<DragState>()
+            .init_resource::<DragEndPending>()
             .add_systems(PreUpdate, receive_drag_regions)
-            .add_systems(Update, (attach_drag_observers, drag_tracking_system));
+            .add_systems(
+                Update,
+                (
+                    attach_drag_observers,
+                    drag_tracking_system,
+                    restore_hover_after_drag,
+                )
+                    .chain(),
+            );
     }
 }
 
@@ -44,6 +53,13 @@ impl PixelRect {
 pub(crate) struct DraggableRegions {
     pub(crate) drag_rects: Vec<PixelRect>,    // -webkit-app-region: drag
     pub(crate) no_drag_rects: Vec<PixelRect>, // -webkit-app-region: no-drag (holes)
+}
+
+/// Tracks a webview that just finished a drag, waiting one frame to send
+/// mouse_leave=false with the correct (post-drag) GlobalTransform.
+#[derive(Resource, Default)]
+pub(crate) struct DragEndPending {
+    pub(crate) webview: Option<Entity>,
 }
 
 /// Global drag routing state — single source of truth for "is drag active?"
@@ -214,6 +230,7 @@ fn drag_tracking_system(
     if !mouse_button.pressed(MouseButton::Left) {
         *drag_state = DragState::Idle;
         commands.entity(webview).remove::<DraggingState>();
+        commands.insert_resource(DragEndPending { webview: Some(webview) });
         return;
     }
 
@@ -225,6 +242,27 @@ fn drag_tracking_system(
     let Some(t) = ray.intersect_plane(ds.plane_origin, InfinitePlane3d::new(ds.plane_normal)) else { return };
     let current_hit = ray.origin + ray.direction * t;
     tf.translation = ds.start_translation + (current_hit - ds.start_hit);
+}
+
+/// Runs one frame after drag end to send mouse_leave=false to CEF with the
+/// restored (post-drag) cursor-to-texture mapping.
+fn restore_hover_after_drag(
+    mut pending: ResMut<DragEndPending>,
+    windows: Query<&Window>,
+    pointer: WebviewPointer,
+    #[cfg(not(target_os = "windows"))]
+    browsers: NonSend<bevy_cef_core::prelude::Browsers>,
+    #[cfg(target_os = "windows")]
+    browsers: Res<bevy_cef_core::prelude::BrowsersProxy>,
+) {
+    let Some(entity) = pending.webview.take() else { return };
+    let Some(cursor) = windows.iter().find_map(|w| w.cursor_position()) else { return };
+    let Some((pos, _cam)) = pointer.pointer_pos_raw(entity, cursor) else { return };
+
+    #[cfg(not(target_os = "windows"))]
+    browsers.send_mouse_move(&entity, std::iter::empty::<&MouseButton>(), pos, false);
+    #[cfg(target_os = "windows")]
+    browsers.send_mouse_move(&entity, &[], pos, false);
 }
 
 #[cfg(test)]
