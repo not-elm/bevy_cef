@@ -16,7 +16,7 @@ impl Plugin for DragPlugin {
             .insert_resource(DraggableRegionReceiver(rx))
             .init_resource::<DragState>()
             .add_systems(PreUpdate, receive_drag_regions)
-            .add_systems(Update, attach_drag_observers);
+            .add_systems(Update, (attach_drag_observers, drag_tracking_system));
     }
 }
 
@@ -195,6 +195,36 @@ fn attach_drag_observers(
     for entity in webviews.iter() {
         commands.entity(entity).observe(on_drag_press);
     }
+}
+
+/// Updates the Transform of the dragged webview every frame by raycasting the current
+/// cursor position to the snapshotted plane, then applying start_translation + delta.
+/// Also detects mouse button release and ends the drag.
+fn drag_tracking_system(
+    mut drag_state: ResMut<DragState>,
+    mouse_button: Res<ButtonInput<MouseButton>>,
+    mut commands: Commands,
+    windows: Query<&Window>,
+    mut webviews: Query<(&mut Transform, &DraggingState)>,
+    cameras_q: Query<(&Camera, &GlobalTransform)>,
+) {
+    let Some(webview) = drag_state.dragging_entity() else { return };
+
+    // Release detection: if mouse button is no longer pressed, end the drag.
+    if !mouse_button.pressed(MouseButton::Left) {
+        *drag_state = DragState::Idle;
+        commands.entity(webview).remove::<DraggingState>();
+        return;
+    }
+
+    // Position update via raycast to snapshotted plane.
+    let Some(cursor) = windows.iter().find_map(|w| w.cursor_position()) else { return };
+    let Ok((mut tf, ds)) = webviews.get_mut(webview) else { return };
+    let Ok((cam, cam_gtf)) = cameras_q.get(ds.camera) else { return };
+    let Ok(ray) = cam.viewport_to_world(cam_gtf, cursor) else { return };
+    let Some(t) = ray.intersect_plane(ds.plane_origin, InfinitePlane3d::new(ds.plane_normal)) else { return };
+    let current_hit = ray.origin + ray.direction * t;
+    tf.translation = ds.start_translation + (current_hit - ds.start_hit);
 }
 
 #[cfg(test)]
