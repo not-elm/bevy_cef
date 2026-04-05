@@ -136,6 +136,10 @@ fn on_drag_press(
     regions_q: Query<&DraggableRegions>,
     transforms_q: Query<(&GlobalTransform, &Transform), With<WebviewSource>>,
     cameras_q: Query<(&Camera, &GlobalTransform)>,
+    #[cfg(not(target_os = "windows"))]
+    browsers: NonSend<bevy_cef_core::prelude::Browsers>,
+    #[cfg(target_os = "windows")]
+    browsers: Res<bevy_cef_core::prelude::BrowsersProxy>,
 ) {
     // Ignore if already dragging.
     if drag_state.is_dragging() {
@@ -168,6 +172,12 @@ fn on_drag_press(
         plane_normal,
         plane_origin,
     });
+
+    // Clear CEF hover state — the webview is being dragged, not hovered.
+    #[cfg(not(target_os = "windows"))]
+    browsers.send_mouse_move(&webview, std::iter::empty::<&MouseButton>(), pixel_pos, true);
+    #[cfg(target_os = "windows")]
+    browsers.send_mouse_move(&webview, &[], pixel_pos, true);
 }
 
 /// Attach drag-press observer to newly-created mesh webviews with a Transform.
