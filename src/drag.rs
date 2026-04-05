@@ -12,7 +12,8 @@ impl Plugin for DragPlugin {
         let (tx, rx) = async_channel::unbounded();
         app.insert_resource(DraggableRegionSender(tx))
             .insert_resource(DraggableRegionReceiver(rx))
-            .init_resource::<DragState>();
+            .init_resource::<DragState>()
+            .add_systems(PreUpdate, receive_drag_regions);
     }
 }
 
@@ -95,6 +96,16 @@ pub(crate) fn convert_draggable_regions(regions: &[DraggableRegion]) -> Draggabl
     DraggableRegions {
         drag_rects,
         no_drag_rects,
+    }
+}
+
+fn receive_drag_regions(
+    mut commands: Commands,
+    receiver: Res<DraggableRegionReceiver>,
+) {
+    while let Ok((entity, regions)) = receiver.0.try_recv() {
+        let regions_component = convert_draggable_regions(&regions);
+        commands.entity(entity).try_insert(regions_component);
     }
 }
 
