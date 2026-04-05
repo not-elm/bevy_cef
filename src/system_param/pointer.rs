@@ -57,22 +57,27 @@ impl<C: Component> WebviewPointer<'_, '_, C> {
         let (min, max) = self.aabb.calculate_local(webview);
         let aabb_size = Vec2::new(max.x - min.x, max.y - min.y);
         let (webview_gtf, webview_size) = self.webviews.get(webview).ok()?;
-        self.cameras.iter().find_map(|(cam_entity, camera, camera_gtf)| {
-            pointer_to_webview_uv(
-                viewport_pos,
-                camera,
-                camera_gtf,
-                webview_gtf,
-                aabb_size,
-                webview_size.0,
-            )
-            .map(|pos| (pos, cam_entity))
-        })
+        self.cameras
+            .iter()
+            .find_map(|(cam_entity, camera, camera_gtf)| {
+                pointer_to_webview_uv(
+                    viewport_pos,
+                    camera,
+                    camera_gtf,
+                    webview_gtf,
+                    aabb_size,
+                    webview_size.0,
+                )
+                .map(|pos| (pos, cam_entity))
+            })
     }
 
     /// Like [`Self::pos_from_trigger`], but skips transparency check.
     /// Returns (webview, pixel_pos, camera_entity).
-    pub fn pos_from_trigger_raw<P>(&self, trigger: &On<Pointer<P>>) -> Option<(Entity, Vec2, Entity)>
+    pub fn pos_from_trigger_raw<P>(
+        &self,
+        trigger: &On<Pointer<P>>,
+    ) -> Option<(Entity, Vec2, Entity)>
     where
         P: Clone + Reflect + Debug,
     {

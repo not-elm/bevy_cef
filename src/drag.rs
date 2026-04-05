@@ -1,11 +1,11 @@
 //! Drag plugin: provides the async_channel plumbing that delivers
 //! CEF `OnDraggableRegionsChanged` callbacks to Bevy ECS.
 
+use crate::prelude::WebviewSource;
+use crate::system_param::pointer::WebviewPointer;
 use async_channel::Receiver;
 use bevy::prelude::*;
 use bevy_cef_core::prelude::{DraggableRegion, DraggableRegionSenderInner};
-use crate::prelude::WebviewSource;
-use crate::system_param::pointer::WebviewPointer;
 
 pub struct DragPlugin;
 
@@ -51,7 +51,7 @@ impl PixelRect {
 /// Per-entity cached drag regions, parsed from CEF OnDraggableRegionsChanged.
 #[derive(Component, Debug, Default, Clone)]
 pub(crate) struct DraggableRegions {
-    pub(crate) drag_rects: Vec<PixelRect>,    // -webkit-app-region: drag
+    pub(crate) drag_rects: Vec<PixelRect>, // -webkit-app-region: drag
     pub(crate) no_drag_rects: Vec<PixelRect>, // -webkit-app-region: no-drag (holes)
 }
 
@@ -67,7 +67,9 @@ pub(crate) struct DragEndPending {
 pub(crate) enum DragState {
     #[default]
     Idle,
-    Dragging { webview: Entity },
+    Dragging {
+        webview: Entity,
+    },
 }
 
 impl DragState {
@@ -118,10 +120,7 @@ pub(crate) fn convert_draggable_regions(regions: &[DraggableRegion]) -> Draggabl
     }
 }
 
-fn receive_drag_regions(
-    mut commands: Commands,
-    receiver: Res<DraggableRegionReceiver>,
-) {
+fn receive_drag_regions(mut commands: Commands, receiver: Res<DraggableRegionReceiver>) {
     while let Ok((entity, regions)) = receiver.0.try_recv() {
         let regions_component = convert_draggable_regions(&regions);
         commands.entity(entity).try_insert(regions_component);
@@ -152,32 +151,42 @@ fn on_drag_press(
     regions_q: Query<&DraggableRegions>,
     transforms_q: Query<(&GlobalTransform, &Transform), With<WebviewSource>>,
     cameras_q: Query<(&Camera, &GlobalTransform)>,
-    #[cfg(not(target_os = "windows"))]
-    browsers: NonSend<bevy_cef_core::prelude::Browsers>,
-    #[cfg(target_os = "windows")]
-    browsers: Res<bevy_cef_core::prelude::BrowsersProxy>,
+    #[cfg(not(target_os = "windows"))] browsers: NonSend<bevy_cef_core::prelude::Browsers>,
+    #[cfg(target_os = "windows")] browsers: Res<bevy_cef_core::prelude::BrowsersProxy>,
 ) {
     // Ignore if already dragging.
     if drag_state.is_dragging() {
         return;
     }
 
-    let Some((webview, pixel_pos, camera_entity)) = pointer.pos_from_trigger_raw(&trigger) else { return };
-    let Ok(regions) = regions_q.get(webview) else { return };
+    let Some((webview, pixel_pos, camera_entity)) = pointer.pos_from_trigger_raw(&trigger) else {
+        return;
+    };
+    let Ok(regions) = regions_q.get(webview) else {
+        return;
+    };
 
     if !is_draggable(&regions.drag_rects, &regions.no_drag_rects, pixel_pos) {
         return;
     }
 
     // Hit — start drag. Use the camera that produced the hit for the plane snapshot.
-    let Ok((webview_gtf, webview_tf)) = transforms_q.get(webview) else { return };
-    let Ok((cam, cam_gtf)) = cameras_q.get(camera_entity) else { return };
+    let Ok((webview_gtf, webview_tf)) = transforms_q.get(webview) else {
+        return;
+    };
+    let Ok((cam, cam_gtf)) = cameras_q.get(camera_entity) else {
+        return;
+    };
 
     let viewport_pos = trigger.pointer_location.position;
-    let Ok(ray) = cam.viewport_to_world(cam_gtf, viewport_pos) else { return };
+    let Ok(ray) = cam.viewport_to_world(cam_gtf, viewport_pos) else {
+        return;
+    };
     let plane_origin = webview_gtf.translation();
     let plane_normal = webview_gtf.forward();
-    let Some(t) = ray.intersect_plane(plane_origin, InfinitePlane3d::new(plane_normal)) else { return };
+    let Some(t) = ray.intersect_plane(plane_origin, InfinitePlane3d::new(plane_normal)) else {
+        return;
+    };
     let start_hit = ray.origin + ray.direction * t;
 
     *drag_state = DragState::Dragging { webview };
@@ -191,7 +200,12 @@ fn on_drag_press(
 
     // Clear CEF hover state — the webview is being dragged, not hovered.
     #[cfg(not(target_os = "windows"))]
-    browsers.send_mouse_move(&webview, std::iter::empty::<&MouseButton>(), pixel_pos, true);
+    browsers.send_mouse_move(
+        &webview,
+        std::iter::empty::<&MouseButton>(),
+        pixel_pos,
+        true,
+    );
     #[cfg(target_os = "windows")]
     browsers.send_mouse_move(&webview, &[], pixel_pos, true);
 }
@@ -224,22 +238,37 @@ fn drag_tracking_system(
     mut webviews: Query<(&mut Transform, &DraggingState)>,
     cameras_q: Query<(&Camera, &GlobalTransform)>,
 ) {
-    let Some(webview) = drag_state.dragging_entity() else { return };
+    let Some(webview) = drag_state.dragging_entity() else {
+        return;
+    };
 
     // Release detection: if mouse button is no longer pressed, end the drag.
     if !mouse_button.pressed(MouseButton::Left) {
         *drag_state = DragState::Idle;
         commands.entity(webview).remove::<DraggingState>();
-        commands.insert_resource(DragEndPending { webview: Some(webview) });
+        commands.insert_resource(DragEndPending {
+            webview: Some(webview),
+        });
         return;
     }
 
     // Position update via raycast to snapshotted plane.
-    let Some(cursor) = windows.iter().find_map(|w| w.cursor_position()) else { return };
-    let Ok((mut tf, ds)) = webviews.get_mut(webview) else { return };
-    let Ok((cam, cam_gtf)) = cameras_q.get(ds.camera) else { return };
-    let Ok(ray) = cam.viewport_to_world(cam_gtf, cursor) else { return };
-    let Some(t) = ray.intersect_plane(ds.plane_origin, InfinitePlane3d::new(ds.plane_normal)) else { return };
+    let Some(cursor) = windows.iter().find_map(|w| w.cursor_position()) else {
+        return;
+    };
+    let Ok((mut tf, ds)) = webviews.get_mut(webview) else {
+        return;
+    };
+    let Ok((cam, cam_gtf)) = cameras_q.get(ds.camera) else {
+        return;
+    };
+    let Ok(ray) = cam.viewport_to_world(cam_gtf, cursor) else {
+        return;
+    };
+    let Some(t) = ray.intersect_plane(ds.plane_origin, InfinitePlane3d::new(ds.plane_normal))
+    else {
+        return;
+    };
     let current_hit = ray.origin + ray.direction * t;
     tf.translation = ds.start_translation + (current_hit - ds.start_hit);
 }
@@ -250,14 +279,18 @@ fn restore_hover_after_drag(
     mut pending: ResMut<DragEndPending>,
     windows: Query<&Window>,
     pointer: WebviewPointer,
-    #[cfg(not(target_os = "windows"))]
-    browsers: NonSend<bevy_cef_core::prelude::Browsers>,
-    #[cfg(target_os = "windows")]
-    browsers: Res<bevy_cef_core::prelude::BrowsersProxy>,
+    #[cfg(not(target_os = "windows"))] browsers: NonSend<bevy_cef_core::prelude::Browsers>,
+    #[cfg(target_os = "windows")] browsers: Res<bevy_cef_core::prelude::BrowsersProxy>,
 ) {
-    let Some(entity) = pending.webview.take() else { return };
-    let Some(cursor) = windows.iter().find_map(|w| w.cursor_position()) else { return };
-    let Some((pos, _cam)) = pointer.pointer_pos_raw(entity, cursor) else { return };
+    let Some(entity) = pending.webview.take() else {
+        return;
+    };
+    let Some(cursor) = windows.iter().find_map(|w| w.cursor_position()) else {
+        return;
+    };
+    let Some((pos, _cam)) = pointer.pointer_pos_raw(entity, cursor) else {
+        return;
+    };
 
     #[cfg(not(target_os = "windows"))]
     browsers.send_mouse_move(&entity, std::iter::empty::<&MouseButton>(), pos, false);
@@ -332,7 +365,12 @@ mod tests {
     fn converts_drag_region() {
         use bevy_cef_core::prelude::{DraggableRegion, Rect};
         let input = vec![DraggableRegion {
-            bounds: Rect { x: 10, y: 20, width: 100, height: 50 },
+            bounds: Rect {
+                x: 10,
+                y: 20,
+                width: 100,
+                height: 50,
+            },
             draggable: 1,
         }];
         let result = convert_draggable_regions(&input);
@@ -346,7 +384,12 @@ mod tests {
     fn converts_no_drag_region() {
         use bevy_cef_core::prelude::{DraggableRegion, Rect};
         let input = vec![DraggableRegion {
-            bounds: Rect { x: 0, y: 0, width: 50, height: 50 },
+            bounds: Rect {
+                x: 0,
+                y: 0,
+                width: 50,
+                height: 50,
+            },
             draggable: 0,
         }];
         let result = convert_draggable_regions(&input);
@@ -359,11 +402,21 @@ mod tests {
         use bevy_cef_core::prelude::{DraggableRegion, Rect};
         let input = vec![
             DraggableRegion {
-                bounds: Rect { x: 0, y: 0, width: 800, height: 40 },
+                bounds: Rect {
+                    x: 0,
+                    y: 0,
+                    width: 800,
+                    height: 40,
+                },
                 draggable: 1,
             },
             DraggableRegion {
-                bounds: Rect { x: 750, y: 5, width: 40, height: 30 },
+                bounds: Rect {
+                    x: 750,
+                    y: 5,
+                    width: 40,
+                    height: 30,
+                },
                 draggable: 0,
             },
         ];
