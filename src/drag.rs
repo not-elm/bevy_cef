@@ -11,7 +11,8 @@ impl Plugin for DragPlugin {
     fn build(&self, app: &mut App) {
         let (tx, rx) = async_channel::unbounded();
         app.insert_resource(DraggableRegionSender(tx))
-            .insert_resource(DraggableRegionReceiver(rx));
+            .insert_resource(DraggableRegionReceiver(rx))
+            .init_resource::<DragState>();
     }
 }
 
@@ -32,6 +33,44 @@ impl PixelRect {
     pub(crate) fn contains(&self, pos: Vec2) -> bool {
         pos.x >= self.min.x && pos.x <= self.max.x && pos.y >= self.min.y && pos.y <= self.max.y
     }
+}
+
+/// Per-entity cached drag regions, parsed from CEF OnDraggableRegionsChanged.
+#[derive(Component, Debug, Default, Clone)]
+pub(crate) struct DraggableRegions {
+    pub(crate) drag_rects: Vec<PixelRect>,    // -webkit-app-region: drag
+    pub(crate) no_drag_rects: Vec<PixelRect>, // -webkit-app-region: no-drag (holes)
+}
+
+/// Global drag routing state — single source of truth for "is drag active?"
+#[derive(Resource, Debug, Default)]
+pub(crate) enum DragState {
+    #[default]
+    Idle,
+    Dragging { webview: Entity },
+}
+
+impl DragState {
+    pub(crate) fn is_dragging(&self) -> bool {
+        matches!(self, DragState::Dragging { .. })
+    }
+
+    pub(crate) fn dragging_entity(&self) -> Option<Entity> {
+        match self {
+            DragState::Dragging { webview } => Some(*webview),
+            DragState::Idle => None,
+        }
+    }
+}
+
+/// Per-drag coordinate computation state, inserted on drag start, removed on drag end.
+#[derive(Component, Debug, Clone, Copy)]
+pub(crate) struct DraggingState {
+    pub(crate) camera: Entity,
+    pub(crate) start_hit: Vec3,
+    pub(crate) start_translation: Vec3,
+    pub(crate) plane_normal: Dir3,
+    pub(crate) plane_origin: Vec3,
 }
 
 /// Returns `true` if `pos` is inside any drag rect but NOT inside any no-drag rect.
