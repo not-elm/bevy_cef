@@ -1,3 +1,14 @@
+## v0.5.4
+
+### Features
+
+- Windows: switched to CEF `multi_threaded_message_loop` so CEF owns its own UI thread. Introduced a `BrowsersProxy` resource and `CefCommand` command-drain architecture; webview systems now use `Res<BrowsersProxy>` on Windows instead of `NonSend<Browsers>`. macOS behavior is unchanged. (#40)
+
+### Performance
+
+- Eliminated the ~2.56 MB per-frame texture buffer clone in the `on_paint` pipeline. `update_webview_image` now borrows `&RenderTextureMessage` and reuses `Image.data` via `copy_from_slice` when dimensions are stable. (#36, #37)
+- Replaced the shared `async_channel::unbounded()` with per-webview `Rc<Cell<Option<RenderTextureMessage>>>` slots (separate for View and Popup paint types) for latest-frame-wins semantics with bounded memory. (#37)
+
 ## v0.5.3
 
 ### Bug Fixes

@@ -1,5 +1,8 @@
 use bevy::prelude::*;
-use bevy_cef_core::prelude::*;
+#[cfg(not(target_os = "windows"))]
+use bevy_cef_core::prelude::Browsers;
+#[cfg(target_os = "windows")]
+use bevy_cef_core::prelude::BrowsersProxy;
 use serde::{Deserialize, Serialize};
 
 /// A trigger event to emit an event from the host to the webview.
@@ -29,12 +32,26 @@ pub(super) struct HostEmitPlugin;
 
 impl Plugin for HostEmitPlugin {
     fn build(&self, app: &mut App) {
-        app.register_type::<HostEmitEvent>().add_observer(host_emit);
+        app.register_type::<HostEmitEvent>();
+
+        #[cfg(not(target_os = "windows"))]
+        app.add_observer(host_emit);
+
+        #[cfg(target_os = "windows")]
+        app.add_observer(host_emit_win);
     }
 }
 
+#[cfg(not(target_os = "windows"))]
 fn host_emit(trigger: On<HostEmitEvent>, browsers: NonSend<Browsers>) {
     if let Ok(v) = serde_json::to_value(&trigger.payload) {
         browsers.emit_event(&trigger.webview, trigger.id.clone(), &v);
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn host_emit_win(trigger: On<HostEmitEvent>, proxy: Res<BrowsersProxy>) {
+    if let Ok(v) = serde_json::to_value(&trigger.payload) {
+        proxy.emit_event(&trigger.webview, trigger.id.clone(), &v);
     }
 }
