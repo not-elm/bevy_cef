@@ -219,6 +219,7 @@ fn create_webview(
     ipc_event_sender: Res<IpcEventRawSender>,
     brp_sender: Res<BrpSender>,
     cursor_icon_sender: Res<SystemCursorIconSender>,
+    drag_regions_sender: Res<crate::drag::DraggableRegionSender>,
     webviews: Query<
         (
             Entity,
@@ -249,6 +250,7 @@ fn create_webview(
                 ipc_event_sender.0.clone(),
                 brp_sender.clone(),
                 cursor_icon_sender.clone(),
+                drag_regions_sender.0.clone(),
                 &initialize_scripts.0,
                 host_window,
             );
@@ -346,6 +348,7 @@ fn create_webview_win(
                     #[allow(deprecated)]
                     w.raw_window_handle().ok()
                 });
+            // TODO(Task 5): pass drag_regions_sender to the Windows path once BrowsersProxy supports it.
             proxy.create_browser(
                 entity,
                 &uri.0,

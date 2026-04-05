@@ -9,7 +9,7 @@ mod client_handler;
 mod command_line_config;
 mod context_menu_handler;
 mod display_handler;
-mod drag_handler;
+pub mod drag_handler;
 mod extensions;
 mod localhost;
 mod message_pump;
