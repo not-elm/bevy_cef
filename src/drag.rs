@@ -4,6 +4,8 @@
 use async_channel::Receiver;
 use bevy::prelude::*;
 use bevy_cef_core::prelude::{DraggableRegion, DraggableRegionSenderInner};
+use crate::prelude::WebviewSource;
+use crate::system_param::pointer::WebviewPointer;
 
 pub struct DragPlugin;
 
@@ -13,7 +15,8 @@ impl Plugin for DragPlugin {
         app.insert_resource(DraggableRegionSender(tx))
             .insert_resource(DraggableRegionReceiver(rx))
             .init_resource::<DragState>()
-            .add_systems(PreUpdate, receive_drag_regions);
+            .add_systems(PreUpdate, receive_drag_regions)
+            .add_systems(Update, attach_drag_observers);
     }
 }
 
@@ -121,6 +124,67 @@ pub(crate) fn is_draggable(
         return false;
     }
     drag_rects.iter().any(|r| r.contains(pos))
+}
+
+/// Observer that fires on Pointer<Press> and starts a drag if the press is in a drag region.
+/// Attached to mesh webview entities via `attach_drag_observers`.
+fn on_drag_press(
+    trigger: On<Pointer<Press>>,
+    mut drag_state: ResMut<DragState>,
+    mut commands: Commands,
+    pointer: WebviewPointer,
+    regions_q: Query<&DraggableRegions>,
+    transforms_q: Query<(&GlobalTransform, &Transform), With<WebviewSource>>,
+    cameras_q: Query<(&Camera, &GlobalTransform)>,
+) {
+    // Ignore if already dragging.
+    if drag_state.is_dragging() {
+        return;
+    }
+
+    let Some((webview, pixel_pos, camera_entity)) = pointer.pos_from_trigger_raw(&trigger) else { return };
+    let Ok(regions) = regions_q.get(webview) else { return };
+
+    if !is_draggable(&regions.drag_rects, &regions.no_drag_rects, pixel_pos) {
+        return;
+    }
+
+    // Hit — start drag. Use the camera that produced the hit for the plane snapshot.
+    let Ok((webview_gtf, webview_tf)) = transforms_q.get(webview) else { return };
+    let Ok((cam, cam_gtf)) = cameras_q.get(camera_entity) else { return };
+
+    let viewport_pos = trigger.pointer_location.position;
+    let Ok(ray) = cam.viewport_to_world(cam_gtf, viewport_pos) else { return };
+    let plane_origin = webview_gtf.translation();
+    let plane_normal = webview_gtf.forward();
+    let Some(t) = ray.intersect_plane(plane_origin, InfinitePlane3d::new(plane_normal)) else { return };
+    let start_hit = ray.origin + ray.direction * t;
+
+    *drag_state = DragState::Dragging { webview };
+    commands.entity(webview).insert(DraggingState {
+        camera: camera_entity,
+        start_hit,
+        start_translation: webview_tf.translation,
+        plane_normal,
+        plane_origin,
+    });
+}
+
+/// Attach drag-press observer to newly-created mesh webviews with a Transform.
+fn attach_drag_observers(
+    mut commands: Commands,
+    webviews: Query<
+        Entity,
+        (
+            Added<WebviewSource>,
+            With<Transform>,
+            Or<(With<Mesh3d>, With<Mesh2d>)>,
+        ),
+    >,
+) {
+    for entity in webviews.iter() {
+        commands.entity(entity).observe(on_drag_press);
+    }
 }
 
 #[cfg(test)]
