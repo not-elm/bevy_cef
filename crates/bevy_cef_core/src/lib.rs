@@ -19,4 +19,5 @@ pub mod prelude {
     pub use crate::render_process::render_process_handler::*;
     pub use crate::util::*;
     pub use cef::DraggableRegion;
+    pub use cef::Rect;
 }

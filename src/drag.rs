@@ -73,6 +73,31 @@ pub(crate) struct DraggingState {
     pub(crate) plane_origin: Vec3,
 }
 
+/// Convert a slice of CEF `DraggableRegion`s into drag_rects + no_drag_rects split by the `draggable` flag.
+/// This matches the CEF behavior where both drag (=1) and no-drag (=0) regions are reported separately.
+pub(crate) fn convert_draggable_regions(regions: &[DraggableRegion]) -> DraggableRegions {
+    let mut drag_rects = Vec::new();
+    let mut no_drag_rects = Vec::new();
+    for r in regions {
+        let rect = PixelRect {
+            min: Vec2::new(r.bounds.x as f32, r.bounds.y as f32),
+            max: Vec2::new(
+                (r.bounds.x + r.bounds.width) as f32,
+                (r.bounds.y + r.bounds.height) as f32,
+            ),
+        };
+        if r.draggable != 0 {
+            drag_rects.push(rect);
+        } else {
+            no_drag_rects.push(rect);
+        }
+    }
+    DraggableRegions {
+        drag_rects,
+        no_drag_rects,
+    }
+}
+
 /// Returns `true` if `pos` is inside any drag rect but NOT inside any no-drag rect.
 /// No-drag regions act as "holes" in drag regions (e.g. a button inside a toolbar).
 pub(crate) fn is_draggable(
@@ -148,5 +173,58 @@ mod tests {
     #[test]
     fn is_draggable_empty_regions() {
         assert!(!is_draggable(&[], &[], Vec2::new(50.0, 50.0)));
+    }
+
+    #[test]
+    fn converts_drag_region() {
+        use bevy_cef_core::prelude::{DraggableRegion, Rect};
+        let input = vec![DraggableRegion {
+            bounds: Rect { x: 10, y: 20, width: 100, height: 50 },
+            draggable: 1,
+        }];
+        let result = convert_draggable_regions(&input);
+        assert_eq!(result.drag_rects.len(), 1);
+        assert_eq!(result.no_drag_rects.len(), 0);
+        assert_eq!(result.drag_rects[0].min, Vec2::new(10.0, 20.0));
+        assert_eq!(result.drag_rects[0].max, Vec2::new(110.0, 70.0));
+    }
+
+    #[test]
+    fn converts_no_drag_region() {
+        use bevy_cef_core::prelude::{DraggableRegion, Rect};
+        let input = vec![DraggableRegion {
+            bounds: Rect { x: 0, y: 0, width: 50, height: 50 },
+            draggable: 0,
+        }];
+        let result = convert_draggable_regions(&input);
+        assert_eq!(result.drag_rects.len(), 0);
+        assert_eq!(result.no_drag_rects.len(), 1);
+    }
+
+    #[test]
+    fn converts_mixed() {
+        use bevy_cef_core::prelude::{DraggableRegion, Rect};
+        let input = vec![
+            DraggableRegion {
+                bounds: Rect { x: 0, y: 0, width: 800, height: 40 },
+                draggable: 1,
+            },
+            DraggableRegion {
+                bounds: Rect { x: 750, y: 5, width: 40, height: 30 },
+                draggable: 0,
+            },
+        ];
+        let result = convert_draggable_regions(&input);
+        assert_eq!(result.drag_rects.len(), 1);
+        assert_eq!(result.no_drag_rects.len(), 1);
+    }
+
+    #[test]
+    fn converts_empty() {
+        use bevy_cef_core::prelude::DraggableRegion;
+        let input: Vec<DraggableRegion> = vec![];
+        let result = convert_draggable_regions(&input);
+        assert_eq!(result.drag_rects.len(), 0);
+        assert_eq!(result.no_drag_rects.len(), 0);
     }
 }
