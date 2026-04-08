@@ -101,14 +101,25 @@ pub struct WebviewPlugin;
 
 impl Plugin for WebviewPlugin {
     fn build(&self, app: &mut App) {
-        app.register_type::<RequestShowDevTool>()
-            .add_plugins((MeshWebviewPlugin,));
+        app.register_type::<RequestShowDevTool>();
 
         // macOS/Linux: direct NonSend<Browsers>
         #[cfg(not(target_os = "windows"))]
         {
             app.init_non_send_resource::<Browsers>()
-                .add_systems(Main, send_external_begin_frame);
+                .init_resource::<BeginFrameInterval>()
+                .add_plugins((MeshWebviewPlugin,))
+                .add_systems(Main, send_external_begin_frame)
+                .add_systems(
+                    Update,
+                    (
+                        resize.run_if(any_resized),
+                        create_webview.run_if(added_webview),
+                        navigate_on_source_change,
+                    ),
+                )
+                .add_observer(apply_request_show_devtool)
+                .add_observer(apply_request_close_devtool);
         }
 
         // Windows: BrowsersProxy already inserted by MessageLoopPlugin.
@@ -116,6 +127,8 @@ impl Plugin for WebviewPlugin {
         // Register conditional drain system that posts CefPostTask(TID_UI).
         #[cfg(target_os = "windows")]
         {
+            app.add_plugins((MeshWebviewPlugin,));
+
             // Initialise the thread-local BrowsersCefSide on the CEF UI thread
             // with the texture sender so that created browsers can deliver
             // rendered frames back to Bevy.
@@ -138,39 +151,17 @@ impl Plugin for WebviewPlugin {
                 cef::post_task(cef::ThreadId::UI, Some(&mut task));
             }
 
-            app.add_systems(Main, post_drain_task.run_if(win_commands_pending));
-        }
-
-        // Platform-conditional systems for create_webview, navigate, resize, devtools
-        #[cfg(not(target_os = "windows"))]
-        {
-            app.init_non_send_resource::<Browsers>()
-                .init_resource::<BeginFrameInterval>()
-                .add_plugins((MeshWebviewPlugin,))
-                .add_systems(Main, send_external_begin_frame)
+            app.add_systems(Main, post_drain_task.run_if(win_commands_pending))
                 .add_systems(
                     Update,
                     (
-                        resize.run_if(any_resized),
-                        create_webview.run_if(added_webview),
-                        navigate_on_source_change,
+                        resize_win.run_if(any_resized),
+                        create_webview_win.run_if(added_webview),
+                        navigate_on_source_change_win,
                     ),
                 )
-                .add_observer(apply_request_show_devtool)
-                .add_observer(apply_request_close_devtool);
-        }
-        #[cfg(target_os = "windows")]
-        {
-            app.add_systems(
-                Update,
-                (
-                    resize_win.run_if(any_resized),
-                    create_webview_win.run_if(added_webview),
-                    navigate_on_source_change_win,
-                ),
-            )
-            .add_observer(apply_request_show_devtool_win)
-            .add_observer(apply_request_close_devtool_win);
+                .add_observer(apply_request_show_devtool_win)
+                .add_observer(apply_request_close_devtool_win);
         }
 
         // Platform-conditional despawn hook
