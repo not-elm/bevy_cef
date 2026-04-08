@@ -203,9 +203,6 @@ fn added_webview(webviews: Query<Entity, Added<ResolvedWebviewUri>>) -> bool {
     !webviews.is_empty()
 }
 
-/// Target interval for external begin frame calls (~60fps).
-const EXTERNAL_BEGIN_FRAME_INTERVAL: Duration = Duration::from_millis(1000 / 60);
-
 #[cfg(not(target_os = "windows"))]
 fn send_external_begin_frame(
     mut hosts: NonSendMut<Browsers>,
