@@ -1,5 +1,13 @@
 ## v0.6.0
 
+### Features
+
+- Added support for CSS `-webkit-app-region` draggable regions. HTML elements with `-webkit-app-region: drag` can now be used to drag-move the host window. CEF's `OnDraggableRegionsChanged` callback feeds a `DraggableRegions` component onto the webview entity; pointer press detection starts window drag, CEF mouse events are suppressed during drag, and hover state is restored after release. New `toolbar_drag` example. (#42)
+
+### Performance
+
+- Throttled CEF `send_external_begin_frame` and `cef_do_message_loop_work` calls. Instead of calling the CEF compositor at Bevy's uncapped frame rate (500+ calls/sec), begin-frame is now gated by a configurable `BeginFrameInterval` resource (default 30 fps) using a Bevy `Timer`, and the message pump enforces a 4 ms minimum interval (~250 pumps/sec). (#39)
+
 ## v0.5.4
 
 ### Features
