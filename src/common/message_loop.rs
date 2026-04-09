@@ -219,11 +219,24 @@ fn cef_do_message_loop_work(
     receiver: NonSend<MessageLoopWorkingReceiver>,
     mut timer: Local<Option<MessageLoopTimer>>,
     mut max_delay_timer: Local<MessageLoopWorkingMaxDelayTimer>,
+    mut last_execution: Local<Option<std::time::Instant>>,
 ) {
     while let Ok(t) = receiver.try_recv() {
         timer.replace(t);
     }
-    if timer.as_ref().map(|t| t.is_finished()).unwrap_or(false) || max_delay_timer.is_finished() {
+    let should_execute =
+        timer.as_ref().map(|t| t.is_finished()).unwrap_or(false) || max_delay_timer.is_finished();
+    if should_execute {
+        // Enforce a minimum interval between executions to prevent
+        // delay_ms=0 requests from causing excessive pump calls.
+        const MIN_PUMP_INTERVAL: std::time::Duration = std::time::Duration::from_millis(4);
+        let now = std::time::Instant::now();
+        if let Some(last) = *last_execution
+            && now.duration_since(last) < MIN_PUMP_INTERVAL
+        {
+            return;
+        }
+        *last_execution = Some(now);
         cef::do_message_loop_work();
         *max_delay_timer = MessageLoopWorkingMaxDelayTimer::default();
         timer.take();
