@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body { margin: 0; font-family: sans-serif; }
+  .toolbar {
+    height: 40px;
+    background: #2c3e50;
+    color: white;
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    -webkit-app-region: drag;
+    user-select: none;
+  }
+  .toolbar .title { flex: 1; }
+  .toolbar button {
+    -webkit-app-region: no-drag;
+    background: #e74c3c;
+    border: none;
+    color: white;
+    padding: 4px 12px;
+    cursor: pointer;
+  }
+  .content {
+    padding: 20px;
+    background: #ecf0f1;
+  }
+</style>
+</head>
+<body>
+  <div class="toolbar">
+    <span class="title">Draggable Toolbar (drag here)</span>
+    <button onclick="alert('Click!')">Button (no-drag)</button>
+  </div>
+  <div class="content">
+    <h2>Content area</h2>
+    <p>This area is NOT draggable. Try scrolling or selecting text.</p>
+  </div>
+</body>
+</html>

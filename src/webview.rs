@@ -15,6 +15,7 @@ use bevy_remote::BrpSender;
 #[allow(deprecated)]
 use raw_window_handle::HasRawWindowHandle;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
 #[cfg(target_os = "windows")]
 use crate::common::CommandChannelReceiver;
@@ -25,7 +26,9 @@ mod mesh;
 mod webview_sprite;
 
 pub mod prelude {
-    pub use crate::webview::{RequestCloseDevtool, RequestShowDevTool, WebviewPlugin, mesh::*};
+    pub use crate::webview::{
+        BeginFrameInterval, RequestCloseDevtool, RequestShowDevTool, WebviewPlugin, mesh::*,
+    };
 }
 
 /// A Trigger event to request showing the developer tools in a webview.
@@ -74,18 +77,49 @@ pub struct RequestCloseDevtool {
     pub webview: Entity,
 }
 
+/// Controls the interval between CEF external begin frame calls.
+///
+/// Defaults to ~30fps. Users can override by inserting this resource:
+/// ```rust,no_run
+/// use bevy::prelude::*;
+/// use bevy_cef::prelude::*;
+///
+/// App::new()
+///     .add_plugins(CefPlugin::default())
+///     .insert_resource(BeginFrameInterval(core::time::Duration::from_millis(1000 / 60)));
+/// ```
+#[derive(Resource)]
+pub struct BeginFrameInterval(pub Duration);
+
+impl Default for BeginFrameInterval {
+    fn default() -> Self {
+        Self(Duration::from_millis(1000 / 30))
+    }
+}
+
 pub struct WebviewPlugin;
 
 impl Plugin for WebviewPlugin {
     fn build(&self, app: &mut App) {
-        app.register_type::<RequestShowDevTool>()
-            .add_plugins((MeshWebviewPlugin,));
+        app.register_type::<RequestShowDevTool>();
 
         // macOS/Linux: direct NonSend<Browsers>
         #[cfg(not(target_os = "windows"))]
         {
             app.init_non_send_resource::<Browsers>()
-                .add_systems(Main, send_external_begin_frame);
+                .init_resource::<BeginFrameInterval>()
+                .add_plugins((MeshWebviewPlugin,))
+                .add_systems(Main, send_external_begin_frame)
+                .add_systems(
+                    Update,
+                    (
+                        resize.run_if(any_resized),
+                        create_webview.run_if(added_webview),
+                        navigate_on_source_change,
+                    ),
+                )
+                .add_observer(apply_request_show_devtool)
+                .add_observer(apply_request_close_devtool);
         }
 
         // Windows: BrowsersProxy already inserted by MessageLoopPlugin.
@@ -93,6 +127,8 @@ impl Plugin for WebviewPlugin {
         // Register conditional drain system that posts CefPostTask(TID_UI).
         #[cfg(target_os = "windows")]
         {
+            app.add_plugins((MeshWebviewPlugin,));
+
             // Initialise the thread-local BrowsersCefSide on the CEF UI thread
             // with the texture sender so that created browsers can deliver
             // rendered frames back to Bevy.
@@ -115,35 +151,17 @@ impl Plugin for WebviewPlugin {
                 cef::post_task(cef::ThreadId::UI, Some(&mut task));
             }
 
-            app.add_systems(Main, post_drain_task.run_if(win_commands_pending));
-        }
-
-        // Platform-conditional systems for create_webview, navigate, resize, devtools
-        #[cfg(not(target_os = "windows"))]
-        {
-            app.add_systems(
-                Update,
-                (
-                    resize.run_if(any_resized),
-                    create_webview.run_if(added_webview),
-                    navigate_on_source_change,
-                ),
-            )
-            .add_observer(apply_request_show_devtool)
-            .add_observer(apply_request_close_devtool);
-        }
-        #[cfg(target_os = "windows")]
-        {
-            app.add_systems(
-                Update,
-                (
-                    resize_win.run_if(any_resized),
-                    create_webview_win.run_if(added_webview),
-                    navigate_on_source_change_win,
-                ),
-            )
-            .add_observer(apply_request_show_devtool_win)
-            .add_observer(apply_request_close_devtool_win);
+            app.add_systems(Main, post_drain_task.run_if(win_commands_pending))
+                .add_systems(
+                    Update,
+                    (
+                        resize_win.run_if(any_resized),
+                        create_webview_win.run_if(added_webview),
+                        navigate_on_source_change_win,
+                    ),
+                )
+                .add_observer(apply_request_show_devtool_win)
+                .add_observer(apply_request_close_devtool_win);
         }
 
         // Platform-conditional despawn hook
@@ -177,8 +195,20 @@ fn added_webview(webviews: Query<Entity, Added<ResolvedWebviewUri>>) -> bool {
 }
 
 #[cfg(not(target_os = "windows"))]
-fn send_external_begin_frame(mut hosts: NonSendMut<Browsers>) {
-    hosts.send_external_begin_frame();
+fn send_external_begin_frame(
+    mut hosts: NonSendMut<Browsers>,
+    time: Res<Time>,
+    interval: Res<BeginFrameInterval>,
+    mut timer: Local<Option<Timer>>,
+) {
+    if interval.is_changed() || timer.is_none() {
+        *timer = Some(Timer::new(interval.0, TimerMode::Repeating));
+    }
+    let timer = timer.as_mut().unwrap();
+    timer.tick(time.delta());
+    if timer.just_finished() {
+        hosts.send_external_begin_frame();
+    }
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -189,6 +219,7 @@ fn create_webview(
     ipc_event_sender: Res<IpcEventRawSender>,
     brp_sender: Res<BrpSender>,
     cursor_icon_sender: Res<SystemCursorIconSender>,
+    drag_regions_sender: Res<crate::drag::DraggableRegionSender>,
     webviews: Query<
         (
             Entity,
@@ -219,6 +250,7 @@ fn create_webview(
                 ipc_event_sender.0.clone(),
                 brp_sender.clone(),
                 cursor_icon_sender.clone(),
+                drag_regions_sender.0.clone(),
                 &initialize_scripts.0,
                 host_window,
             );
@@ -294,6 +326,7 @@ fn create_webview_win(
     ipc_event_sender: Res<IpcEventRawSender>,
     brp_sender: Res<BrpSender>,
     cursor_icon_sender: Res<SystemCursorIconSender>,
+    drag_regions_sender: Res<crate::drag::DraggableRegionSender>,
     webviews: Query<
         (
             Entity,
@@ -324,6 +357,7 @@ fn create_webview_win(
                 ipc_event_sender.0.clone(),
                 brp_sender.clone(),
                 cursor_icon_sender.clone(),
+                drag_regions_sender.0.clone(),
                 &initialize_scripts.0,
                 host_window,
             );

@@ -77,7 +77,11 @@ fn apply_on_pointer_move(
     browsers: NonSend<Browsers>,
     cameras: Query<(&Camera, &GlobalTransform)>,
     webviews: Query<(&Sprite, &WebviewSize, &GlobalTransform)>,
+    drag_state: Res<crate::drag::DragState>,
 ) {
+    if drag_state.is_dragging() {
+        return;
+    }
     let Some(pos) = obtain_relative_pos_from_trigger(&trigger, &webviews, &cameras) else {
         return;
     };
@@ -90,7 +94,11 @@ fn apply_on_pointer_pressed(
     browsers: NonSend<Browsers>,
     cameras: Query<(&Camera, &GlobalTransform)>,
     webviews: Query<(&Sprite, &WebviewSize, &GlobalTransform)>,
+    drag_state: Res<crate::drag::DragState>,
 ) {
+    if drag_state.is_dragging() {
+        return;
+    }
     let Some(pos) = obtain_relative_pos_from_trigger(&trigger, &webviews, &cameras) else {
         return;
     };
@@ -103,7 +111,11 @@ fn apply_on_pointer_released(
     browsers: NonSend<Browsers>,
     cameras: Query<(&Camera, &GlobalTransform)>,
     webviews: Query<(&Sprite, &WebviewSize, &GlobalTransform)>,
+    drag_state: Res<crate::drag::DragState>,
 ) {
+    if drag_state.is_dragging() {
+        return;
+    }
     let Some(pos) = obtain_relative_pos_from_trigger(&trigger, &webviews, &cameras) else {
         return;
     };
@@ -117,7 +129,11 @@ fn on_mouse_wheel(
     webviews: Query<(Entity, &Sprite, &WebviewSize, &GlobalTransform)>,
     cameras: Query<(&Camera, &GlobalTransform)>,
     windows: Query<&Window>,
+    drag_state: Res<crate::drag::DragState>,
 ) {
+    if drag_state.is_dragging() {
+        return;
+    }
     let Some(cursor_pos) = windows.iter().find_map(|window| window.cursor_position()) else {
         return;
     };
@@ -161,7 +177,11 @@ fn apply_on_pointer_move_win(
     proxy: Res<BrowsersProxy>,
     cameras: Query<(&Camera, &GlobalTransform)>,
     webviews: Query<(&Sprite, &WebviewSize, &GlobalTransform)>,
+    drag_state: Res<crate::drag::DragState>,
 ) {
+    if drag_state.is_dragging() {
+        return;
+    }
     let Some(pos) = obtain_relative_pos_from_trigger(&trigger, &webviews, &cameras) else {
         return;
     };
@@ -175,7 +195,11 @@ fn apply_on_pointer_pressed_win(
     proxy: Res<BrowsersProxy>,
     cameras: Query<(&Camera, &GlobalTransform)>,
     webviews: Query<(&Sprite, &WebviewSize, &GlobalTransform)>,
+    drag_state: Res<crate::drag::DragState>,
 ) {
+    if drag_state.is_dragging() {
+        return;
+    }
     let Some(pos) = obtain_relative_pos_from_trigger(&trigger, &webviews, &cameras) else {
         return;
     };
@@ -188,7 +212,11 @@ fn apply_on_pointer_released_win(
     proxy: Res<BrowsersProxy>,
     cameras: Query<(&Camera, &GlobalTransform)>,
     webviews: Query<(&Sprite, &WebviewSize, &GlobalTransform)>,
+    drag_state: Res<crate::drag::DragState>,
 ) {
+    if drag_state.is_dragging() {
+        return;
+    }
     let Some(pos) = obtain_relative_pos_from_trigger(&trigger, &webviews, &cameras) else {
         return;
     };
@@ -202,7 +230,11 @@ fn on_mouse_wheel_win(
     webviews: Query<(Entity, &Sprite, &WebviewSize, &GlobalTransform)>,
     cameras: Query<(&Camera, &GlobalTransform)>,
     windows: Query<&Window>,
+    drag_state: Res<crate::drag::DragState>,
 ) {
+    if drag_state.is_dragging() {
+        return;
+    }
     let Some(cursor_pos) = windows.iter().find_map(|window| window.cursor_position()) else {
         return;
     };

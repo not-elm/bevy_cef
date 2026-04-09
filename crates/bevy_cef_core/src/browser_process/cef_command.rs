@@ -13,6 +13,7 @@ use raw_window_handle::RawWindowHandle;
 
 use crate::browser_process::client_handler::IpcEventRaw;
 use crate::browser_process::display_handler::SystemCursorIconSenderInner;
+use crate::browser_process::drag_handler::DraggableRegionSenderInner;
 use crate::browser_process::localhost::Requester;
 
 /// A `Send`-safe wrapper around [`RawWindowHandle`].
@@ -42,6 +43,7 @@ pub enum CefCommand {
         ipc_event_sender: Sender<IpcEventRaw>,
         brp_sender: Sender<BrpMessage>,
         system_cursor_icon_sender: SystemCursorIconSenderInner,
+        drag_regions_sender: DraggableRegionSenderInner,
         initialize_scripts: Vec<String>,
         window_handle: Option<SendRawWindowHandle>,
     },
@@ -167,6 +169,7 @@ impl BrowsersProxy {
         ipc_event_sender: Sender<IpcEventRaw>,
         brp_sender: Sender<BrpMessage>,
         system_cursor_icon_sender: SystemCursorIconSenderInner,
+        drag_regions_sender: DraggableRegionSenderInner,
         initialize_scripts: &[String],
         window_handle: Option<RawWindowHandle>,
     ) {
@@ -178,6 +181,7 @@ impl BrowsersProxy {
             ipc_event_sender,
             brp_sender,
             system_cursor_icon_sender,
+            drag_regions_sender,
             initialize_scripts: initialize_scripts.to_vec(),
             window_handle: window_handle.map(SendRawWindowHandle),
         });

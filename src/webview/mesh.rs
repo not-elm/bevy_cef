@@ -66,7 +66,11 @@ fn on_pointer_move(
     input: Res<ButtonInput<MouseButton>>,
     pointer: WebviewPointer,
     browsers: NonSend<Browsers>,
+    drag_state: Res<crate::drag::DragState>,
 ) {
+    if drag_state.is_dragging() {
+        return;
+    }
     let Some((webview, pos)) = pointer.pos_from_trigger(&trigger) else {
         return;
     };
@@ -79,7 +83,11 @@ fn on_pointer_pressed(
     trigger: On<Pointer<Press>>,
     browsers: NonSend<Browsers>,
     pointer: WebviewPointer,
+    drag_state: Res<crate::drag::DragState>,
 ) {
+    if drag_state.is_dragging() {
+        return;
+    }
     let Some((webview, pos)) = pointer.pos_from_trigger(&trigger) else {
         return;
     };
@@ -91,7 +99,11 @@ fn on_pointer_released(
     trigger: On<Pointer<Release>>,
     browsers: NonSend<Browsers>,
     pointer: WebviewPointer,
+    drag_state: Res<crate::drag::DragState>,
 ) {
+    if drag_state.is_dragging() {
+        return;
+    }
     let Some((webview, pos)) = pointer.pos_from_trigger(&trigger) else {
         return;
     };
@@ -105,7 +117,11 @@ fn on_mouse_wheel(
     pointer: WebviewPointer,
     windows: Query<&Window>,
     webviews: Query<Entity, (With<WebviewSource>, Or<(With<Mesh3d>, With<Mesh2d>)>)>,
+    drag_state: Res<crate::drag::DragState>,
 ) {
+    if drag_state.is_dragging() {
+        return;
+    }
     let Some(cursor_pos) = windows.iter().find_map(|window| window.cursor_position()) else {
         return;
     };
@@ -146,7 +162,11 @@ fn on_pointer_move_win(
     input: Res<ButtonInput<MouseButton>>,
     pointer: WebviewPointer,
     proxy: Res<BrowsersProxy>,
+    drag_state: Res<crate::drag::DragState>,
 ) {
+    if drag_state.is_dragging() {
+        return;
+    }
     let Some((webview, pos)) = pointer.pos_from_trigger(&trigger) else {
         return;
     };
@@ -160,7 +180,11 @@ fn on_pointer_pressed_win(
     trigger: On<Pointer<Press>>,
     proxy: Res<BrowsersProxy>,
     pointer: WebviewPointer,
+    drag_state: Res<crate::drag::DragState>,
 ) {
+    if drag_state.is_dragging() {
+        return;
+    }
     let Some((webview, pos)) = pointer.pos_from_trigger(&trigger) else {
         return;
     };
@@ -172,7 +196,11 @@ fn on_pointer_released_win(
     trigger: On<Pointer<Release>>,
     proxy: Res<BrowsersProxy>,
     pointer: WebviewPointer,
+    drag_state: Res<crate::drag::DragState>,
 ) {
+    if drag_state.is_dragging() {
+        return;
+    }
     let Some((webview, pos)) = pointer.pos_from_trigger(&trigger) else {
         return;
     };
@@ -186,7 +214,11 @@ fn on_mouse_wheel_win(
     pointer: WebviewPointer,
     windows: Query<&Window>,
     webviews: Query<Entity, (With<WebviewSource>, Or<(With<Mesh3d>, With<Mesh2d>)>)>,
+    drag_state: Res<crate::drag::DragState>,
 ) {
+    if drag_state.is_dragging() {
+        return;
+    }
     let Some(cursor_pos) = windows.iter().find_map(|window| window.cursor_position()) else {
         return;
     };

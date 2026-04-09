@@ -2,6 +2,7 @@
 
 mod common;
 mod cursor_icon;
+mod drag;
 mod keyboard;
 mod mute;
 mod navigation;
@@ -11,6 +12,7 @@ mod zoom;
 
 use crate::common::{LocalHostPlugin, MessageLoopPlugin, WebviewCoreComponentsPlugin};
 use crate::cursor_icon::SystemCursorIconPlugin;
+use crate::drag::DragPlugin;
 use crate::keyboard::KeyboardPlugin;
 use crate::mute::AudioMutePlugin;
 use crate::prelude::{IpcPlugin, NavigationPlugin, WebviewPlugin};
@@ -50,6 +52,7 @@ impl Plugin for CefPlugin {
             IpcPlugin,
             KeyboardPlugin,
             SystemCursorIconPlugin,
+            DragPlugin,
             NavigationPlugin,
             ZoomPlugin,
             AudioMutePlugin,
