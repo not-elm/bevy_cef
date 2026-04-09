@@ -8,7 +8,7 @@ use std::fmt::Debug;
 #[derive(SystemParam)]
 pub struct WebviewPointer<'w, 's, C: Component = Camera3d> {
     aabb: MeshAabb<'w, 's>,
-    cameras: Query<'w, 's, (&'static Camera, &'static GlobalTransform), With<C>>,
+    cameras: Query<'w, 's, (Entity, &'static Camera, &'static GlobalTransform), With<C>>,
     webviews: Query<
         'w,
         's,
@@ -34,7 +34,7 @@ impl<C: Component> WebviewPointer<'_, '_, C> {
         let (min, max) = self.aabb.calculate_local(webview);
         let aabb_size = Vec2::new(max.x - min.x, max.y - min.y);
         let (webview_gtf, webview_size) = self.webviews.get(webview).ok()?;
-        let pos = self.cameras.iter().find_map(|(camera, camera_gtf)| {
+        let pos = self.cameras.iter().find_map(|(_, camera, camera_gtf)| {
             pointer_to_webview_uv(
                 viewport_pos,
                 camera,
@@ -48,6 +48,42 @@ impl<C: Component> WebviewPointer<'_, '_, C> {
             return None;
         }
         Some(pos)
+    }
+
+    /// Like [`Self::pointer_pos`], but does NOT check pixel transparency.
+    /// Returns the pixel position AND the camera entity that produced the hit.
+    /// Used for drag region hit-testing.
+    pub fn pointer_pos_raw(&self, webview: Entity, viewport_pos: Vec2) -> Option<(Vec2, Entity)> {
+        let (min, max) = self.aabb.calculate_local(webview);
+        let aabb_size = Vec2::new(max.x - min.x, max.y - min.y);
+        let (webview_gtf, webview_size) = self.webviews.get(webview).ok()?;
+        self.cameras
+            .iter()
+            .find_map(|(cam_entity, camera, camera_gtf)| {
+                pointer_to_webview_uv(
+                    viewport_pos,
+                    camera,
+                    camera_gtf,
+                    webview_gtf,
+                    aabb_size,
+                    webview_size.0,
+                )
+                .map(|pos| (pos, cam_entity))
+            })
+    }
+
+    /// Like [`Self::pos_from_trigger`], but skips transparency check.
+    /// Returns (webview, pixel_pos, camera_entity).
+    pub fn pos_from_trigger_raw<P>(
+        &self,
+        trigger: &On<Pointer<P>>,
+    ) -> Option<(Entity, Vec2, Entity)>
+    where
+        P: Clone + Reflect + Debug,
+    {
+        let webview = find_webview_entity(trigger.entity, &self.parents)?;
+        let (pos, cam_entity) = self.pointer_pos_raw(webview, trigger.pointer_location.position)?;
+        Some((webview, pos, cam_entity))
     }
 
     fn is_transparent_at(&self, webview: Entity, pos: Vec2) -> bool {

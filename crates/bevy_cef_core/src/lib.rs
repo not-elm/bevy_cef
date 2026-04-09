@@ -10,6 +10,7 @@ pub mod prelude {
     pub use crate::browser_process::cef_command::{BrowsersProxy, CefCommand};
     #[cfg(target_os = "windows")]
     pub use crate::browser_process::cef_thread::{drain_commands, init_cef_browsers};
+    pub use crate::browser_process::drag_handler::DraggableRegionSenderInner;
     pub use crate::browser_process::*;
     #[cfg(target_os = "macos")]
     pub use crate::debug::*;
@@ -17,4 +18,6 @@ pub mod prelude {
     pub use crate::render_process::execute_render_process;
     pub use crate::render_process::render_process_handler::*;
     pub use crate::util::*;
+    pub use cef::DraggableRegion;
+    pub use cef::Rect;
 }
