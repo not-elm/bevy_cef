@@ -34,6 +34,7 @@ The [texture quality requirements spec](../../specs/2026-04-10-cef-webview-textu
 - Monitor-transition DPR updates.
 - Full migration of `WebviewSize` to derived-only status.
 - Non-centered origins (sprites with `Anchor::TopLeft`, meshes with off-center vertices).
+- Non-Z-normal planes (e.g., `Plane3d::new(Vec3::Y, ...)`). Phase 1 requires Z-normal meshes; debug-asserted at `on_add`.
 - Animated / parent-scaled webviews (the pipeline owns `Transform.scale.xy` on resizable meshes).
 - Linux support (plugin does not yet support Linux at all).
 
@@ -60,7 +61,7 @@ Where each term is an explicit ECS component:
 | `DisplaySize` | `Vec2` | Logical visual size (DIP for sprite, world units for mesh) | unchanged |
 | `BaseRenderScale` | `Vec2` | Snapshotted at spawn, per-axis | unchanged — never overwritten |
 | `QualityMultiplier` | `f32` | Always `1.0` | Driven by quality profile |
-| `WebviewDpr` | `f32` | `Window.scale_factor()` at spawn | Updated on monitor transitions |
+| `WebviewDpr` | `f32` | Sampled at spawn from the `HostWindow` (or `PrimaryWindow` fallback) — same resolution path as `create_browser` | Updated on monitor transitions |
 
 Per-axis `BaseRenderScale` is needed to honor non-square initial ratios (e.g., `WebviewSize(800, 800)` on a 2×1 mesh — the snapshotted ratio is 400 vs 800 px/world-unit, which must be preserved).
 
@@ -72,15 +73,19 @@ For a 3D mesh at the moment `WebviewResizable` is inserted:
 BaseRenderScale = WebviewSize / (mesh_world_2d_size × WebviewDpr)
 ```
 
-Where `mesh_world_2d_size` is computed via a `WebviewBasis2d` helper (see §2.4) that projects the mesh's AABB into its local 2D plane and applies `GlobalTransform.scale`. This correctly handles non-`Z`-normal planes.
+Where `mesh_world_2d_size` is computed via a `WebviewBasis2d` helper (see §2.4) that projects the mesh's AABB into its local XY plane and applies `GlobalTransform.scale`. Phase 1 requires Z-normal planes (debug-asserted at `on_add`); non-Z-normal support is deferred to Phase 2.
+
+If the mesh AABB is not yet available at `on_add` time (asset still loading), a `PendingBasisInit` marker is inserted and the snapshot is retried each frame in a system before `DerivePipeline`. The derive pipeline skips entities with `PendingBasisInit`.
 
 For a 2D sprite:
 
 ```
-BaseRenderScale = Vec2::ONE   // sprite custom_size is already in DIP
+BaseRenderScale = WebviewSize / (custom_size × WebviewDpr)
 ```
 
-The algebraic identity `WebviewSize = DisplaySize × BaseRenderScale × QualityMultiplier × WebviewDpr` holds immediately after the snapshot, for any initial user configuration.
+This handles sprites where the user intentionally set a higher-than-1:1 texture ratio for crispness (e.g., `custom_size = 400×300`, `WebviewSize = 800×600` → `BaseRenderScale = (2.0, 2.0)` on DPR 1.0).
+
+The algebraic identity `WebviewSize = DisplaySize × BaseRenderScale × QualityMultiplier × WebviewDpr` holds immediately after the snapshot, for any initial user configuration — both mesh and sprite paths.
 
 ### 2.3 Phase 2 forward compatibility
 
@@ -88,7 +93,7 @@ When Phase 2 introduces quality profiles, a profile like `Ultra = 2×` sets `Qua
 
 ### 2.4 `WebviewBasis2d` — shared mesh 2D basis
 
-A new component fixing a latent bug in the existing pointer mapping code (`src/system_param/pointer.rs:143`) that only handles `Z`-normal planes correctly.
+A new component for the resize pipeline. Phase 1 constrains to Z-normal planes (debug-asserted). The existing pointer mapping code (`src/system_param/pointer.rs:143`) has a latent bug with non-Z-normal planes; fixing that is out of scope for Phase 1 but the `WebviewBasis2d` abstraction makes it straightforward to fix in Phase 2.
 
 ```rust
 #[derive(Component, Debug, Clone, Copy)]
@@ -142,7 +147,9 @@ Moving the existing `create_webview` and `resize` systems into `CreateBrowser` a
 
 ### 2.6 Change detection scope
 
-The derive system triggers on `Or<(Changed<DisplaySize>, Changed<BaseRenderScale>, Changed<QualityMultiplier>, Changed<WebviewDpr>)>`. Only processes entities with `WebviewResizable`. Non-resizable webviews skip the pipeline entirely and retain legacy behavior.
+The derive system triggers on `Or<(Changed<DisplaySize>, Changed<BaseRenderScale>, Changed<QualityMultiplier>, Changed<WebviewDpr>, Changed<WebviewResizable>)>`. The `Changed<WebviewResizable>` inclusion ensures that runtime adjustments to `min_size`/`max_size` take effect immediately.
+
+Only processes entities with `WebviewResizable`. Entities with `PendingBasisInit` are skipped (retried next frame). Non-resizable webviews skip the pipeline entirely and retain legacy behavior.
 
 ### 2.7 Integer commit policy
 
@@ -302,6 +309,8 @@ fn on_webview_press(trigger, drag_state, resize_state, ...) {
 
 Implementation: merge the existing `on_drag_press` observer into a single `on_webview_press` observer that routes to either resize or drag. Attached to any webview entity with `Or<(With<WebviewResizable>, With<WebviewSource>)>`.
 
+**CEF input gating**: all existing CEF input forwarding systems — `apply_on_pointer_move`, `apply_on_pointer_pressed`, `apply_on_pointer_released` (in both `src/webview/mesh.rs` and `src/webview/webview_sprite.rs`), and `on_mouse_wheel` — currently gate on `drag_state.is_dragging()`. They must **also** gate on `resize_state.is_resizing()`. During an active resize, no pointer events should flow to CEF. The `is_resizing()` method returns `true` iff `ResizeState::Resizing { .. }`.
+
 ### 4.3 Tracking system
 
 Runs in `WebviewSet::ResizeInteraction`, mirroring `drag_tracking_system` in `src/drag.rs:234`:
@@ -364,9 +373,16 @@ Note: `min_size`/`max_size` are configured in **texture pixels** on `WebviewResi
 
 A separate system runs every frame while not `Resizing`:
 
+The cursor hover system requires **two paths** because `WebviewPointer` only works with `Camera3d` (mesh webviews) and sprite pointer mapping is separate:
+
+- **3D mesh path**: uses `WebviewPointer<Camera3d>` + `pointer_pos_raw()` to get the hovered webview entity and texture-pixel position.
+- **2D sprite path**: uses the existing `obtain_relative_pos()` from `src/webview/webview_sprite.rs` with the window cursor position.
+
+Both paths produce `Option<(Entity, Vec2)>` (webview entity + texture-pixel position) and feed into the same zone classification:
+
 ```rust
 fn cursor_hover_system(
-    pointer: WebviewPointer,
+    // ... per-target hover detection (mesh + sprite paths produce hovered_webview)
     mut resize_state: ResMut<ResizeState>,
     resizables: Query<(&WebviewResizable, &WebviewSize)>,
     mut cursor_override: ResMut<SystemCursorOverride>,
@@ -374,7 +390,9 @@ fn cursor_hover_system(
     if matches!(*resize_state, ResizeState::Resizing { .. }) {
         return;
     }
-    let Some((webview, pixel_pos)) = pointer.current_hover() else {
+
+    // hovered_webview: Option<(Entity, Vec2)> from mesh or sprite path
+    let Some((webview, pixel_pos)) = hovered_webview else {
         *resize_state = ResizeState::Idle;
         cursor_override.clear();
         return;
@@ -510,13 +528,15 @@ Using `actual_dw`/`dh` (after clamping) rather than the raw deltas ensures that 
 
 ### 5.3 3D mesh — `DisplaySize` → `Transform.scale.xy`
 
-The pipeline owns `Transform.scale.xy` on resizable meshes. When `DisplaySize` changes:
+The pipeline owns `Transform.scale.xy` on resizable meshes. Phase 1 requires Z-normal planes (`Plane3d::new(Vec3::Z, ...)`) so that the webview's width/height correspond to local X/Y. When `DisplaySize` changes:
 
 ```
 Transform.scale.xy = DisplaySize / WebviewBasis2d.local_size
 ```
 
 `Transform.scale.z` is untouched. User-authored `Transform.scale.xy` on `WebviewResizable` entities is overwritten — documented as "use a parent entity if you need animation-driven scale on a resizable mesh".
+
+Non-Z-normal planes (e.g., `Vec3::Y`) would require mapping width/height to `scale.xz` instead — deferred to Phase 2 when `WebviewBasis2d` can express arbitrary axis mappings.
 
 ### 5.4 2D sprite — `DisplaySize` → `sprite.custom_size`
 
@@ -653,8 +673,10 @@ Phase 1 is ready to merge when:
 
 These are explicitly **not** answered in Phase 1 and are flagged for the quality profile spec follow-up:
 
-1. How does `QualityMultiplier` compose with existing user code that sets `WebviewSize` directly on a non-resizable webview? Probably: adding `QualityMultiplier` auto-adds `WebviewResizable` or some subset of the pipeline. TBD in Phase 2.
-2. Monitor-transition DPR updates — requires hooking `WindowEvent::ScaleFactorChanged`.
-3. Quality profile API shape (`balanced`/`crisp`/`ultra` enum vs explicit scalar).
-4. Device-pixel max-size clamp (texture size limits per GPU).
-5. Observability surface (FR-007): events, logs, or a debug UI.
+1. **Pipeline without resize UX**: Phase 2's quality scaling needs the derive pipeline (`WebviewSize = DisplaySize × BaseRenderScale × QualityMul × DPR`) to apply to webviews that are NOT user-resizable (e.g., a billboard that should be `crisp` but not draggable). Solution direction: introduce a `WebviewQuality` component that activates the pipeline without the resize edges. The pipeline filter would become `Or<(With<WebviewResizable>, With<WebviewQuality>)>`. Phase 1's pipeline code already supports this — the split is purely which component triggers `on_add` initialization.
+2. How does `QualityMultiplier` compose with existing user code that sets `WebviewSize` directly on a non-resizable webview? Probably: adding `WebviewQuality` auto-adds pipeline components. TBD in Phase 2.
+3. Monitor-transition DPR updates — requires hooking `WindowEvent::ScaleFactorChanged`.
+4. Quality profile API shape (`balanced`/`crisp`/`ultra` enum vs explicit scalar).
+5. Device-pixel max-size clamp (texture size limits per GPU).
+6. Observability surface (FR-007): events, logs, or a debug UI.
+7. Non-Z-normal plane support — `WebviewBasis2d` axis mapping + `Transform.scale` axis writeback for arbitrary plane orientations.
