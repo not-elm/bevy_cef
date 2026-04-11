@@ -117,6 +117,32 @@ pub(crate) fn apply_resize(
     (new_size, new_translation)
 }
 
+/// Derive the target `WebviewSize` from the pipeline inputs.
+/// Returns `None` if the computed size equals the current size (no-op).
+pub(crate) fn derive_webview_size(
+    display_size: Vec2,
+    base_render_scale: Vec2,
+    quality_multiplier: f32,
+    dpr: f32,
+    min_size: UVec2,
+    max_size: Option<UVec2>,
+    current_size: UVec2,
+) -> Option<UVec2> {
+    let raw = display_size * base_render_scale * quality_multiplier * dpr;
+    let mut target = UVec2::new(raw.x.round().max(1.0) as u32, raw.y.round().max(1.0) as u32);
+
+    target = target.max(min_size);
+    if let Some(max) = max_size {
+        target = target.min(max);
+    }
+
+    if target == current_size {
+        None
+    } else {
+        Some(target)
+    }
+}
+
 /// Classify a pointer's texture-pixel position: resize edge > drag region > page input.
 pub(crate) fn classify_hit(
     regions: &DraggableRegions,
@@ -325,5 +351,145 @@ mod tests {
             apply_resize(ResizeZone::SW, START_SIZE, START_TR, -0.5, 0.5, U, V, false, MIN, None);
         let ne_after = world_pos_of(new_tr, new_size, U, V, 1.0, 1.0);
         assert_pinned(ne_before, ne_after);
+    }
+
+    #[test]
+    fn derive_sprite_pixel_size_from_display_and_dpr() {
+        let result = derive_webview_size(
+            Vec2::new(400.0, 300.0),
+            Vec2::new(2.0, 2.0),
+            1.0,
+            2.0,
+            UVec2::new(100, 100),
+            None,
+            UVec2::ZERO,
+        );
+        assert_eq!(result, Some(UVec2::new(1600, 1200)));
+    }
+
+    #[test]
+    fn derive_mesh_pixel_size_preserves_initial_ratio() {
+        let result = derive_webview_size(
+            Vec2::new(3.0, 2.0),
+            Vec2::new(400.0, 400.0),
+            1.0,
+            1.0,
+            UVec2::new(100, 100),
+            None,
+            UVec2::ZERO,
+        );
+        assert_eq!(result, Some(UVec2::new(1200, 800)));
+    }
+
+    #[test]
+    fn derive_clamps_to_min_size() {
+        let result = derive_webview_size(
+            Vec2::new(0.1, 0.1),
+            Vec2::new(100.0, 100.0),
+            1.0,
+            1.0,
+            UVec2::new(100, 100),
+            None,
+            UVec2::ZERO,
+        );
+        assert_eq!(result, Some(UVec2::new(100, 100)));
+    }
+
+    #[test]
+    fn derive_clamps_to_max_size() {
+        let result = derive_webview_size(
+            Vec2::new(100.0, 100.0),
+            Vec2::new(100.0, 100.0),
+            1.0,
+            1.0,
+            UVec2::new(100, 100),
+            Some(UVec2::new(2000, 2000)),
+            UVec2::ZERO,
+        );
+        assert_eq!(result, Some(UVec2::new(2000, 2000)));
+    }
+
+    #[test]
+    fn derive_rounds_fractional_to_int() {
+        let result = derive_webview_size(
+            Vec2::new(3.0, 3.0),
+            Vec2::new(133.33, 133.33),
+            1.0,
+            1.0,
+            UVec2::new(1, 1),
+            None,
+            UVec2::ZERO,
+        );
+        assert_eq!(result, Some(UVec2::new(400, 400)));
+    }
+
+    #[test]
+    fn derive_dedupes_on_integer_change() {
+        let result = derive_webview_size(
+            Vec2::new(2.0, 2.0),
+            Vec2::new(400.0, 400.0),
+            1.0,
+            1.0,
+            UVec2::new(100, 100),
+            None,
+            UVec2::new(800, 800),
+        );
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn aspect_lock_dominant_axis_drives_other() {
+        let (new_size, _) = apply_resize(
+            ResizeZone::SE,
+            Vec2::new(2.0, 2.0),
+            Vec3::ZERO,
+            2.0,
+            0.1,
+            Vec3::X,
+            Vec3::Y,
+            true,
+            Vec2::new(0.1, 0.1),
+            None,
+        );
+        assert!((new_size.x - new_size.y).abs() < 1e-4, "Aspect not locked: {new_size:?}");
+    }
+
+    #[test]
+    fn aspect_lock_preserves_start_ratio() {
+        let (new_size, _) = apply_resize(
+            ResizeZone::E,
+            Vec2::new(4.0, 3.0),
+            Vec3::ZERO,
+            1.0,
+            0.0,
+            Vec3::X,
+            Vec3::Y,
+            true,
+            Vec2::new(0.1, 0.1),
+            None,
+        );
+        let expected_aspect = 4.0 / 3.0;
+        let actual_aspect = new_size.x / new_size.y;
+        assert!(
+            (expected_aspect - actual_aspect).abs() < 1e-4,
+            "Aspect ratio not preserved: expected {expected_aspect}, got {actual_aspect}"
+        );
+    }
+
+    #[test]
+    fn aspect_lock_respects_min_max_clamp() {
+        let (new_size, _) = apply_resize(
+            ResizeZone::W,
+            Vec2::new(2.0, 2.0),
+            Vec3::ZERO,
+            10.0,
+            0.0,
+            Vec3::X,
+            Vec3::Y,
+            true,
+            Vec2::new(1.0, 1.0),
+            None,
+        );
+        assert!(new_size.x >= 1.0 && new_size.y >= 1.0, "Below min: {new_size:?}");
     }
 }
