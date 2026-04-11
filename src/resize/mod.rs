@@ -6,11 +6,42 @@ pub(crate) mod pipeline;
 
 use bevy::prelude::*;
 use crate::drag::{is_draggable, DraggableRegions};
+use components::AspectLockMode;
 
 /// One of the 8 resize zones around a webview's edge.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ResizeZone {
     N, S, E, W, NE, NW, SE, SW,
+}
+
+/// Global resize routing state.
+#[derive(Resource, Debug, Default)]
+pub(crate) enum ResizeState {
+    #[default]
+    Idle,
+    Hovering {
+        webview: Entity,
+        zone: ResizeZone,
+    },
+    Resizing {
+        webview: Entity,
+        zone: ResizeZone,
+        start_display_size: Vec2,
+        start_translation: Vec3,
+        start_hit_world: Vec3,
+        plane_origin: Vec3,
+        plane_normal: Dir3,
+        camera: Entity,
+        u_axis: Vec3,
+        v_axis: Vec3,
+        aspect_lock_mode: AspectLockMode,
+    },
+}
+
+impl ResizeState {
+    pub(crate) fn is_resizing(&self) -> bool {
+        matches!(self, ResizeState::Resizing { .. })
+    }
 }
 
 /// Describes the resize-sensitive frame around a webview in texture-pixel space.

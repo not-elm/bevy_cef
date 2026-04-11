@@ -58,6 +58,7 @@ impl Plugin for CefPlugin {
             ZoomPlugin,
             AudioMutePlugin,
         ));
+        app.init_resource::<resize::ResizeState>();
         if !app.is_plugin_added::<RemotePlugin>() {
             app.add_plugins(RemotePlugin::default());
         }
