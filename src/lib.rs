@@ -3,6 +3,7 @@
 mod common;
 mod cursor_icon;
 mod drag;
+mod resize;
 mod keyboard;
 mod mute;
 mod navigation;
