@@ -3,10 +3,10 @@
 mod common;
 mod cursor_icon;
 mod drag;
-mod resize;
 mod keyboard;
 mod mute;
 mod navigation;
+mod resize;
 mod system_param;
 mod webview;
 mod zoom;
@@ -24,8 +24,8 @@ use bevy_cef_core::prelude::{CefExtensions, CommandLineConfig};
 use bevy_remote::RemotePlugin;
 
 pub mod prelude {
+    pub use crate::resize::components::{AspectLockMode, WebviewResizable};
     pub use crate::{CefPlugin, RunOnMainThread, common::*, navigation::*, webview::prelude::*};
-    pub use crate::resize::components::{WebviewResizable, AspectLockMode};
     pub use bevy_cef_core::prelude::{CefExtensions, CommandLineConfig};
 }
 

@@ -63,7 +63,11 @@ pub(crate) fn apply_display_to_mesh_system(
 pub(crate) fn apply_display_to_sprite_system(
     mut webviews: Query<
         (&DisplaySize, &mut Sprite),
-        (With<WebviewResizable>, Changed<DisplaySize>, Without<Mesh3d>),
+        (
+            With<WebviewResizable>,
+            Changed<DisplaySize>,
+            Without<Mesh3d>,
+        ),
     >,
 ) {
     for (display, mut sprite) in webviews.iter_mut() {

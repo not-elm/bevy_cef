@@ -1,7 +1,7 @@
 //! Cursor override for resize edge hover feedback.
 
-use bevy::window::SystemCursorIcon;
 use bevy::prelude::*;
+use bevy::window::SystemCursorIcon;
 
 use super::ResizeZone;
 

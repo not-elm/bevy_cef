@@ -1,7 +1,7 @@
 //! Resize plugin: wires derive pipeline, resize state machine, and unified observer.
 
-use bevy::prelude::*;
 use bevy::camera::primitives::MeshAabb as _;
+use bevy::prelude::*;
 
 use super::components::*;
 use super::cursor::*;
@@ -20,11 +20,7 @@ impl Plugin for ResizePlugin {
             .init_resource::<SystemCursorOverride>()
             .add_systems(
                 Update,
-                (
-                    cursor_hover_system,
-                    resize_tracking_system,
-                )
-                    .in_set(WebviewSet::ResizeInteraction),
+                (cursor_hover_system, resize_tracking_system).in_set(WebviewSet::ResizeInteraction),
             )
             .add_systems(
                 Update,
@@ -109,8 +105,7 @@ fn on_resizable_press(
             };
             let plane_origin = webview_gtf.translation();
             let plane_normal = webview_gtf.forward();
-            let Some(t) =
-                ray.intersect_plane(plane_origin, InfinitePlane3d::new(plane_normal))
+            let Some(t) = ray.intersect_plane(plane_origin, InfinitePlane3d::new(plane_normal))
             else {
                 return;
             };
@@ -161,8 +156,7 @@ fn on_resizable_press(
             };
             let plane_origin = webview_gtf.translation();
             let plane_normal = webview_gtf.forward();
-            let Some(t) =
-                ray.intersect_plane(plane_origin, InfinitePlane3d::new(plane_normal))
+            let Some(t) = ray.intersect_plane(plane_origin, InfinitePlane3d::new(plane_normal))
             else {
                 return;
             };
@@ -271,27 +265,20 @@ fn resize_tracking_system(
     let du = delta.dot(u_axis);
     let dv = delta.dot(v_axis);
 
-    let Ok((mut tf, mut display_size, resizable, base, quality, dpr)) =
-        webviews.get_mut(webview)
+    let Ok((mut tf, mut display_size, resizable, base, quality, dpr)) = webviews.get_mut(webview)
     else {
         return;
     };
 
     // Convert min/max from texture pixels to display-size units.
-    let scale_factor = Vec2::new(
-        base.0.x * quality.0 * dpr.0,
-        base.0.y * quality.0 * dpr.0,
-    );
+    let scale_factor = Vec2::new(base.0.x * quality.0 * dpr.0, base.0.y * quality.0 * dpr.0);
     let min_display = Vec2::new(
         resizable.min_size.x as f32 / scale_factor.x,
         resizable.min_size.y as f32 / scale_factor.y,
     );
-    let max_display = resizable.max_size.map(|max| {
-        Vec2::new(
-            max.x as f32 / scale_factor.x,
-            max.y as f32 / scale_factor.y,
-        )
-    });
+    let max_display = resizable
+        .max_size
+        .map(|max| Vec2::new(max.x as f32 / scale_factor.x, max.y as f32 / scale_factor.y));
 
     // Determine if aspect lock is active.
     let lock_aspect = match aspect_lock_mode {
@@ -333,7 +320,13 @@ fn cursor_hover_system(
     >,
     // Sprite path
     sprite_resizables: Query<
-        (Entity, &WebviewResizable, &WebviewSize, &Sprite, &GlobalTransform),
+        (
+            Entity,
+            &WebviewResizable,
+            &WebviewSize,
+            &Sprite,
+            &GlobalTransform,
+        ),
         (With<WebviewResizable>, With<Sprite>),
     >,
     cameras: Query<(&Camera, &GlobalTransform)>,
@@ -364,9 +357,9 @@ fn cursor_hover_system(
 
     // Try sprite path
     for (_entity, resizable, size, sprite, gtf) in sprite_resizables.iter() {
-        if let Some(pixel_pos) =
-            crate::webview::webview_sprite::obtain_relative_pos(sprite, size, gtf, &cameras, cursor_pos)
-        {
+        if let Some(pixel_pos) = crate::webview::webview_sprite::obtain_relative_pos(
+            sprite, size, gtf, &cameras, cursor_pos,
+        ) {
             let frame = ResizeFrame {
                 width: size.0.x as u32,
                 height: size.0.y as u32,
@@ -415,8 +408,7 @@ fn init_resizable_system(
                     let local_size =
                         Vec2::new(aabb.half_extents.x * 2.0, aabb.half_extents.y * 2.0);
                     let scale = gtf.compute_transform().scale;
-                    let world_size =
-                        Vec2::new(local_size.x * scale.x, local_size.y * scale.y);
+                    let world_size = Vec2::new(local_size.x * scale.x, local_size.y * scale.y);
                     let base = Vec2::new(
                         webview_size.0.x / (world_size.x * dpr),
                         webview_size.0.y / (world_size.y * dpr),

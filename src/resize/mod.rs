@@ -5,14 +5,21 @@ pub(crate) mod cursor;
 pub(crate) mod pipeline;
 pub(crate) mod plugin;
 
+use crate::drag::{DraggableRegions, is_draggable};
 use bevy::prelude::*;
-use crate::drag::{is_draggable, DraggableRegions};
 use components::AspectLockMode;
 
 /// One of the 8 resize zones around a webview's edge.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ResizeZone {
-    N, S, E, W, NE, NW, SE, SW,
+    N,
+    S,
+    E,
+    W,
+    NE,
+    NW,
+    SE,
+    SW,
 }
 
 /// Global resize routing state.
@@ -185,10 +192,10 @@ pub(crate) fn classify_hit(
     frame: Option<&ResizeFrame>,
     pos: Vec2,
 ) -> HitResult {
-    if let Some(frame) = frame {
-        if let Some(zone) = frame.classify(pos) {
-            return HitResult::Resize(zone);
-        }
+    if let Some(frame) = frame
+        && let Some(zone) = frame.classify(pos)
+    {
+        return HitResult::Resize(zone);
     }
     if is_draggable(&regions.drag_rects, &regions.no_drag_rects, pos) {
         return HitResult::Drag;
@@ -202,7 +209,11 @@ mod tests {
     use crate::drag::{DraggableRegions, PixelRect};
 
     fn frame(w: u32, h: u32, t: u32) -> ResizeFrame {
-        ResizeFrame { width: w, height: h, edge_thickness: t }
+        ResizeFrame {
+            width: w,
+            height: h,
+            edge_thickness: t,
+        }
     }
 
     #[test]
@@ -261,7 +272,11 @@ mod tests {
             }],
             no_drag_rects: vec![],
         };
-        let resize_frame = ResizeFrame { width: 800, height: 600, edge_thickness: 16 };
+        let resize_frame = ResizeFrame {
+            width: 800,
+            height: 600,
+            edge_thickness: 16,
+        };
         let result = classify_hit(&regions, Some(&resize_frame), Vec2::new(3.0, 3.0));
         assert_eq!(result, HitResult::Resize(ResizeZone::NW));
     }
@@ -275,7 +290,11 @@ mod tests {
             }],
             no_drag_rects: vec![],
         };
-        let resize_frame = ResizeFrame { width: 800, height: 600, edge_thickness: 16 };
+        let resize_frame = ResizeFrame {
+            width: 800,
+            height: 600,
+            edge_thickness: 16,
+        };
         let result = classify_hit(&regions, Some(&resize_frame), Vec2::new(400.0, 25.0));
         assert_eq!(result, HitResult::Drag);
     }
@@ -320,8 +339,18 @@ mod tests {
     #[test]
     fn apply_resize_east_pins_west_edge() {
         let west_before = world_pos_of(START_TR, START_SIZE, U, V, 0.0, 0.5);
-        let (new_size, new_tr) =
-            apply_resize(ResizeZone::E, START_SIZE, START_TR, 1.5, 0.0, U, V, false, MIN, None);
+        let (new_size, new_tr) = apply_resize(
+            ResizeZone::E,
+            START_SIZE,
+            START_TR,
+            1.5,
+            0.0,
+            U,
+            V,
+            false,
+            MIN,
+            None,
+        );
         let west_after = world_pos_of(new_tr, new_size, U, V, 0.0, 0.5);
         assert_pinned(west_before, west_after);
     }
@@ -329,8 +358,18 @@ mod tests {
     #[test]
     fn apply_resize_west_pins_east_edge() {
         let east_before = world_pos_of(START_TR, START_SIZE, U, V, 1.0, 0.5);
-        let (new_size, new_tr) =
-            apply_resize(ResizeZone::W, START_SIZE, START_TR, 0.8, 0.0, U, V, false, MIN, None);
+        let (new_size, new_tr) = apply_resize(
+            ResizeZone::W,
+            START_SIZE,
+            START_TR,
+            0.8,
+            0.0,
+            U,
+            V,
+            false,
+            MIN,
+            None,
+        );
         let east_after = world_pos_of(new_tr, new_size, U, V, 1.0, 0.5);
         assert_pinned(east_before, east_after);
     }
@@ -338,8 +377,18 @@ mod tests {
     #[test]
     fn apply_resize_north_pins_south_edge() {
         let south_before = world_pos_of(START_TR, START_SIZE, U, V, 0.5, 0.0);
-        let (new_size, new_tr) =
-            apply_resize(ResizeZone::N, START_SIZE, START_TR, 0.0, -1.0, U, V, false, MIN, None);
+        let (new_size, new_tr) = apply_resize(
+            ResizeZone::N,
+            START_SIZE,
+            START_TR,
+            0.0,
+            -1.0,
+            U,
+            V,
+            false,
+            MIN,
+            None,
+        );
         let south_after = world_pos_of(new_tr, new_size, U, V, 0.5, 0.0);
         assert_pinned(south_before, south_after);
     }
@@ -347,8 +396,18 @@ mod tests {
     #[test]
     fn apply_resize_south_pins_north_edge() {
         let north_before = world_pos_of(START_TR, START_SIZE, U, V, 0.5, 1.0);
-        let (new_size, new_tr) =
-            apply_resize(ResizeZone::S, START_SIZE, START_TR, 0.0, 1.0, U, V, false, MIN, None);
+        let (new_size, new_tr) = apply_resize(
+            ResizeZone::S,
+            START_SIZE,
+            START_TR,
+            0.0,
+            1.0,
+            U,
+            V,
+            false,
+            MIN,
+            None,
+        );
         let north_after = world_pos_of(new_tr, new_size, U, V, 0.5, 1.0);
         assert_pinned(north_before, north_after);
     }
@@ -356,8 +415,18 @@ mod tests {
     #[test]
     fn apply_resize_ne_pins_sw_corner() {
         let sw_before = world_pos_of(START_TR, START_SIZE, U, V, 0.0, 0.0);
-        let (new_size, new_tr) =
-            apply_resize(ResizeZone::NE, START_SIZE, START_TR, 0.5, -0.5, U, V, false, MIN, None);
+        let (new_size, new_tr) = apply_resize(
+            ResizeZone::NE,
+            START_SIZE,
+            START_TR,
+            0.5,
+            -0.5,
+            U,
+            V,
+            false,
+            MIN,
+            None,
+        );
         let sw_after = world_pos_of(new_tr, new_size, U, V, 0.0, 0.0);
         assert_pinned(sw_before, sw_after);
     }
@@ -365,8 +434,18 @@ mod tests {
     #[test]
     fn apply_resize_nw_pins_se_corner() {
         let se_before = world_pos_of(START_TR, START_SIZE, U, V, 1.0, 0.0);
-        let (new_size, new_tr) =
-            apply_resize(ResizeZone::NW, START_SIZE, START_TR, -0.5, -0.5, U, V, false, MIN, None);
+        let (new_size, new_tr) = apply_resize(
+            ResizeZone::NW,
+            START_SIZE,
+            START_TR,
+            -0.5,
+            -0.5,
+            U,
+            V,
+            false,
+            MIN,
+            None,
+        );
         let se_after = world_pos_of(new_tr, new_size, U, V, 1.0, 0.0);
         assert_pinned(se_before, se_after);
     }
@@ -374,8 +453,18 @@ mod tests {
     #[test]
     fn apply_resize_se_pins_nw_corner() {
         let nw_before = world_pos_of(START_TR, START_SIZE, U, V, 0.0, 1.0);
-        let (new_size, new_tr) =
-            apply_resize(ResizeZone::SE, START_SIZE, START_TR, 0.5, 0.5, U, V, false, MIN, None);
+        let (new_size, new_tr) = apply_resize(
+            ResizeZone::SE,
+            START_SIZE,
+            START_TR,
+            0.5,
+            0.5,
+            U,
+            V,
+            false,
+            MIN,
+            None,
+        );
         let nw_after = world_pos_of(new_tr, new_size, U, V, 0.0, 1.0);
         assert_pinned(nw_before, nw_after);
     }
@@ -383,8 +472,18 @@ mod tests {
     #[test]
     fn apply_resize_sw_pins_ne_corner() {
         let ne_before = world_pos_of(START_TR, START_SIZE, U, V, 1.0, 1.0);
-        let (new_size, new_tr) =
-            apply_resize(ResizeZone::SW, START_SIZE, START_TR, -0.5, 0.5, U, V, false, MIN, None);
+        let (new_size, new_tr) = apply_resize(
+            ResizeZone::SW,
+            START_SIZE,
+            START_TR,
+            -0.5,
+            0.5,
+            U,
+            V,
+            false,
+            MIN,
+            None,
+        );
         let ne_after = world_pos_of(new_tr, new_size, U, V, 1.0, 1.0);
         assert_pinned(ne_before, ne_after);
     }
@@ -487,7 +586,10 @@ mod tests {
             Vec2::new(0.1, 0.1),
             None,
         );
-        assert!((new_size.x - new_size.y).abs() < 1e-4, "Aspect not locked: {new_size:?}");
+        assert!(
+            (new_size.x - new_size.y).abs() < 1e-4,
+            "Aspect not locked: {new_size:?}"
+        );
     }
 
     #[test]
@@ -526,6 +628,9 @@ mod tests {
             Vec2::new(1.0, 1.0),
             None,
         );
-        assert!(new_size.x >= 1.0 && new_size.y >= 1.0, "Below min: {new_size:?}");
+        assert!(
+            new_size.x >= 1.0 && new_size.y >= 1.0,
+            "Below min: {new_size:?}"
+        );
     }
 }

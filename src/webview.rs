@@ -138,7 +138,9 @@ impl Plugin for WebviewPlugin {
                     Update,
                     (
                         resize.run_if(any_resized).in_set(WebviewSet::CommitResize),
-                        create_webview.run_if(added_webview).in_set(WebviewSet::CreateBrowser),
+                        create_webview
+                            .run_if(added_webview)
+                            .in_set(WebviewSet::CreateBrowser),
                         navigate_on_source_change,
                     ),
                 )
@@ -179,8 +181,12 @@ impl Plugin for WebviewPlugin {
                 .add_systems(
                     Update,
                     (
-                        resize_win.run_if(any_resized).in_set(WebviewSet::CommitResize),
-                        create_webview_win.run_if(added_webview).in_set(WebviewSet::CreateBrowser),
+                        resize_win
+                            .run_if(any_resized)
+                            .in_set(WebviewSet::CommitResize),
+                        create_webview_win
+                            .run_if(added_webview)
+                            .in_set(WebviewSet::CreateBrowser),
                         navigate_on_source_change_win,
                     ),
                 )
