@@ -3,6 +3,7 @@
 pub(crate) mod components;
 pub(crate) mod cursor;
 pub(crate) mod pipeline;
+pub(crate) mod plugin;
 
 use bevy::prelude::*;
 use crate::drag::{is_draggable, DraggableRegions};

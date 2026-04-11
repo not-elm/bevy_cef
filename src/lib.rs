@@ -17,6 +17,7 @@ use crate::drag::DragPlugin;
 use crate::keyboard::KeyboardPlugin;
 use crate::mute::AudioMutePlugin;
 use crate::prelude::{IpcPlugin, NavigationPlugin, WebviewPlugin};
+use crate::resize::plugin::ResizePlugin;
 use crate::zoom::ZoomPlugin;
 use bevy::prelude::*;
 use bevy_cef_core::prelude::{CefExtensions, CommandLineConfig};
@@ -54,11 +55,11 @@ impl Plugin for CefPlugin {
             KeyboardPlugin,
             SystemCursorIconPlugin,
             DragPlugin,
+            ResizePlugin,
             NavigationPlugin,
             ZoomPlugin,
             AudioMutePlugin,
         ));
-        app.init_resource::<resize::ResizeState>();
         if !app.is_plugin_added::<RemotePlugin>() {
             app.add_plugins(RemotePlugin::default());
         }

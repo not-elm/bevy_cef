@@ -212,6 +212,7 @@ fn on_drag_press(
 }
 
 /// Attach drag-press observer to newly-created mesh webviews with a Transform.
+/// Resizable webviews are excluded — they use the unified observer in `ResizePlugin`.
 fn attach_drag_observers(
     mut commands: Commands,
     webviews: Query<
@@ -219,6 +220,7 @@ fn attach_drag_observers(
         (
             Added<WebviewSource>,
             With<Transform>,
+            Without<crate::resize::components::WebviewResizable>,
             Or<(With<Mesh3d>, With<Mesh2d>)>,
         ),
     >,
