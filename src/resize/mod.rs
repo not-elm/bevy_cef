@@ -27,10 +27,6 @@ pub enum ResizeZone {
 pub(crate) enum ResizeState {
     #[default]
     Idle,
-    Hovering {
-        webview: Entity,
-        zone: ResizeZone,
-    },
     Resizing {
         webview: Entity,
         zone: ResizeZone,
@@ -103,6 +99,7 @@ pub(crate) enum HitResult {
 ///
 /// The pinned-corner rule: dragging one edge/corner keeps the opposite
 /// edge/corner fixed in world space. Assumes centered origin.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn apply_resize(
     zone: ResizeZone,
     start_size: Vec2,

@@ -263,7 +263,7 @@ fn resize_tracking_system(
     let current_hit = ray.origin + ray.direction * t;
     let delta = current_hit - start_hit_world;
     let du = delta.dot(u_axis);
-    let dv = delta.dot(v_axis);
+    let dv = -delta.dot(v_axis);
 
     let Ok((mut tf, mut display_size, resizable, base, quality, dpr)) = webviews.get_mut(webview)
     else {
@@ -418,11 +418,7 @@ fn init_resizable_system(
                         BaseRenderScale(base),
                         QualityMultiplier::default(),
                         WebviewDpr(dpr),
-                        WebviewBasis2d {
-                            u_axis: Vec3::X,
-                            v_axis: Vec3::Y,
-                            local_size,
-                        },
+                        WebviewBasis2d { local_size },
                     ));
                 } else {
                     // AABB not ready -- mark for deferred init
@@ -484,11 +480,7 @@ fn pending_basis_init_system(
         commands.entity(entity).insert((
             DisplaySize(world_size),
             BaseRenderScale(base),
-            WebviewBasis2d {
-                u_axis: Vec3::X,
-                v_axis: Vec3::Y,
-                local_size,
-            },
+            WebviewBasis2d { local_size },
         ));
         commands.entity(entity).remove::<PendingBasisInit>();
     }

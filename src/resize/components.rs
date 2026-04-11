@@ -90,10 +90,6 @@ impl Default for WebviewDpr {
 /// Phase 1 requires Z-normal planes (`Plane3d::new(Vec3::Z, ...)`).
 #[derive(Component, Debug, Clone, Copy)]
 pub struct WebviewBasis2d {
-    /// World-space direction of local +U (webview width).
-    pub u_axis: Vec3,
-    /// World-space direction of local +V (webview height).
-    pub v_axis: Vec3,
     /// Extent of the webview in local 2D units (width, height), pre-scale.
     pub local_size: Vec2,
 }
