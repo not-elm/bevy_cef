@@ -25,6 +25,7 @@ use bevy_remote::RemotePlugin;
 
 pub mod prelude {
     pub use crate::{CefPlugin, RunOnMainThread, common::*, navigation::*, webview::prelude::*};
+    pub use crate::resize::components::{WebviewResizable, AspectLockMode};
     pub use bevy_cef_core::prelude::{CefExtensions, CommandLineConfig};
 }
 
