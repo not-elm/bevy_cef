@@ -56,6 +56,67 @@ pub(crate) enum HitResult {
     None,
 }
 
+/// Compute new display size and translation after a resize drag.
+///
+/// The pinned-corner rule: dragging one edge/corner keeps the opposite
+/// edge/corner fixed in world space. Assumes centered origin.
+pub(crate) fn apply_resize(
+    zone: ResizeZone,
+    start_size: Vec2,
+    start_translation: Vec3,
+    du: f32,
+    dv: f32,
+    u_axis: Vec3,
+    v_axis: Vec3,
+    lock_aspect: bool,
+    min_size: Vec2,
+    max_size: Option<Vec2>,
+) -> (Vec2, Vec3) {
+    let (dw_raw, dh_raw) = match zone {
+        ResizeZone::E => (du, 0.0),
+        ResizeZone::W => (-du, 0.0),
+        ResizeZone::S => (0.0, dv),
+        ResizeZone::N => (0.0, -dv),
+        ResizeZone::NE => (du, -dv),
+        ResizeZone::NW => (-du, -dv),
+        ResizeZone::SE => (du, dv),
+        ResizeZone::SW => (-du, dv),
+    };
+    let mut new_size = Vec2::new(start_size.x + dw_raw, start_size.y + dh_raw);
+
+    if lock_aspect {
+        let aspect = start_size.x / start_size.y;
+        if dw_raw.abs() * (1.0 / aspect) > dh_raw.abs() {
+            new_size.y = new_size.x / aspect;
+        } else {
+            new_size.x = new_size.y * aspect;
+        }
+    }
+
+    new_size = new_size.max(min_size);
+    if let Some(max) = max_size {
+        new_size = new_size.min(max);
+    }
+
+    let actual_dw = new_size.x - start_size.x;
+    let actual_dh = new_size.y - start_size.y;
+
+    let sign_u = match zone {
+        ResizeZone::E | ResizeZone::NE | ResizeZone::SE => 0.5,
+        ResizeZone::W | ResizeZone::NW | ResizeZone::SW => -0.5,
+        _ => 0.0,
+    };
+    let sign_v = match zone {
+        ResizeZone::N | ResizeZone::NE | ResizeZone::NW => 0.5,
+        ResizeZone::S | ResizeZone::SE | ResizeZone::SW => -0.5,
+        _ => 0.0,
+    };
+    let new_translation =
+        start_translation + u_axis * (actual_dw * sign_u) + v_axis * (actual_dh * sign_v);
+
+    (new_size, new_translation)
+}
+
 /// Classify a pointer's texture-pixel position: resize edge > drag region > page input.
 pub(crate) fn classify_hit(
     regions: &DraggableRegions,
@@ -168,5 +229,101 @@ mod tests {
         };
         let result = classify_hit(&regions, None, Vec2::new(3.0, 3.0));
         assert_eq!(result, HitResult::Drag);
+    }
+
+    fn world_pos_of(
+        translation: Vec3,
+        size: Vec2,
+        u_axis: Vec3,
+        v_axis: Vec3,
+        fx: f32,
+        fy: f32,
+    ) -> Vec3 {
+        translation + u_axis * size.x * (fx - 0.5) + v_axis * size.y * (fy - 0.5)
+    }
+
+    fn assert_pinned(before: Vec3, after: Vec3) {
+        assert!(
+            (before - after).length() < 1e-4,
+            "Pinned point moved: {before:?} → {after:?}"
+        );
+    }
+
+    const U: Vec3 = Vec3::X;
+    const V: Vec3 = Vec3::Y;
+    const START_SIZE: Vec2 = Vec2::new(2.0, 2.0);
+    const START_TR: Vec3 = Vec3::ZERO;
+    const MIN: Vec2 = Vec2::new(0.1, 0.1);
+
+    #[test]
+    fn apply_resize_east_pins_west_edge() {
+        let west_before = world_pos_of(START_TR, START_SIZE, U, V, 0.0, 0.5);
+        let (new_size, new_tr) =
+            apply_resize(ResizeZone::E, START_SIZE, START_TR, 1.5, 0.0, U, V, false, MIN, None);
+        let west_after = world_pos_of(new_tr, new_size, U, V, 0.0, 0.5);
+        assert_pinned(west_before, west_after);
+    }
+
+    #[test]
+    fn apply_resize_west_pins_east_edge() {
+        let east_before = world_pos_of(START_TR, START_SIZE, U, V, 1.0, 0.5);
+        let (new_size, new_tr) =
+            apply_resize(ResizeZone::W, START_SIZE, START_TR, 0.8, 0.0, U, V, false, MIN, None);
+        let east_after = world_pos_of(new_tr, new_size, U, V, 1.0, 0.5);
+        assert_pinned(east_before, east_after);
+    }
+
+    #[test]
+    fn apply_resize_north_pins_south_edge() {
+        let south_before = world_pos_of(START_TR, START_SIZE, U, V, 0.5, 0.0);
+        let (new_size, new_tr) =
+            apply_resize(ResizeZone::N, START_SIZE, START_TR, 0.0, -1.0, U, V, false, MIN, None);
+        let south_after = world_pos_of(new_tr, new_size, U, V, 0.5, 0.0);
+        assert_pinned(south_before, south_after);
+    }
+
+    #[test]
+    fn apply_resize_south_pins_north_edge() {
+        let north_before = world_pos_of(START_TR, START_SIZE, U, V, 0.5, 1.0);
+        let (new_size, new_tr) =
+            apply_resize(ResizeZone::S, START_SIZE, START_TR, 0.0, 1.0, U, V, false, MIN, None);
+        let north_after = world_pos_of(new_tr, new_size, U, V, 0.5, 1.0);
+        assert_pinned(north_before, north_after);
+    }
+
+    #[test]
+    fn apply_resize_ne_pins_sw_corner() {
+        let sw_before = world_pos_of(START_TR, START_SIZE, U, V, 0.0, 0.0);
+        let (new_size, new_tr) =
+            apply_resize(ResizeZone::NE, START_SIZE, START_TR, 0.5, -0.5, U, V, false, MIN, None);
+        let sw_after = world_pos_of(new_tr, new_size, U, V, 0.0, 0.0);
+        assert_pinned(sw_before, sw_after);
+    }
+
+    #[test]
+    fn apply_resize_nw_pins_se_corner() {
+        let se_before = world_pos_of(START_TR, START_SIZE, U, V, 1.0, 0.0);
+        let (new_size, new_tr) =
+            apply_resize(ResizeZone::NW, START_SIZE, START_TR, -0.5, -0.5, U, V, false, MIN, None);
+        let se_after = world_pos_of(new_tr, new_size, U, V, 1.0, 0.0);
+        assert_pinned(se_before, se_after);
+    }
+
+    #[test]
+    fn apply_resize_se_pins_nw_corner() {
+        let nw_before = world_pos_of(START_TR, START_SIZE, U, V, 0.0, 1.0);
+        let (new_size, new_tr) =
+            apply_resize(ResizeZone::SE, START_SIZE, START_TR, 0.5, 0.5, U, V, false, MIN, None);
+        let nw_after = world_pos_of(new_tr, new_size, U, V, 0.0, 1.0);
+        assert_pinned(nw_before, nw_after);
+    }
+
+    #[test]
+    fn apply_resize_sw_pins_ne_corner() {
+        let ne_before = world_pos_of(START_TR, START_SIZE, U, V, 1.0, 1.0);
+        let (new_size, new_tr) =
+            apply_resize(ResizeZone::SW, START_SIZE, START_TR, -0.5, 0.5, U, V, false, MIN, None);
+        let ne_after = world_pos_of(new_tr, new_size, U, V, 1.0, 1.0);
+        assert_pinned(ne_before, ne_after);
     }
 }
