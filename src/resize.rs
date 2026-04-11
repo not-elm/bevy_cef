@@ -1,6 +1,7 @@
 //! Resize feature: drag-to-resize webviews with automatic edge detection.
 
 use bevy::prelude::*;
+use crate::drag::{is_draggable, DraggableRegions};
 
 /// One of the 8 resize zones around a webview's edge.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -47,9 +48,35 @@ impl ResizeFrame {
     }
 }
 
+/// Result of classifying a pointer position on a webview.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum HitResult {
+    Resize(ResizeZone),
+    Drag,
+    None,
+}
+
+/// Classify a pointer's texture-pixel position: resize edge > drag region > page input.
+pub(crate) fn classify_hit(
+    regions: &DraggableRegions,
+    frame: Option<&ResizeFrame>,
+    pos: Vec2,
+) -> HitResult {
+    if let Some(frame) = frame {
+        if let Some(zone) = frame.classify(pos) {
+            return HitResult::Resize(zone);
+        }
+    }
+    if is_draggable(&regions.drag_rects, &regions.no_drag_rects, pos) {
+        return HitResult::Drag;
+    }
+    HitResult::None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::drag::{DraggableRegions, PixelRect};
 
     fn frame(w: u32, h: u32, t: u32) -> ResizeFrame {
         ResizeFrame { width: w, height: h, edge_thickness: t }
@@ -100,5 +127,46 @@ mod tests {
         assert_eq!(f.classify(Vec2::new(3.0, 597.0)), Some(ResizeZone::SW));
         assert_eq!(f.classify(Vec2::new(400.0, 597.0)), Some(ResizeZone::S));
         assert_eq!(f.classify(Vec2::new(797.0, 597.0)), Some(ResizeZone::SE));
+    }
+
+    #[test]
+    fn resize_edge_wins_over_drag_region_at_boundary() {
+        let regions = DraggableRegions {
+            drag_rects: vec![PixelRect {
+                min: Vec2::new(0.0, 0.0),
+                max: Vec2::new(800.0, 40.0),
+            }],
+            no_drag_rects: vec![],
+        };
+        let resize_frame = ResizeFrame { width: 800, height: 600, edge_thickness: 16 };
+        let result = classify_hit(&regions, Some(&resize_frame), Vec2::new(3.0, 3.0));
+        assert_eq!(result, HitResult::Resize(ResizeZone::NW));
+    }
+
+    #[test]
+    fn interior_drag_region_unchanged_by_resize_edges() {
+        let regions = DraggableRegions {
+            drag_rects: vec![PixelRect {
+                min: Vec2::new(0.0, 0.0),
+                max: Vec2::new(800.0, 40.0),
+            }],
+            no_drag_rects: vec![],
+        };
+        let resize_frame = ResizeFrame { width: 800, height: 600, edge_thickness: 16 };
+        let result = classify_hit(&regions, Some(&resize_frame), Vec2::new(400.0, 25.0));
+        assert_eq!(result, HitResult::Drag);
+    }
+
+    #[test]
+    fn classify_hit_no_resize_frame_falls_through_to_drag() {
+        let regions = DraggableRegions {
+            drag_rects: vec![PixelRect {
+                min: Vec2::new(0.0, 0.0),
+                max: Vec2::new(800.0, 40.0),
+            }],
+            no_drag_rects: vec![],
+        };
+        let result = classify_hit(&regions, None, Vec2::new(3.0, 3.0));
+        assert_eq!(result, HitResult::Drag);
     }
 }
