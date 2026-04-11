@@ -1,6 +1,7 @@
 //! Resize feature: drag-to-resize webviews with automatic edge detection.
 
 pub(crate) mod components;
+pub(crate) mod pipeline;
 
 use bevy::prelude::*;
 use crate::drag::{is_draggable, DraggableRegions};
