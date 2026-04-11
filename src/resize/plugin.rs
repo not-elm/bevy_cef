@@ -1,8 +1,10 @@
 //! Resize plugin: wires derive pipeline, resize state machine, and unified observer.
 
 use bevy::prelude::*;
+use bevy::camera::primitives::MeshAabb as _;
 
 use super::components::*;
+use super::cursor::*;
 use super::pipeline::*;
 use super::*;
 use crate::common::{WebviewSize, WebviewSource};
@@ -15,13 +17,19 @@ pub struct ResizePlugin;
 impl Plugin for ResizePlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ResizeState>()
+            .init_resource::<SystemCursorOverride>()
             .add_systems(
                 Update,
-                resize_tracking_system.in_set(WebviewSet::ResizeInteraction),
+                (
+                    cursor_hover_system,
+                    resize_tracking_system,
+                )
+                    .in_set(WebviewSet::ResizeInteraction),
             )
             .add_systems(
                 Update,
                 (
+                    (init_resizable_system, pending_basis_init_system),
                     derive_pipeline_system,
                     (apply_display_to_mesh_system, apply_display_to_sprite_system),
                 )
@@ -309,4 +317,187 @@ fn resize_tracking_system(
 
     display_size.0 = new_size;
     tf.translation = new_translation;
+}
+
+/// Detects cursor hovering over a resize edge and sets the appropriate cursor icon.
+#[allow(clippy::too_many_arguments)]
+fn cursor_hover_system(
+    resize_state: Res<ResizeState>,
+    windows: Query<&Window>,
+    mut cursor_override: ResMut<SystemCursorOverride>,
+    // Mesh path
+    pointer: WebviewPointer,
+    mesh_resizables: Query<
+        (Entity, &WebviewResizable, &WebviewSize),
+        (With<WebviewResizable>, With<Mesh3d>),
+    >,
+    // Sprite path
+    sprite_resizables: Query<
+        (Entity, &WebviewResizable, &WebviewSize, &Sprite, &GlobalTransform),
+        (With<WebviewResizable>, With<Sprite>),
+    >,
+    cameras: Query<(&Camera, &GlobalTransform)>,
+) {
+    if resize_state.is_resizing() {
+        return;
+    }
+
+    let Some(cursor_pos) = windows.iter().find_map(|w| w.cursor_position()) else {
+        cursor_override.clear();
+        return;
+    };
+
+    // Try mesh path first
+    for (entity, resizable, size) in mesh_resizables.iter() {
+        if let Some((pixel_pos, _cam)) = pointer.pointer_pos_raw(entity, cursor_pos) {
+            let frame = ResizeFrame {
+                width: size.0.x as u32,
+                height: size.0.y as u32,
+                edge_thickness: resizable.edge_thickness,
+            };
+            if let Some(zone) = frame.classify(pixel_pos) {
+                cursor_override.set(cursor_for_zone(zone));
+                return;
+            }
+        }
+    }
+
+    // Try sprite path
+    for (_entity, resizable, size, sprite, gtf) in sprite_resizables.iter() {
+        if let Some(pixel_pos) =
+            crate::webview::webview_sprite::obtain_relative_pos(sprite, size, gtf, &cameras, cursor_pos)
+        {
+            let frame = ResizeFrame {
+                width: size.0.x as u32,
+                height: size.0.y as u32,
+                edge_thickness: resizable.edge_thickness,
+            };
+            if let Some(zone) = frame.classify(pixel_pos) {
+                cursor_override.set(cursor_for_zone(zone));
+                return;
+            }
+        }
+    }
+
+    // No resize edge hit -- clear override
+    cursor_override.clear();
+}
+
+/// Initializes pipeline components when `WebviewResizable` is first added to an entity.
+#[allow(clippy::too_many_arguments)]
+fn init_resizable_system(
+    mut commands: Commands,
+    new_resizables: Query<
+        (
+            Entity,
+            &WebviewSize,
+            &Transform,
+            &GlobalTransform,
+            Option<&Mesh3d>,
+            Option<&Sprite>,
+        ),
+        Added<WebviewResizable>,
+    >,
+    mesh_assets: Res<Assets<Mesh>>,
+    windows: Query<&Window>,
+) {
+    let dpr = windows
+        .iter()
+        .next()
+        .map(|w| w.scale_factor())
+        .unwrap_or(1.0);
+
+    for (entity, webview_size, _tf, gtf, mesh3d, sprite) in new_resizables.iter() {
+        if let Some(mesh3d) = mesh3d {
+            // 3D mesh path
+            if let Some(mesh) = mesh_assets.get(&mesh3d.0) {
+                if let Some(aabb) = mesh.compute_aabb() {
+                    let local_size =
+                        Vec2::new(aabb.half_extents.x * 2.0, aabb.half_extents.y * 2.0);
+                    let scale = gtf.compute_transform().scale;
+                    let world_size =
+                        Vec2::new(local_size.x * scale.x, local_size.y * scale.y);
+                    let base = Vec2::new(
+                        webview_size.0.x / (world_size.x * dpr),
+                        webview_size.0.y / (world_size.y * dpr),
+                    );
+                    commands.entity(entity).insert((
+                        DisplaySize(world_size),
+                        BaseRenderScale(base),
+                        QualityMultiplier::default(),
+                        WebviewDpr(dpr),
+                        WebviewBasis2d {
+                            u_axis: Vec3::X,
+                            v_axis: Vec3::Y,
+                            local_size,
+                        },
+                    ));
+                } else {
+                    // AABB not ready -- mark for deferred init
+                    commands.entity(entity).insert((
+                        PendingBasisInit,
+                        QualityMultiplier::default(),
+                        WebviewDpr(dpr),
+                    ));
+                }
+            } else {
+                commands.entity(entity).insert((
+                    PendingBasisInit,
+                    QualityMultiplier::default(),
+                    WebviewDpr(dpr),
+                ));
+            }
+        } else if let Some(sprite) = sprite {
+            // 2D sprite path
+            let display_size = sprite
+                .custom_size
+                .unwrap_or(Vec2::new(webview_size.0.x, webview_size.0.y));
+            let base = Vec2::new(
+                webview_size.0.x / (display_size.x * dpr),
+                webview_size.0.y / (display_size.y * dpr),
+            );
+            commands.entity(entity).insert((
+                DisplaySize(display_size),
+                BaseRenderScale(base),
+                QualityMultiplier::default(),
+                WebviewDpr(dpr),
+            ));
+        }
+    }
+}
+
+/// Retries initialization for entities with `PendingBasisInit` once their mesh AABB becomes available.
+fn pending_basis_init_system(
+    mut commands: Commands,
+    pending: Query<
+        (Entity, &WebviewSize, &GlobalTransform, &Mesh3d, &WebviewDpr),
+        With<PendingBasisInit>,
+    >,
+    mesh_assets: Res<Assets<Mesh>>,
+) {
+    for (entity, webview_size, gtf, mesh3d, dpr) in pending.iter() {
+        let Some(mesh) = mesh_assets.get(&mesh3d.0) else {
+            continue;
+        };
+        let Some(aabb) = mesh.compute_aabb() else {
+            continue;
+        };
+        let local_size = Vec2::new(aabb.half_extents.x * 2.0, aabb.half_extents.y * 2.0);
+        let scale = gtf.compute_transform().scale;
+        let world_size = Vec2::new(local_size.x * scale.x, local_size.y * scale.y);
+        let base = Vec2::new(
+            webview_size.0.x / (world_size.x * dpr.0),
+            webview_size.0.y / (world_size.y * dpr.0),
+        );
+        commands.entity(entity).insert((
+            DisplaySize(world_size),
+            BaseRenderScale(base),
+            WebviewBasis2d {
+                u_axis: Vec3::X,
+                v_axis: Vec3::Y,
+                local_size,
+            },
+        ));
+        commands.entity(entity).remove::<PendingBasisInit>();
+    }
 }

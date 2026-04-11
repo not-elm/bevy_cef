@@ -304,7 +304,7 @@ fn obtain_relative_pos_from_trigger<E: Debug + Clone + Reflect>(
     )
 }
 
-fn obtain_relative_pos(
+pub(crate) fn obtain_relative_pos(
     sprite: &Sprite,
     webview_size: &WebviewSize,
     transform: &GlobalTransform,

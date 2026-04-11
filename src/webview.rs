@@ -23,7 +23,7 @@ use crate::common::CommandChannelReceiver;
 use crate::common::TextureSenderRes;
 
 mod mesh;
-mod webview_sprite;
+pub(crate) mod webview_sprite;
 
 pub mod prelude {
     pub use crate::webview::{
