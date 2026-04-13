@@ -19,7 +19,7 @@
 </head>
 <body>
   <h1>bevy_cef HiDPI</h1>
-  <div class="dpr">DPR: <span id="dpr">?</span></div>
+  <div class="dpr">DPR: <span id="dpr">?</span> | VP: <span id="vp">?</span></div>
   <p>
     Lorem ipsum dolor sit amet, consectetur adipiscing elit.
     Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
@@ -28,7 +28,11 @@
   <p class="hint">Move this window between monitors with different DPI to verify the value updates, or press 1 / 2 / 3 in the host window to force DPR 1.0 / 2.0 / 3.0.</p>
   <script>
     const el = document.getElementById('dpr');
-    function render() { el.textContent = window.devicePixelRatio.toFixed(2); }
+    const vp = document.getElementById('vp');
+    function render() {
+      el.textContent = window.devicePixelRatio.toFixed(2);
+      vp.textContent = window.innerWidth + 'x' + window.innerHeight;
+    }
     render();
     setInterval(render, 250);
   </script>
