@@ -17,8 +17,8 @@ use bevy_remote::BrpMessage;
 use cef::{
     BrowserSettings, CefString, Client, DictionaryValue, ImplBrowser, ImplBrowserHost,
     ImplDictionaryValue, ImplFrame, ImplListValue, ImplProcessMessage, ImplRequestContext,
-    MouseButtonType, ProcessId, Range, RequestContext, RequestContextSettings, WindowInfo,
-    browser_host_create_browser_sync, dictionary_value_create, process_message_create,
+    MouseButtonType, PaintElementType, ProcessId, Range, RequestContext, RequestContextSettings,
+    WindowInfo, browser_host_create_browser_sync, dictionary_value_create, process_message_create,
 };
 use cef_dll_sys::{cef_event_flags_t, cef_mouse_button_type_t};
 #[allow(deprecated)]
@@ -259,16 +259,26 @@ impl BrowsersCefSide {
         }
     }
 
-    pub fn set_dpr(&self, webview: &Entity, dpr: f32) {
+    /// Updates the `SharedDpr` slot that `screen_info` reads.
+    ///
+    /// Call this *before* [`Self::notify_screen_info_changed`] — the latter causes
+    /// CEF to immediately re-query `GetScreenInfo`, which reads from this slot.
+    fn set_dpr(&self, webview: &Entity, dpr: f32) {
         if let Some(browser) = self.browsers.get(webview) {
             *browser.dpr.lock().unwrap() = dpr;
         }
     }
 
-    pub fn notify_screen_info_changed(&self, webview: &Entity) {
+    /// Tell CEF to re-query screen info and force an immediate repaint.
+    ///
+    /// `notify_screen_info_changed` alone only updates Chromium's cached screen
+    /// metrics; it does not explicitly promise an `OnPaint` (cef_browser.h:710-730).
+    /// We follow the cefclient OSR convention and pair it with an explicit
+    /// `invalidate(PET_VIEW)` so the new DPR is visible on the next frame.
+    fn notify_screen_info_changed(&self, webview: &Entity) {
         if let Some(browser) = self.browsers.get(webview) {
             browser.host.notify_screen_info_changed();
-            browser.host.invalidate(cef::PaintElementType::VIEW);
+            browser.host.invalidate(PaintElementType::VIEW);
         }
     }
 
