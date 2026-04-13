@@ -11,12 +11,12 @@ use bevy::prelude::*;
 /// pipeline. Use a parent entity if you need animation-driven scale.
 #[derive(Component, Debug, Clone, Copy)]
 pub struct WebviewResizable {
-    /// Width of the invisible resize border, in **texture pixels**.
+    /// Width of the invisible resize border, in **logical pixels (DIP)**.
     /// Default: 16.
     pub edge_thickness: u32,
-    /// Minimum texture size in pixels. Default: (100, 100).
+    /// Minimum size in **logical pixels (DIP)**. Default: (100, 100).
     pub min_size: UVec2,
-    /// Maximum texture size in pixels. `None` = no cap.
+    /// Maximum size in **logical pixels (DIP)**. `None` = no cap.
     pub max_size: Option<UVec2>,
     /// Aspect-lock behavior during resize drag.
     pub aspect_lock: AspectLockMode,
@@ -67,18 +67,6 @@ pub struct BaseRenderScale(pub Vec2);
 pub struct QualityMultiplier(pub f32);
 
 impl Default for QualityMultiplier {
-    fn default() -> Self {
-        Self(1.0)
-    }
-}
-
-/// Window DPR snapshot for this webview. Phase 1: set once at spawn
-/// from the `HostWindow` (or `PrimaryWindow` fallback).
-/// Phase 2 will update this on monitor transitions.
-#[derive(Component, Debug, Clone, Copy, Deref, DerefMut)]
-pub struct WebviewDpr(pub f32);
-
-impl Default for WebviewDpr {
     fn default() -> Self {
         Self(1.0)
     }

@@ -11,7 +11,8 @@ impl Plugin for WebviewCoreComponentsPlugin {
             .register_type::<HostWindow>()
             .register_type::<ZoomLevel>()
             .register_type::<AudioMuted>()
-            .register_type::<PreloadScripts>();
+            .register_type::<PreloadScripts>()
+            .register_type::<WebviewDpr>();
     }
 }
 
@@ -24,7 +25,7 @@ impl Plugin for WebviewCoreComponentsPlugin {
 /// automatically navigates to the new source without being recreated.
 #[derive(Component, Debug, Clone, Reflect)]
 #[reflect(Component, Debug)]
-#[require(WebviewSize, ZoomLevel, AudioMuted, PreloadScripts)]
+#[require(WebviewSize, ZoomLevel, AudioMuted, PreloadScripts, WebviewDpr)]
 pub enum WebviewSource {
     /// A remote or local URL (e.g. `"https://..."` or `"cef://localhost/file.html"`).
     Url(String),
@@ -75,6 +76,25 @@ pub struct WebviewSize(pub Vec2);
 impl Default for WebviewSize {
     fn default() -> Self {
         Self(Vec2::splat(800.0))
+    }
+}
+
+/// Device pixel ratio (DPR) for the webview's backing CEF render buffer.
+///
+/// Automatically set and kept up-to-date by `WebviewDpiPlugin`: seeded from
+/// the host window's `scale_factor()` at spawn, refreshed on
+/// `WindowScaleFactorChanged`. User code normally does not need to write this
+/// component, but may override it (e.g. to force 2× rendering for screenshots).
+///
+/// `WebviewSize` is interpreted in logical pixels (DIP). The actual GPU
+/// texture CEF allocates is `WebviewSize × WebviewDpr` physical pixels.
+#[derive(Reflect, Component, Debug, Copy, Clone, PartialEq, Deref, DerefMut)]
+#[reflect(Component, Debug, Default)]
+pub struct WebviewDpr(pub f32);
+
+impl Default for WebviewDpr {
+    fn default() -> Self {
+        Self(1.0)
     }
 }
 

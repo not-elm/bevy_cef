@@ -11,7 +11,9 @@ mod system_param;
 mod webview;
 mod zoom;
 
-use crate::common::{LocalHostPlugin, MessageLoopPlugin, WebviewCoreComponentsPlugin};
+use crate::common::{
+    LocalHostPlugin, MessageLoopPlugin, WebviewCoreComponentsPlugin, WebviewDpiPlugin,
+};
 use crate::cursor_icon::SystemCursorIconPlugin;
 use crate::drag::DragPlugin;
 use crate::keyboard::KeyboardPlugin;
@@ -51,6 +53,7 @@ impl Plugin for CefPlugin {
                 root_cache_path: self.root_cache_path.clone(),
             },
             WebviewCoreComponentsPlugin,
+            WebviewDpiPlugin,
             WebviewPlugin,
             IpcPlugin,
             KeyboardPlugin,

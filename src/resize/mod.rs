@@ -163,12 +163,11 @@ pub(crate) fn derive_webview_size(
     display_size: Vec2,
     base_render_scale: Vec2,
     quality_multiplier: f32,
-    dpr: f32,
     min_size: UVec2,
     max_size: Option<UVec2>,
     current_size: UVec2,
 ) -> Option<UVec2> {
-    let raw = display_size * base_render_scale * quality_multiplier * dpr;
+    let raw = display_size * base_render_scale * quality_multiplier;
     let mut target = UVec2::new(raw.x.round().max(1.0) as u32, raw.y.round().max(1.0) as u32);
 
     target = target.max(min_size);
@@ -486,17 +485,16 @@ mod tests {
     }
 
     #[test]
-    fn derive_sprite_pixel_size_from_display_and_dpr() {
+    fn derive_sprite_pixel_size_from_display_and_scale() {
         let result = derive_webview_size(
             Vec2::new(400.0, 300.0),
             Vec2::new(2.0, 2.0),
             1.0,
-            2.0,
             UVec2::new(100, 100),
             None,
             UVec2::ZERO,
         );
-        assert_eq!(result, Some(UVec2::new(1600, 1200)));
+        assert_eq!(result, Some(UVec2::new(800, 600)));
     }
 
     #[test]
@@ -504,7 +502,6 @@ mod tests {
         let result = derive_webview_size(
             Vec2::new(3.0, 2.0),
             Vec2::new(400.0, 400.0),
-            1.0,
             1.0,
             UVec2::new(100, 100),
             None,
@@ -519,7 +516,6 @@ mod tests {
             Vec2::new(0.1, 0.1),
             Vec2::new(100.0, 100.0),
             1.0,
-            1.0,
             UVec2::new(100, 100),
             None,
             UVec2::ZERO,
@@ -532,7 +528,6 @@ mod tests {
         let result = derive_webview_size(
             Vec2::new(100.0, 100.0),
             Vec2::new(100.0, 100.0),
-            1.0,
             1.0,
             UVec2::new(100, 100),
             Some(UVec2::new(2000, 2000)),
@@ -547,7 +542,6 @@ mod tests {
             Vec2::new(3.0, 3.0),
             Vec2::new(133.33, 133.33),
             1.0,
-            1.0,
             UVec2::new(1, 1),
             None,
             UVec2::ZERO,
@@ -560,7 +554,6 @@ mod tests {
         let result = derive_webview_size(
             Vec2::new(2.0, 2.0),
             Vec2::new(400.0, 400.0),
-            1.0,
             1.0,
             UVec2::new(100, 100),
             None,

@@ -45,6 +45,7 @@ pub struct WebviewBrowser {
     pub client: Browser,
     pub host: BrowserHost,
     pub size: SharedViewSize,
+    pub dpr: SharedDpr,
     #[cfg(not(target_os = "windows"))]
     pub view_slot: SharedTexture,
     #[cfg(not(target_os = "windows"))]
@@ -64,6 +65,7 @@ impl Browsers {
         webview: Entity,
         uri: &str,
         webview_size: Vec2,
+        initial_dpr: f32,
         requester: Requester,
         ipc_event_sender: Sender<IpcEventRaw>,
         brp_sender: Sender<BrpMessage>,
@@ -74,6 +76,7 @@ impl Browsers {
     ) {
         let mut context = Self::request_context(requester);
         let size: SharedViewSize = Rc::new(Cell::new(webview_size));
+        let dpr: SharedDpr = Rc::new(Cell::new(initial_dpr));
         let view_slot: SharedTexture = Rc::new(Cell::new(None));
         let popup_slot: SharedTexture = Rc::new(Cell::new(None));
         let browser = browser_host_create_browser_sync(
@@ -92,6 +95,7 @@ impl Browsers {
                 size.clone(),
                 view_slot.clone(),
                 popup_slot.clone(),
+                dpr.clone(),
                 ipc_event_sender,
                 brp_sender,
                 system_cursor_icon_sender,
@@ -111,6 +115,7 @@ impl Browsers {
             host,
             client: browser,
             size,
+            dpr,
             view_slot,
             popup_slot,
         };
@@ -220,6 +225,37 @@ impl Browsers {
             {
                 *browser.size.lock().unwrap() = size;
             }
+            browser.host.was_resized();
+        }
+    }
+
+    /// Update the stored device scale factor for the webview's backing browser.
+    ///
+    /// Must be called before [`Self::notify_screen_info_changed`] — otherwise
+    /// CEF re-queries `GetScreenInfo` with the stale value.
+    pub fn set_dpr(&self, webview: &Entity, dpr: f32) {
+        if let Some(browser) = self.browsers.get(webview) {
+            #[cfg(not(target_os = "windows"))]
+            browser.dpr.set(dpr);
+            #[cfg(target_os = "windows")]
+            {
+                *browser.dpr.lock().unwrap() = dpr;
+            }
+        }
+    }
+
+    /// Tell CEF to re-query screen info and force Blink to reflow at the new DPR.
+    ///
+    /// `notify_screen_info_changed` alone updates Chromium's cached screen
+    /// metrics but does not run `ResizeRootLayer` / `SynchronizeVisualProperties`.
+    /// Only `was_resized()` pushes new `VisualProperties` (including the new
+    /// `device_scale_factor`) to Blink. Without the pair, the CSS viewport
+    /// ends up laid out as `view_rect × DSF` DIP wide and on-screen text
+    /// shrinks by exactly `1/DSF`. Matches the cefclient OSR convention
+    /// (`tests/cefclient/browser/osr_window_win.cc::SetDeviceScaleFactor`).
+    pub fn notify_screen_info_changed(&self, webview: &Entity) {
+        if let Some(browser) = self.browsers.get(webview) {
+            browser.host.notify_screen_info_changed();
             browser.host.was_resized();
         }
     }
@@ -441,6 +477,7 @@ impl Browsers {
         size: SharedViewSize,
         view_slot: SharedTexture,
         popup_slot: SharedTexture,
+        dpr: SharedDpr,
         ipc_event_sender: Sender<IpcEventRaw>,
         brp_sender: Sender<BrpMessage>,
         system_cursor_icon_sender: SystemCursorIconSenderInner,
@@ -451,6 +488,7 @@ impl Browsers {
             view_slot,
             popup_slot,
             size.clone(),
+            dpr,
         ))
         .with_display_handler(DisplayHandlerBuilder::build(system_cursor_icon_sender))
         .with_drag_handler(DragHandlerBuilder::build(webview, drag_regions_sender))
