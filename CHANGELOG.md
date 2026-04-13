@@ -1,29 +1,12 @@
 ## [Unreleased]
 
-### Added
+### Features
 
-- HiDPI / `device_scale_factor` support for CEF OSR rendering. Webview
-  textures now automatically use the host window's pixel ratio, producing
-  sharp output on Retina and Windows-scaled displays. Monitor transitions
-  are handled via `WindowScaleFactorChanged`.
-- `WebviewDpiPlugin` (included in `CefPlugin`) seeds and refreshes
-  `WebviewDpr` on every webview.
+- Added HiDPI / `device_scale_factor` support. Implemented CEF's `RenderHandler::screen_info` so webview textures render at the display's native physical resolution on Retina and Windows-scaled monitors. A new `WebviewDpiPlugin` (included in `CefPlugin`) seeds `WebviewDpr` on every webview from its `HostWindow` at spawn and refreshes it on `WindowScaleFactorChanged`, including multi-window setups. Alpha-channel hit-testing now correctly converts DIP coordinates to physical pixels. New `hidpi` example. (#45)
 
-### Changed
+### Breaking Changes
 
-- **Breaking:** `WebviewSize` is now interpreted as **logical pixels (DIP)**,
-  matching CSS viewport semantics. On HiDPI displays the underlying GPU
-  texture is allocated at `WebviewSize × DPR` physical pixels. Users who
-  previously set `WebviewSize` expecting physical pixels may see larger
-  textures on high-DPI monitors; reduce `WebviewSize` to compensate if
-  needed.
-- **Breaking:** `WebviewResizable::min_size`, `max_size`, and
-  `edge_thickness` are now measured in DIP, not physical pixels.
-- The `WebviewDpr` component has moved from the `resize` module to the
-  common module and is now auto-inserted on every webview via `WebviewSource`.
-- `RenderHandler::screen_info` is now implemented and returns the host
-  window's `device_scale_factor`; the resize derive pipeline no longer
-  applies a DPR multiplier (CEF handles physical-pixel scaling internally).
+- `WebviewSize` is now interpreted as **logical pixels (DIP)**, matching CSS viewport semantics. On HiDPI displays the backing texture is allocated at `WebviewSize × DPR` physical pixels — reduce `WebviewSize` if GPU memory matters. `WebviewResizable::min_size`, `max_size`, and `edge_thickness` are likewise DIP now (numeric defaults unchanged). The `WebviewDpr` component has moved from `bevy_cef::resize` to `bevy_cef::common` (still re-exported through the prelude). (#45)
 
 ## v0.7.0
 
