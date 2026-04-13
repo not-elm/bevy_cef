@@ -102,6 +102,8 @@ impl Default for BeginFrameInterval {
 pub enum WebviewSet {
     /// Resize drag tracking writes DisplaySize.
     ResizeInteraction,
+    /// Seeds and refreshes WebviewDpr from host window scale factors.
+    DpiSeed,
     /// Derives WebviewSize from pipeline components.
     DerivePipeline,
     /// Creates CEF browser instances.
@@ -120,6 +122,7 @@ impl Plugin for WebviewPlugin {
             Update,
             (
                 WebviewSet::ResizeInteraction,
+                WebviewSet::DpiSeed,
                 WebviewSet::DerivePipeline,
                 WebviewSet::CreateBrowser,
                 WebviewSet::CommitResize,
