@@ -17,8 +17,8 @@ use bevy_remote::BrpMessage;
 use cef::{
     BrowserSettings, CefString, Client, DictionaryValue, ImplBrowser, ImplBrowserHost,
     ImplDictionaryValue, ImplFrame, ImplListValue, ImplProcessMessage, ImplRequestContext,
-    MouseButtonType, PaintElementType, ProcessId, Range, RequestContext, RequestContextSettings,
-    WindowInfo, browser_host_create_browser_sync, dictionary_value_create, process_message_create,
+    MouseButtonType, ProcessId, Range, RequestContext, RequestContextSettings, WindowInfo,
+    browser_host_create_browser_sync, dictionary_value_create, process_message_create,
 };
 use cef_dll_sys::{cef_event_flags_t, cef_mouse_button_type_t};
 #[allow(deprecated)]
@@ -269,16 +269,19 @@ impl BrowsersCefSide {
         }
     }
 
-    /// Tell CEF to re-query screen info and force an immediate repaint.
+    /// Tell CEF to re-query screen info and force Blink to reflow at the new DPR.
     ///
-    /// `notify_screen_info_changed` alone only updates Chromium's cached screen
-    /// metrics; it does not explicitly promise an `OnPaint` (cef_browser.h:710-730).
-    /// We follow the cefclient OSR convention and pair it with an explicit
-    /// `invalidate(PET_VIEW)` so the new DPR is visible on the next frame.
+    /// `notify_screen_info_changed` alone updates Chromium's cached screen
+    /// metrics but does not run `ResizeRootLayer` / `SynchronizeVisualProperties`.
+    /// Only `was_resized()` pushes new `VisualProperties` (including the new
+    /// `device_scale_factor`) to Blink. Without the pair, the CSS viewport
+    /// ends up laid out as `view_rect × DSF` DIP wide and on-screen text
+    /// shrinks by exactly `1/DSF`. Matches the cefclient OSR convention
+    /// (`tests/cefclient/browser/osr_window_win.cc::SetDeviceScaleFactor`).
     fn notify_screen_info_changed(&self, webview: &Entity) {
         if let Some(browser) = self.browsers.get(webview) {
             browser.host.notify_screen_info_changed();
-            browser.host.invalidate(PaintElementType::VIEW);
+            browser.host.was_resized();
         }
     }
 
