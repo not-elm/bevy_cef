@@ -5,6 +5,23 @@ use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use std::fmt::Debug;
 
+/// Convert a DIP (logical-pixel) coordinate to a physical pixel index
+/// inside an image of size `img_size`, given a logical viewport of `dip_size`.
+///
+/// Clamps to `img_size - 1` on each axis so it is safe to use as an index
+/// into the image's byte buffer. Returns `UVec2::ZERO` when `dip_size` has
+/// a zero component (caller is expected to early-out on invalid inputs).
+fn dip_to_pixel(pos: Vec2, img_size: UVec2, dip_size: Vec2) -> UVec2 {
+    if dip_size.x <= 0.0 || dip_size.y <= 0.0 || img_size.x == 0 || img_size.y == 0 {
+        return UVec2::ZERO;
+    }
+    let sx = img_size.x as f32 / dip_size.x;
+    let sy = img_size.y as f32 / dip_size.y;
+    let x = ((pos.x * sx).floor() as u32).min(img_size.x - 1);
+    let y = ((pos.y * sy).floor() as u32).min(img_size.y - 1);
+    UVec2::new(x, y)
+}
+
 #[derive(SystemParam)]
 pub struct WebviewPointer<'w, 's, C: Component = Camera3d> {
     aabb: MeshAabb<'w, 's>,
@@ -159,4 +176,63 @@ fn pointer_to_webview_uv(
     let px = u * tex_size.x;
     let py = (1.0 - v) * tex_size.y;
     Some(Vec2::new(px, py))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dip_to_pixel_identity_at_dpr_1() {
+        // 800 DIP window, 800 px image → 1.0x scaling
+        let result = dip_to_pixel(
+            Vec2::new(100.0, 200.0),
+            UVec2::new(800, 800),
+            Vec2::new(800.0, 800.0),
+        );
+        assert_eq!(result, UVec2::new(100, 200));
+    }
+
+    #[test]
+    fn dip_to_pixel_scales_by_dpr_2() {
+        // 800 DIP window, 1600 px image → 2.0x scaling
+        let result = dip_to_pixel(
+            Vec2::new(100.0, 200.0),
+            UVec2::new(1600, 1600),
+            Vec2::new(800.0, 800.0),
+        );
+        assert_eq!(result, UVec2::new(200, 400));
+    }
+
+    #[test]
+    fn dip_to_pixel_scales_by_dpr_1_5() {
+        // 800×600 DIP window, 1200×900 px image → 1.5x scaling
+        let result = dip_to_pixel(
+            Vec2::new(100.0, 100.0),
+            UVec2::new(1200, 900),
+            Vec2::new(800.0, 600.0),
+        );
+        assert_eq!(result, UVec2::new(150, 150));
+    }
+
+    #[test]
+    fn dip_to_pixel_clamps_to_image_bounds() {
+        // pos larger than dip size must clamp to img_size - 1
+        let result = dip_to_pixel(
+            Vec2::new(1000.0, 1000.0),
+            UVec2::new(800, 800),
+            Vec2::new(800.0, 800.0),
+        );
+        assert_eq!(result, UVec2::new(799, 799));
+    }
+
+    #[test]
+    fn dip_to_pixel_zero_position_is_origin() {
+        let result = dip_to_pixel(
+            Vec2::ZERO,
+            UVec2::new(1600, 1600),
+            Vec2::new(800.0, 800.0),
+        );
+        assert_eq!(result, UVec2::ZERO);
+    }
 }
