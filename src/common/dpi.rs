@@ -77,13 +77,27 @@ fn refresh_on_scale_factor_changed_system(
     }
 }
 
-// Stubs — implemented in Task 11.
-
 #[cfg(not(target_os = "windows"))]
-fn commit_webview_dpr_system() {}
+fn commit_webview_dpr_system(
+    browsers: NonSend<Browsers>,
+    webviews: Query<(Entity, &WebviewDpr), Changed<WebviewDpr>>,
+) {
+    for (entity, dpr) in webviews.iter() {
+        browsers.set_dpr(&entity, dpr.0);
+        browsers.notify_screen_info_changed(&entity);
+    }
+}
 
 #[cfg(target_os = "windows")]
-fn commit_webview_dpr_system_win() {}
+fn commit_webview_dpr_system_win(
+    proxy: Res<BrowsersProxy>,
+    webviews: Query<(Entity, &WebviewDpr), Changed<WebviewDpr>>,
+) {
+    for (entity, dpr) in webviews.iter() {
+        proxy.set_dpr(&entity, dpr.0);
+        proxy.notify_screen_info_changed(&entity);
+    }
+}
 
 #[cfg(test)]
 mod tests {
