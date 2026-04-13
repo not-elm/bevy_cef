@@ -65,13 +65,24 @@ In practice, this means:
 
 ## WebviewSize {#webview-size}
 
-`WebviewSize` is a common source of confusion. It controls the **pixel resolution** of the texture that CEF renders into, not the physical size of the mesh in your scene. The default is 800x800 pixels.
+`WebviewSize` controls the **logical pixel (DIP) resolution** of the webview's
+CSS viewport, not the physical size of the mesh in your scene. The default is
+800×800 DIP.
 
-- To make a webview appear larger in your 3D scene, change the mesh dimensions or scale the entity's `Transform`.
-- To make the rendered content sharper (higher DPI), increase `WebviewSize`. This allocates a larger texture and uses more GPU memory.
-- To make the rendered content fit a non-square aspect ratio, set `WebviewSize` to match your desired ratio (e.g., 1920x1080).
+On HiDPI displays (Retina, Windows scaling > 100%), the underlying GPU texture
+is automatically rendered at `WebviewSize × device_pixel_ratio` physical pixels,
+so text and imagery stay sharp without any additional configuration.
 
-The webview's CSS layout uses `WebviewSize` as its viewport dimensions. A `WebviewSize` of 1920x1080 means the web page sees a 1920x1080 viewport, just as if it were displayed in a browser window of that size.
+- To make a webview appear larger in your 3D scene, change the mesh dimensions
+  or scale the entity's `Transform`.
+- To make the rendered content use a different viewport size (e.g. to match a
+  page designed for 1920×1080), set `WebviewSize` accordingly.
+- On a 2× display, an 800×800 DIP `WebviewSize` allocates roughly a 1600×1600
+  physical-pixel texture. Keep this in mind for GPU memory budgeting.
+
+The webview's CSS layout uses `WebviewSize` as its viewport dimensions, just as
+if it were displayed in a browser window of that size. `window.devicePixelRatio`
+in JavaScript reflects the host window's actual DPR.
 
 ## Pointer Interaction {#pointer-interaction}
 
