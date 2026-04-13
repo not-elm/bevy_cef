@@ -44,6 +44,16 @@ pub type SharedViewSize = std::rc::Rc<std::cell::Cell<Vec2>>;
 #[cfg(target_os = "windows")]
 pub type SharedViewSize = std::sync::Arc<std::sync::Mutex<Vec2>>;
 
+/// Thread-safe slot for a webview's current `device_scale_factor`.
+///
+/// Mirrors `SharedViewSize`'s platform split: on non-Windows the CEF UI
+/// thread is the Bevy main thread, so no locking is needed; on Windows the
+/// CEF UI thread is separate, so an `Arc<Mutex<_>>` is required.
+#[cfg(not(target_os = "windows"))]
+pub type SharedDpr = std::rc::Rc<std::cell::Cell<f32>>;
+#[cfg(target_os = "windows")]
+pub type SharedDpr = std::sync::Arc<std::sync::Mutex<f32>>;
+
 /// ## Reference
 ///
 /// - [`CefRenderHandler Class Reference`](https://cef-builds.spotifycdn.com/docs/106.1/classCefRenderHandler.html)
@@ -57,6 +67,7 @@ pub struct RenderHandlerBuilder {
     #[cfg(target_os = "windows")]
     texture_sender: TextureSender,
     size: SharedViewSize,
+    dpr: SharedDpr,
 }
 
 impl RenderHandlerBuilder {
@@ -66,6 +77,7 @@ impl RenderHandlerBuilder {
         view_slot: SharedTexture,
         popup_slot: SharedTexture,
         size: SharedViewSize,
+        dpr: SharedDpr,
     ) -> RenderHandler {
         RenderHandler::new(Self {
             object: std::ptr::null_mut(),
@@ -73,6 +85,7 @@ impl RenderHandlerBuilder {
             view_slot,
             popup_slot,
             size,
+            dpr,
         })
     }
 
@@ -81,12 +94,14 @@ impl RenderHandlerBuilder {
         webview: Entity,
         texture_sender: TextureSender,
         size: SharedViewSize,
+        dpr: SharedDpr,
     ) -> RenderHandler {
         RenderHandler::new(Self {
             object: std::ptr::null_mut(),
             webview,
             texture_sender,
             size,
+            dpr,
         })
     }
 }
@@ -123,6 +138,7 @@ impl Clone for RenderHandlerBuilder {
             #[cfg(target_os = "windows")]
             texture_sender: self.texture_sender.clone(),
             size: self.size.clone(),
+            dpr: self.dpr.clone(),
         }
     }
 }
@@ -137,6 +153,30 @@ impl ImplRenderHandler for RenderHandlerBuilder {
             rect.width = size.x as _;
             rect.height = size.y as _;
         }
+    }
+
+    fn screen_info(
+        &self,
+        _browser: Option<&mut Browser>,
+        screen_info: Option<&mut cef::ScreenInfo>,
+    ) -> c_int {
+        let Some(info) = screen_info else { return 0 };
+
+        #[cfg(not(target_os = "windows"))]
+        let dpr = self.dpr.get();
+        #[cfg(target_os = "windows")]
+        let dpr = *self.dpr.lock().unwrap();
+
+        info.device_scale_factor = dpr;
+        info.depth = 24;
+        info.depth_per_component = 8;
+        info.is_monochrome = 0;
+        // `rect` / `available_rect` describe the monitor in virtual-screen coords
+        // per CEF (`cef_types.h:1911-1923`), not the view size. For HiDPI quality
+        // only `device_scale_factor` matters — leave rects at their defaults.
+        info.rect = cef::Rect::default();
+        info.available_rect = cef::Rect::default();
+        1
     }
 
     #[allow(clippy::not_unsafe_ptr_arg_deref)]

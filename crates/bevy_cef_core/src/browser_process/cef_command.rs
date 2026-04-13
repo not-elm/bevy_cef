@@ -39,6 +39,7 @@ pub enum CefCommand {
         webview: Entity,
         uri: String,
         webview_size: Vec2,
+        initial_dpr: f32,
         requester: Requester,
         ipc_event_sender: Sender<IpcEventRaw>,
         brp_sender: Sender<BrpMessage>,
@@ -65,6 +66,12 @@ pub enum CefCommand {
 
     /// Resize the webview texture.
     Resize { entity: Entity, size: Vec2 },
+
+    /// Update the device_scale_factor for a webview's backing CEF browser.
+    SetDpr { entity: Entity, dpr: f32 },
+
+    /// Ask CEF to re-query screen info and force a repaint (paired with SetDpr).
+    NotifyScreenInfoChanged { entity: Entity },
 
     /// Forward a mouse-move event.
     SendMouseMove {
@@ -165,6 +172,7 @@ impl BrowsersProxy {
         webview: Entity,
         uri: &str,
         webview_size: Vec2,
+        initial_dpr: f32,
         requester: Requester,
         ipc_event_sender: Sender<IpcEventRaw>,
         brp_sender: Sender<BrpMessage>,
@@ -177,6 +185,7 @@ impl BrowsersProxy {
             webview,
             uri: uri.to_owned(),
             webview_size,
+            initial_dpr,
             requester,
             ipc_event_sender,
             brp_sender,
@@ -221,6 +230,19 @@ impl BrowsersProxy {
             entity: *entity,
             size,
         });
+    }
+
+    pub fn set_dpr(&self, entity: &Entity, dpr: f32) {
+        let _ = self.tx.send_blocking(CefCommand::SetDpr {
+            entity: *entity,
+            dpr,
+        });
+    }
+
+    pub fn notify_screen_info_changed(&self, entity: &Entity) {
+        let _ = self
+            .tx
+            .send_blocking(CefCommand::NotifyScreenInfoChanged { entity: *entity });
     }
 
     pub fn send_mouse_move(

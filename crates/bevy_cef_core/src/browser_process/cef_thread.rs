@@ -35,7 +35,7 @@ use crate::browser_process::display_handler::{DisplayHandlerBuilder, SystemCurso
 use crate::browser_process::drag_handler::{DragHandlerBuilder, DraggableRegionSenderInner};
 use crate::browser_process::localhost::{LocalSchemaHandlerBuilder, Requester};
 use crate::browser_process::renderer_handler::{
-    RenderHandlerBuilder, RenderTextureMessage, SharedViewSize, TextureSender,
+    RenderHandlerBuilder, RenderTextureMessage, SharedDpr, SharedViewSize, TextureSender,
 };
 use crate::browser_process::request_context_handler::RequestContextHandlerBuilder;
 use crate::prelude::{INIT_SCRIPT_KEY, IntoString, PROCESS_MESSAGE_HOST_EMIT};
@@ -76,6 +76,7 @@ impl BrowsersCefSide {
                 webview,
                 uri,
                 webview_size,
+                initial_dpr,
                 requester,
                 ipc_event_sender,
                 brp_sender,
@@ -90,6 +91,7 @@ impl BrowsersCefSide {
                     webview,
                     &uri,
                     webview_size,
+                    initial_dpr,
                     requester,
                     ipc_event_sender,
                     brp_sender,
@@ -105,6 +107,10 @@ impl BrowsersCefSide {
             CefCommand::GoForward { entity } => self.go_forward(&entity),
             CefCommand::ReloadWebview { entity } => self.reload_webview(&entity),
             CefCommand::Resize { entity, size } => self.resize(&entity, size),
+            CefCommand::SetDpr { entity, dpr } => self.set_dpr(&entity, dpr),
+            CefCommand::NotifyScreenInfoChanged { entity } => {
+                self.notify_screen_info_changed(&entity)
+            }
             CefCommand::SendMouseMove {
                 webview,
                 buttons,
@@ -153,6 +159,7 @@ impl BrowsersCefSide {
         webview: Entity,
         uri: &str,
         webview_size: Vec2,
+        initial_dpr: f32,
         requester: Requester,
         ipc_event_sender: Sender<IpcEventRaw>,
         brp_sender: Sender<BrpMessage>,
@@ -163,6 +170,7 @@ impl BrowsersCefSide {
     ) {
         let mut context = Self::request_context(requester);
         let size: SharedViewSize = Arc::new(Mutex::new(webview_size));
+        let dpr: SharedDpr = Arc::new(Mutex::new(initial_dpr));
         let browser = browser_host_create_browser_sync(
             Some(&WindowInfo {
                 windowless_rendering_enabled: true as _,
@@ -179,6 +187,7 @@ impl BrowsersCefSide {
             Some(&mut self.client_handler(
                 webview,
                 size.clone(),
+                dpr.clone(),
                 ipc_event_sender,
                 brp_sender,
                 system_cursor_icon_sender,
@@ -198,6 +207,7 @@ impl BrowsersCefSide {
             host,
             client: browser,
             size,
+            dpr,
         };
         self.browsers.insert(webview, webview_browser);
     }
@@ -246,6 +256,19 @@ impl BrowsersCefSide {
         if let Some(browser) = self.browsers.get(entity) {
             *browser.size.lock().unwrap() = size;
             browser.host.was_resized();
+        }
+    }
+
+    pub fn set_dpr(&self, webview: &Entity, dpr: f32) {
+        if let Some(browser) = self.browsers.get(webview) {
+            *browser.dpr.lock().unwrap() = dpr;
+        }
+    }
+
+    pub fn notify_screen_info_changed(&self, webview: &Entity) {
+        if let Some(browser) = self.browsers.get(webview) {
+            browser.host.notify_screen_info_changed();
+            browser.host.invalidate(cef::PaintElementType::VIEW);
         }
     }
 
@@ -445,10 +468,12 @@ impl BrowsersCefSide {
         context
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn client_handler(
         &self,
         webview: Entity,
         size: SharedViewSize,
+        dpr: SharedDpr,
         ipc_event_sender: Sender<IpcEventRaw>,
         brp_sender: Sender<BrpMessage>,
         system_cursor_icon_sender: SystemCursorIconSenderInner,
@@ -458,6 +483,7 @@ impl BrowsersCefSide {
             webview,
             self.texture_sender.clone(),
             size.clone(),
+            dpr,
         ))
         .with_display_handler(DisplayHandlerBuilder::build(system_cursor_icon_sender))
         .with_drag_handler(DragHandlerBuilder::build(webview, drag_regions_sender))
