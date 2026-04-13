@@ -7,7 +7,7 @@ use super::components::*;
 use super::cursor::*;
 use super::pipeline::*;
 use super::*;
-use crate::common::{WebviewDpr, WebviewSize, WebviewSource};
+use crate::common::{WebviewSize, WebviewSource};
 use crate::drag::{DragState, DraggableRegions, DraggingState, InteractionEndPending};
 use crate::system_param::pointer::WebviewPointer;
 use crate::webview::WebviewSet;
@@ -204,7 +204,6 @@ fn resize_tracking_system(
         &WebviewResizable,
         &BaseRenderScale,
         &QualityMultiplier,
-        &WebviewDpr,
     )>,
     cameras_q: Query<(&Camera, &GlobalTransform)>,
 ) {
@@ -265,13 +264,13 @@ fn resize_tracking_system(
     let du = delta.dot(u_axis);
     let dv = -delta.dot(v_axis);
 
-    let Ok((mut tf, mut display_size, resizable, base, quality, dpr)) = webviews.get_mut(webview)
+    let Ok((mut tf, mut display_size, resizable, base, quality)) = webviews.get_mut(webview)
     else {
         return;
     };
 
     // Convert min/max from texture pixels to display-size units.
-    let scale_factor = Vec2::new(base.0.x * quality.0 * dpr.0, base.0.y * quality.0 * dpr.0);
+    let scale_factor = Vec2::new(base.0.x * quality.0, base.0.y * quality.0);
     let min_display = Vec2::new(
         resizable.min_size.x as f32 / scale_factor.x,
         resizable.min_size.y as f32 / scale_factor.y,
@@ -392,14 +391,7 @@ fn init_resizable_system(
         Added<WebviewResizable>,
     >,
     mesh_assets: Res<Assets<Mesh>>,
-    windows: Query<&Window>,
 ) {
-    let dpr = windows
-        .iter()
-        .next()
-        .map(|w| w.scale_factor())
-        .unwrap_or(1.0);
-
     for (entity, webview_size, _tf, gtf, mesh3d, sprite) in new_resizables.iter() {
         if let Some(mesh3d) = mesh3d {
             // 3D mesh path
@@ -410,30 +402,25 @@ fn init_resizable_system(
                     let scale = gtf.compute_transform().scale;
                     let world_size = Vec2::new(local_size.x * scale.x, local_size.y * scale.y);
                     let base = Vec2::new(
-                        webview_size.0.x / (world_size.x * dpr),
-                        webview_size.0.y / (world_size.y * dpr),
+                        webview_size.0.x / world_size.x,
+                        webview_size.0.y / world_size.y,
                     );
                     commands.entity(entity).insert((
                         DisplaySize(world_size),
                         BaseRenderScale(base),
                         QualityMultiplier::default(),
-                        WebviewDpr(dpr),
                         WebviewBasis2d { local_size },
                     ));
                 } else {
                     // AABB not ready -- mark for deferred init
-                    commands.entity(entity).insert((
-                        PendingBasisInit,
-                        QualityMultiplier::default(),
-                        WebviewDpr(dpr),
-                    ));
+                    commands
+                        .entity(entity)
+                        .insert((PendingBasisInit, QualityMultiplier::default()));
                 }
             } else {
-                commands.entity(entity).insert((
-                    PendingBasisInit,
-                    QualityMultiplier::default(),
-                    WebviewDpr(dpr),
-                ));
+                commands
+                    .entity(entity)
+                    .insert((PendingBasisInit, QualityMultiplier::default()));
             }
         } else if let Some(sprite) = sprite {
             // 2D sprite path
@@ -441,14 +428,13 @@ fn init_resizable_system(
                 .custom_size
                 .unwrap_or(Vec2::new(webview_size.0.x, webview_size.0.y));
             let base = Vec2::new(
-                webview_size.0.x / (display_size.x * dpr),
-                webview_size.0.y / (display_size.y * dpr),
+                webview_size.0.x / display_size.x,
+                webview_size.0.y / display_size.y,
             );
             commands.entity(entity).insert((
                 DisplaySize(display_size),
                 BaseRenderScale(base),
                 QualityMultiplier::default(),
-                WebviewDpr(dpr),
             ));
         }
     }
@@ -457,13 +443,10 @@ fn init_resizable_system(
 /// Retries initialization for entities with `PendingBasisInit` once their mesh AABB becomes available.
 fn pending_basis_init_system(
     mut commands: Commands,
-    pending: Query<
-        (Entity, &WebviewSize, &GlobalTransform, &Mesh3d, &WebviewDpr),
-        With<PendingBasisInit>,
-    >,
+    pending: Query<(Entity, &WebviewSize, &GlobalTransform, &Mesh3d), With<PendingBasisInit>>,
     mesh_assets: Res<Assets<Mesh>>,
 ) {
-    for (entity, webview_size, gtf, mesh3d, dpr) in pending.iter() {
+    for (entity, webview_size, gtf, mesh3d) in pending.iter() {
         let Some(mesh) = mesh_assets.get(&mesh3d.0) else {
             continue;
         };
@@ -474,8 +457,8 @@ fn pending_basis_init_system(
         let scale = gtf.compute_transform().scale;
         let world_size = Vec2::new(local_size.x * scale.x, local_size.y * scale.y);
         let base = Vec2::new(
-            webview_size.0.x / (world_size.x * dpr.0),
-            webview_size.0.y / (world_size.y * dpr.0),
+            webview_size.0.x / world_size.x,
+            webview_size.0.y / world_size.y,
         );
         commands.entity(entity).insert((
             DisplaySize(world_size),
