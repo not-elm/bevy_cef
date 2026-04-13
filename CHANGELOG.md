@@ -1,3 +1,30 @@
+## [Unreleased]
+
+### Added
+
+- HiDPI / `device_scale_factor` support for CEF OSR rendering. Webview
+  textures now automatically use the host window's pixel ratio, producing
+  sharp output on Retina and Windows-scaled displays. Monitor transitions
+  are handled via `WindowScaleFactorChanged`.
+- `WebviewDpiPlugin` (included in `CefPlugin`) seeds and refreshes
+  `WebviewDpr` on every webview.
+
+### Changed
+
+- **Breaking:** `WebviewSize` is now interpreted as **logical pixels (DIP)**,
+  matching CSS viewport semantics. On HiDPI displays the underlying GPU
+  texture is allocated at `WebviewSize × DPR` physical pixels. Users who
+  previously set `WebviewSize` expecting physical pixels may see larger
+  textures on high-DPI monitors; reduce `WebviewSize` to compensate if
+  needed.
+- **Breaking:** `WebviewResizable::min_size`, `max_size`, and
+  `edge_thickness` are now measured in DIP, not physical pixels.
+- The `WebviewDpr` component has moved from the `resize` module to the
+  common module and is now auto-inserted on every webview via `WebviewSource`.
+- `RenderHandler::screen_info` is now implemented and returns the host
+  window's `device_scale_factor`; the resize derive pipeline no longer
+  applies a DPR multiplier (CEF handles physical-pixel scaling internally).
+
 ## v0.7.0
 
 ### Features
