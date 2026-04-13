@@ -60,8 +60,24 @@ fn seed_webview_dpr_system(
     }
 }
 
-// Stubs — implemented in Task 10 and Task 11.
-fn refresh_on_scale_factor_changed_system() {}
+fn refresh_on_scale_factor_changed_system(
+    mut er: MessageReader<WindowScaleFactorChanged>,
+    mut webviews: Query<(&mut WebviewDpr, Option<&HostWindow>), With<WebviewSource>>,
+    primary: Query<Entity, With<PrimaryWindow>>,
+) {
+    for event in er.read() {
+        let changed_window = event.window;
+        let primary_entity = primary.single().ok();
+        for (mut dpr, host) in webviews.iter_mut() {
+            let target = host.map(|h| h.0).or(primary_entity);
+            if target == Some(changed_window) {
+                dpr.set_if_neq(WebviewDpr(event.scale_factor as f32));
+            }
+        }
+    }
+}
+
+// Stubs — implemented in Task 11.
 
 #[cfg(not(target_os = "windows"))]
 fn commit_webview_dpr_system() {}
@@ -115,5 +131,67 @@ mod tests {
         app.update();
         let dpr = app.world().get::<WebviewDpr>(entity).unwrap();
         assert_eq!(dpr.0, 2.0);
+    }
+
+    #[test]
+    fn refresh_updates_only_webviews_on_the_changed_window() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .add_plugins(bevy::window::WindowPlugin {
+                primary_window: None,
+                ..default()
+            })
+            .add_message::<WindowScaleFactorChanged>()
+            .add_systems(Update, refresh_on_scale_factor_changed_system);
+
+        // Two fake windows with different scale factors
+        let win_a = app
+            .world_mut()
+            .spawn(Window {
+                resolution: bevy::window::WindowResolution::new(800, 600)
+                    .with_scale_factor_override(1.0),
+                ..default()
+            })
+            .id();
+        let win_b = app
+            .world_mut()
+            .spawn(Window {
+                resolution: bevy::window::WindowResolution::new(800, 600)
+                    .with_scale_factor_override(2.0),
+                ..default()
+            })
+            .id();
+
+        let wv_a = app
+            .world_mut()
+            .spawn((
+                WebviewSource::new("https://a.example"),
+                WebviewDpr(1.0),
+                HostWindow(win_a),
+            ))
+            .id();
+        let wv_b = app
+            .world_mut()
+            .spawn((
+                WebviewSource::new("https://b.example"),
+                WebviewDpr(1.0),
+                HostWindow(win_b),
+            ))
+            .id();
+
+        // Fire ScaleFactorChanged for window B only
+        app.world_mut()
+            .resource_mut::<bevy::ecs::message::Messages<WindowScaleFactorChanged>>()
+            .write(WindowScaleFactorChanged {
+                window: win_b,
+                scale_factor: 2.0,
+            });
+
+        app.update();
+
+        let dpr_a = app.world().get::<WebviewDpr>(wv_a).unwrap();
+        let dpr_b = app.world().get::<WebviewDpr>(wv_b).unwrap();
+        assert_eq!(dpr_a.0, 1.0, "webview A should be untouched");
+        assert_eq!(dpr_b.0, 2.0, "webview B should be refreshed");
     }
 }
