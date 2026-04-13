@@ -114,10 +114,7 @@ impl<C: Component> WebviewPointer<'_, '_, C> {
             return false;
         };
         let img_size = UVec2::new(image.width(), image.height());
-        if img_size.x == 0
-            || img_size.y == 0
-            || webview_size.0.x <= 0.0
-            || webview_size.0.y <= 0.0
+        if img_size.x == 0 || img_size.y == 0 || webview_size.0.x <= 0.0 || webview_size.0.y <= 0.0
         {
             return false;
         }
@@ -233,11 +230,7 @@ mod tests {
 
     #[test]
     fn dip_to_pixel_zero_position_is_origin() {
-        let result = dip_to_pixel(
-            Vec2::ZERO,
-            UVec2::new(1600, 1600),
-            Vec2::new(800.0, 800.0),
-        );
+        let result = dip_to_pixel(Vec2::ZERO, UVec2::new(1600, 1600), Vec2::new(800.0, 800.0));
         assert_eq!(result, UVec2::ZERO);
     }
 }

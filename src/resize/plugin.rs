@@ -264,8 +264,7 @@ fn resize_tracking_system(
     let du = delta.dot(u_axis);
     let dv = -delta.dot(v_axis);
 
-    let Ok((mut tf, mut display_size, resizable, base, quality)) = webviews.get_mut(webview)
-    else {
+    let Ok((mut tf, mut display_size, resizable, base, quality)) = webviews.get_mut(webview) else {
         return;
     };
 
