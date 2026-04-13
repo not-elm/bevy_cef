@@ -110,14 +110,19 @@ impl<C: Component> WebviewPointer<'_, '_, C> {
         let Some(image) = self.images.get(surface.0.id()) else {
             return false;
         };
-        let width = image.width();
-        let height = image.height();
-        if width == 0 || height == 0 {
+        let Ok((_, webview_size)) = self.webviews.get(webview) else {
+            return false;
+        };
+        let img_size = UVec2::new(image.width(), image.height());
+        if img_size.x == 0
+            || img_size.y == 0
+            || webview_size.0.x <= 0.0
+            || webview_size.0.y <= 0.0
+        {
             return false;
         }
-        let x = (pos.x.floor() as u32).min(width - 1);
-        let y = (pos.y.floor() as u32).min(height - 1);
-        let offset = ((y * width + x) * 4 + 3) as usize;
+        let px = dip_to_pixel(pos, img_size, webview_size.0);
+        let offset = ((px.y * img_size.x + px.x) * 4 + 3) as usize;
         let Some(data) = image.data.as_ref() else {
             return false;
         };
