@@ -67,8 +67,12 @@ fn on_pointer_move(
     pointer: WebviewPointer,
     browsers: NonSend<Browsers>,
     drag_state: Res<crate::drag::DragState>,
+    resize_state: Res<crate::resize::ResizeState>,
 ) {
     if drag_state.is_dragging() {
+        return;
+    }
+    if resize_state.is_resizing() {
         return;
     }
     let Some((webview, pos)) = pointer.pos_from_trigger(&trigger) else {
@@ -84,8 +88,12 @@ fn on_pointer_pressed(
     browsers: NonSend<Browsers>,
     pointer: WebviewPointer,
     drag_state: Res<crate::drag::DragState>,
+    resize_state: Res<crate::resize::ResizeState>,
 ) {
     if drag_state.is_dragging() {
+        return;
+    }
+    if resize_state.is_resizing() {
         return;
     }
     let Some((webview, pos)) = pointer.pos_from_trigger(&trigger) else {
@@ -100,8 +108,12 @@ fn on_pointer_released(
     browsers: NonSend<Browsers>,
     pointer: WebviewPointer,
     drag_state: Res<crate::drag::DragState>,
+    resize_state: Res<crate::resize::ResizeState>,
 ) {
     if drag_state.is_dragging() {
+        return;
+    }
+    if resize_state.is_resizing() {
         return;
     }
     let Some((webview, pos)) = pointer.pos_from_trigger(&trigger) else {
@@ -118,8 +130,12 @@ fn on_mouse_wheel(
     windows: Query<&Window>,
     webviews: Query<Entity, (With<WebviewSource>, Or<(With<Mesh3d>, With<Mesh2d>)>)>,
     drag_state: Res<crate::drag::DragState>,
+    resize_state: Res<crate::resize::ResizeState>,
 ) {
     if drag_state.is_dragging() {
+        return;
+    }
+    if resize_state.is_resizing() {
         return;
     }
     let Some(cursor_pos) = windows.iter().find_map(|window| window.cursor_position()) else {
@@ -163,8 +179,12 @@ fn on_pointer_move_win(
     pointer: WebviewPointer,
     proxy: Res<BrowsersProxy>,
     drag_state: Res<crate::drag::DragState>,
+    resize_state: Res<crate::resize::ResizeState>,
 ) {
     if drag_state.is_dragging() {
+        return;
+    }
+    if resize_state.is_resizing() {
         return;
     }
     let Some((webview, pos)) = pointer.pos_from_trigger(&trigger) else {
@@ -181,8 +201,12 @@ fn on_pointer_pressed_win(
     proxy: Res<BrowsersProxy>,
     pointer: WebviewPointer,
     drag_state: Res<crate::drag::DragState>,
+    resize_state: Res<crate::resize::ResizeState>,
 ) {
     if drag_state.is_dragging() {
+        return;
+    }
+    if resize_state.is_resizing() {
         return;
     }
     let Some((webview, pos)) = pointer.pos_from_trigger(&trigger) else {
@@ -197,8 +221,12 @@ fn on_pointer_released_win(
     proxy: Res<BrowsersProxy>,
     pointer: WebviewPointer,
     drag_state: Res<crate::drag::DragState>,
+    resize_state: Res<crate::resize::ResizeState>,
 ) {
     if drag_state.is_dragging() {
+        return;
+    }
+    if resize_state.is_resizing() {
         return;
     }
     let Some((webview, pos)) = pointer.pos_from_trigger(&trigger) else {
@@ -215,8 +243,12 @@ fn on_mouse_wheel_win(
     windows: Query<&Window>,
     webviews: Query<Entity, (With<WebviewSource>, Or<(With<Mesh3d>, With<Mesh2d>)>)>,
     drag_state: Res<crate::drag::DragState>,
+    resize_state: Res<crate::resize::ResizeState>,
 ) {
     if drag_state.is_dragging() {
+        return;
+    }
+    if resize_state.is_resizing() {
         return;
     }
     let Some(cursor_pos) = windows.iter().find_map(|window| window.cursor_position()) else {

@@ -23,7 +23,7 @@ use crate::common::CommandChannelReceiver;
 use crate::common::TextureSenderRes;
 
 mod mesh;
-mod webview_sprite;
+pub(crate) mod webview_sprite;
 
 pub mod prelude {
     pub use crate::webview::{
@@ -97,11 +97,35 @@ impl Default for BeginFrameInterval {
     }
 }
 
+/// System ordering for the webview lifecycle.
+#[derive(SystemSet, Clone, Debug, Hash, PartialEq, Eq)]
+pub enum WebviewSet {
+    /// Resize drag tracking writes DisplaySize.
+    ResizeInteraction,
+    /// Derives WebviewSize from pipeline components.
+    DerivePipeline,
+    /// Creates CEF browser instances.
+    CreateBrowser,
+    /// Commits WebviewSize changes to CEF via browsers.resize().
+    CommitResize,
+}
+
 pub struct WebviewPlugin;
 
 impl Plugin for WebviewPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<RequestShowDevTool>();
+
+        app.configure_sets(
+            Update,
+            (
+                WebviewSet::ResizeInteraction,
+                WebviewSet::DerivePipeline,
+                WebviewSet::CreateBrowser,
+                WebviewSet::CommitResize,
+            )
+                .chain(),
+        );
 
         // macOS/Linux: direct NonSend<Browsers>
         #[cfg(not(target_os = "windows"))]
@@ -113,8 +137,10 @@ impl Plugin for WebviewPlugin {
                 .add_systems(
                     Update,
                     (
-                        resize.run_if(any_resized),
-                        create_webview.run_if(added_webview),
+                        resize.run_if(any_resized).in_set(WebviewSet::CommitResize),
+                        create_webview
+                            .run_if(added_webview)
+                            .in_set(WebviewSet::CreateBrowser),
                         navigate_on_source_change,
                     ),
                 )
@@ -155,8 +181,12 @@ impl Plugin for WebviewPlugin {
                 .add_systems(
                     Update,
                     (
-                        resize_win.run_if(any_resized),
-                        create_webview_win.run_if(added_webview),
+                        resize_win
+                            .run_if(any_resized)
+                            .in_set(WebviewSet::CommitResize),
+                        create_webview_win
+                            .run_if(added_webview)
+                            .in_set(WebviewSet::CreateBrowser),
                         navigate_on_source_change_win,
                     ),
                 )

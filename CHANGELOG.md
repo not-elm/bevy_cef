@@ -1,3 +1,9 @@
+## v0.7.0
+
+### Features
+
+- Added `ResizePlugin` for drag-to-resize of 3D mesh webviews. Users add `WebviewResizable` to a webview entity to enable edge/corner resize handles with configurable edge thickness, min/max size constraints, and aspect-ratio locking (always, never, or shift-key toggle). Cursor icon updates automatically on hover. New `resize` example.
+
 ## v0.6.0
 
 ### Features

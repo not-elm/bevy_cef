@@ -10,6 +10,7 @@ impl Plugin for SystemCursorIconPlugin {
         let (tx, rx) = async_channel::unbounded();
         app.insert_resource(SystemCursorIconSender(tx))
             .insert_resource(SystemCursorIconReceiver(rx))
+            .init_resource::<crate::resize::cursor::SystemCursorOverride>()
             .add_systems(Update, update_cursor_icon);
     }
 }
@@ -23,8 +24,22 @@ pub(crate) struct SystemCursorIconReceiver(pub(crate) Receiver<SystemCursorIcon>
 fn update_cursor_icon(
     mut commands: Commands,
     cursor_icon_receiver: Res<SystemCursorIconReceiver>,
+    cursor_override: Res<crate::resize::cursor::SystemCursorOverride>,
     windows: Query<Entity>,
 ) {
+    // Override takes priority over CEF cursor.
+    if let Some(override_icon) = cursor_override.get() {
+        for entity in windows.iter() {
+            commands
+                .entity(entity)
+                .try_insert(CursorIcon::System(override_icon));
+        }
+        // Drain the receiver so it doesn't pile up.
+        while cursor_icon_receiver.0.try_recv().is_ok() {}
+        return;
+    }
+
+    // Original CEF cursor path.
     while let Ok(cursor_icon) = cursor_icon_receiver.0.try_recv() {
         windows.iter().for_each(|window| {
             commands
