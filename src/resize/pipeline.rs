@@ -4,7 +4,7 @@ use bevy::prelude::*;
 
 use super::components::*;
 use super::derive_webview_size;
-use crate::common::WebviewSize;
+use crate::common::{WebviewDpr, WebviewSize};
 
 /// Derives `WebviewSize` from pipeline components whenever any input changes.
 pub(crate) fn derive_pipeline_system(

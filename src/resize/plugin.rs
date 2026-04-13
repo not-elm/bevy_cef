@@ -7,7 +7,7 @@ use super::components::*;
 use super::cursor::*;
 use super::pipeline::*;
 use super::*;
-use crate::common::{WebviewSize, WebviewSource};
+use crate::common::{WebviewDpr, WebviewSize, WebviewSource};
 use crate::drag::{DragState, DraggableRegions, DraggingState, InteractionEndPending};
 use crate::system_param::pointer::WebviewPointer;
 use crate::webview::WebviewSet;

@@ -72,18 +72,6 @@ impl Default for QualityMultiplier {
     }
 }
 
-/// Window DPR snapshot for this webview. Phase 1: set once at spawn
-/// from the `HostWindow` (or `PrimaryWindow` fallback).
-/// Phase 2 will update this on monitor transitions.
-#[derive(Component, Debug, Clone, Copy, Deref, DerefMut)]
-pub struct WebviewDpr(pub f32);
-
-impl Default for WebviewDpr {
-    fn default() -> Self {
-        Self(1.0)
-    }
-}
-
 /// Planar basis for a 3D mesh webview. Describes the webview's local
 /// width/height directions in world space and its pre-scale local size.
 ///
