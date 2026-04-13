@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>bevy_cef HiDPI demo</title>
+<style>
+  body {
+    margin: 0;
+    padding: 24px;
+    background: #111;
+    color: #eee;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  h1 { font-size: 28px; margin: 0 0 8px 0; }
+  .dpr { font-size: 64px; color: #4af; margin: 16px 0; }
+  .hint { font-size: 14px; color: #888; margin-top: 12px; }
+  p { font-size: 12px; line-height: 1.4; }
+</style>
+</head>
+<body>
+  <h1>bevy_cef HiDPI</h1>
+  <div class="dpr">DPR: <span id="dpr">?</span></div>
+  <p>
+    Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+    Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+    Ut enim ad minim veniam, quis nostrud exercitation ullamco.
+  </p>
+  <p class="hint">Move this window between monitors with different DPI to verify the value updates.</p>
+  <script>
+    const el = document.getElementById('dpr');
+    function render() { el.textContent = window.devicePixelRatio.toFixed(2); }
+    render();
+    setInterval(render, 250);
+  </script>
+</body>
+</html>
