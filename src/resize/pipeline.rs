@@ -1,10 +1,10 @@
-//! Derive pipeline: WebviewSize = DisplaySize × BaseRenderScale × QualityMultiplier × DPR
+//! Derive pipeline: WebviewSize = DisplaySize × BaseRenderScale × QualityMultiplier
 
 use bevy::prelude::*;
 
 use super::components::*;
 use super::derive_webview_size;
-use crate::common::{WebviewDpr, WebviewSize};
+use crate::common::WebviewSize;
 
 /// Derives `WebviewSize` from pipeline components whenever any input changes.
 pub(crate) fn derive_pipeline_system(
@@ -13,7 +13,6 @@ pub(crate) fn derive_pipeline_system(
             &DisplaySize,
             &BaseRenderScale,
             &QualityMultiplier,
-            &WebviewDpr,
             &WebviewResizable,
             &mut WebviewSize,
         ),
@@ -23,18 +22,16 @@ pub(crate) fn derive_pipeline_system(
                 Changed<DisplaySize>,
                 Changed<BaseRenderScale>,
                 Changed<QualityMultiplier>,
-                Changed<WebviewDpr>,
                 Changed<WebviewResizable>,
             )>,
         ),
     >,
 ) {
-    for (display, base, quality, dpr, resizable, mut size) in webviews.iter_mut() {
+    for (display, base, quality, resizable, mut size) in webviews.iter_mut() {
         if let Some(new_size) = derive_webview_size(
             display.0,
             base.0,
             quality.0,
-            dpr.0,
             resizable.min_size,
             resizable.max_size,
             // WebviewSize wraps Vec2, convert to UVec2 for comparison
