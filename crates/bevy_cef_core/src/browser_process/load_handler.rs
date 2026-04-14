@@ -5,9 +5,7 @@
 use async_channel::Sender;
 use bevy::prelude::Entity;
 use cef::rc::{Rc, RcImpl};
-use cef::{
-    Browser, CefString, Errorcode, Frame, ImplFrame, ImplLoadHandler, WrapLoadHandler, sys,
-};
+use cef::{Browser, CefString, Errorcode, Frame, ImplFrame, ImplLoadHandler, WrapLoadHandler, sys};
 use std::os::raw::c_int;
 
 /// Messages sent from the CEF load handler to the Bevy drain system.
