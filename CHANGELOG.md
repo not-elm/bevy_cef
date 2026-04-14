@@ -1,3 +1,16 @@
+## v0.8.1
+
+### Features
+
+- Added `LoadHandler` for page load lifecycle events (`OnLoadingStateChange`, `OnLoadStart`, `OnLoadEnd`, `OnLoadError`). New `LoadHandlerBuilder` wires load state into Bevy via `NavigationPlugin`.
+- Added `AddressChanged` event to `DisplayHandler`, enabling Bevy systems to react to URL navigation changes.
+
+### Bug Fixes
+
+- Fixed stale V8 callback crashes by using per-context value storage instead of global pointers.
+- Added `ctx.enter()` return value check before V8 operations to prevent use-after-free in the render process.
+- Resolved clippy warnings in `LoadHandlerBuilder`.
+
 ## v0.8.0
 
 ### Features

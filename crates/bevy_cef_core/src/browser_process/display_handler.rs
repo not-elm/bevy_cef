@@ -1,14 +1,24 @@
 use async_channel::Sender;
 use bevy::log::{error, info, trace, warn};
+use bevy::prelude::Entity;
 use bevy::window::SystemCursorIcon;
 use cef::rc::{ConvertParam, Rc, RcImpl};
 use cef::{
-    Browser, CefString, CursorInfo, CursorType, ImplDisplayHandler, LogSeverity,
-    WrapDisplayHandler, sys,
+    Browser, CefString, CursorInfo, CursorType, Frame, ImplBrowser, ImplDisplayHandler,
+    LogSeverity, WrapDisplayHandler, sys,
 };
 use cef_dll_sys::{cef_cursor_type_t, cef_log_severity_t};
 use std::os::raw::c_int;
 
+/// Message sent from the CEF display handler when the browser's URL changes.
+pub struct AddressChangedMessage {
+    pub webview: Entity,
+    pub url: String,
+    pub can_go_back: bool,
+    pub can_go_forward: bool,
+}
+
+pub type AddressChangedSenderInner = Sender<AddressChangedMessage>;
 pub type SystemCursorIconSenderInner = Sender<SystemCursorIcon>;
 
 /// ## Reference
@@ -16,14 +26,22 @@ pub type SystemCursorIconSenderInner = Sender<SystemCursorIcon>;
 /// - [`CefDisplayHandler Class Reference`](https://cef-builds.spotifycdn.com/docs/112.3/classCefDisplayHandler.html#af1cc8410a0b1a97166923428d3794636)
 pub struct DisplayHandlerBuilder {
     object: *mut RcImpl<sys::cef_display_handler_t, Self>,
+    webview: Entity,
     cursor_icon: SystemCursorIconSenderInner,
+    address_changed_sender: AddressChangedSenderInner,
 }
 
 impl DisplayHandlerBuilder {
-    pub fn build(cursor_icon: SystemCursorIconSenderInner) -> cef::DisplayHandler {
+    pub fn build(
+        webview: Entity,
+        cursor_icon: SystemCursorIconSenderInner,
+        address_changed_sender: AddressChangedSenderInner,
+    ) -> cef::DisplayHandler {
         cef::DisplayHandler::new(Self {
             object: core::ptr::null_mut(),
+            webview,
             cursor_icon,
+            address_changed_sender,
         })
     }
 }
@@ -46,7 +64,9 @@ impl Clone for DisplayHandlerBuilder {
         };
         Self {
             object,
+            webview: self.webview,
             cursor_icon: self.cursor_icon.clone(),
+            address_changed_sender: self.address_changed_sender.clone(),
         }
     }
 }
@@ -86,6 +106,24 @@ impl ImplDisplayHandler for DisplayHandlerBuilder {
             }
         }
         1
+    }
+
+    fn on_address_change(
+        &self,
+        browser: Option<&mut Browser>,
+        _frame: Option<&mut Frame>,
+        url: Option<&CefString>,
+    ) {
+        if let Some(browser) = browser {
+            let _ = self
+                .address_changed_sender
+                .send_blocking(AddressChangedMessage {
+                    webview: self.webview,
+                    url: url.map(|u| u.to_string()).unwrap_or_default(),
+                    can_go_back: browser.can_go_back() == 1,
+                    can_go_forward: browser.can_go_forward() == 1,
+                });
+        }
     }
 
     fn on_cursor_change(

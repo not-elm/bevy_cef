@@ -6,7 +6,8 @@ use crate::prelude::IntoString;
 use cef::rc::{Rc, RcImpl};
 use cef::{
     Browser, Client, ContextMenuHandler, DisplayHandler, DragHandler, Frame, ImplClient,
-    ImplProcessMessage, ListValue, ProcessId, ProcessMessage, RenderHandler, WrapClient, sys,
+    ImplProcessMessage, ListValue, LoadHandler, ProcessId, ProcessMessage, RenderHandler,
+    WrapClient, sys,
 };
 use std::os::raw::c_int;
 
@@ -29,6 +30,7 @@ pub struct ClientHandlerBuilder {
     message_handlers: Vec<std::rc::Rc<dyn ProcessMessageHandler>>,
     display_handler: Option<DisplayHandler>,
     drag_handler: Option<DragHandler>,
+    load_handler: Option<LoadHandler>,
 }
 
 impl ClientHandlerBuilder {
@@ -40,6 +42,7 @@ impl ClientHandlerBuilder {
             message_handlers: Vec::new(),
             display_handler: None,
             drag_handler: None,
+            load_handler: None,
         }
     }
 
@@ -50,6 +53,11 @@ impl ClientHandlerBuilder {
 
     pub fn with_drag_handler(mut self, drag_handler: DragHandler) -> Self {
         self.drag_handler = Some(drag_handler);
+        self
+    }
+
+    pub fn with_load_handler(mut self, load_handler: LoadHandler) -> Self {
+        self.load_handler = Some(load_handler);
         self
     }
 
@@ -93,6 +101,7 @@ impl Clone for ClientHandlerBuilder {
             message_handlers: self.message_handlers.clone(),
             display_handler: self.display_handler.clone(),
             drag_handler: self.drag_handler.clone(),
+            load_handler: self.load_handler.clone(),
         }
     }
 }
@@ -108,6 +117,10 @@ impl ImplClient for ClientHandlerBuilder {
 
     fn drag_handler(&self) -> Option<DragHandler> {
         self.drag_handler.clone()
+    }
+
+    fn load_handler(&self) -> Option<LoadHandler> {
+        self.load_handler.clone()
     }
 
     fn on_process_message_received(

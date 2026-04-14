@@ -10,6 +10,9 @@ pub mod prelude {
     pub use crate::browser_process::cef_command::{BrowsersProxy, CefCommand};
     #[cfg(target_os = "windows")]
     pub use crate::browser_process::cef_thread::{drain_commands, init_cef_browsers};
+    pub use crate::browser_process::display_handler::{
+        AddressChangedMessage, AddressChangedSenderInner,
+    };
     pub use crate::browser_process::drag_handler::DraggableRegionSenderInner;
     pub use crate::browser_process::*;
     #[cfg(target_os = "macos")]

@@ -31,8 +31,13 @@ if (!cef) cef = {};
 })();
 "#;
 
-pub(crate) static BRP_PROMISES: Mutex<HashMap<String, V8Value>> = Mutex::new(HashMap::new());
-pub(crate) static LISTEN_EVENTS: Mutex<HashMap<String, V8Value>> = Mutex::new(HashMap::new());
+/// Composite key identifying a V8 context: (browser_id, frame_id).
+pub(crate) type ContextKey = (i32, String);
+
+pub(crate) static BRP_PROMISES: Mutex<HashMap<ContextKey, HashMap<String, V8Value>>> =
+    Mutex::new(HashMap::new());
+pub(crate) static LISTEN_EVENTS: Mutex<HashMap<ContextKey, HashMap<String, V8Value>>> =
+    Mutex::new(HashMap::new());
 
 static INIT_SCRIPTS: Mutex<HashMap<c_int, String>> = Mutex::new(HashMap::new());
 pub const INIT_SCRIPT_KEY: &str = "init_script";
@@ -114,23 +119,37 @@ impl ImplRenderProcessHandler for RenderProcessHandlerBuilder {
         }
     }
 
+    fn on_context_released(
+        &self,
+        browser: Option<&mut Browser>,
+        frame: Option<&mut Frame>,
+        _context: Option<&mut V8Context>,
+    ) {
+        if let (Some(browser), Some(frame)) = (browser, frame) {
+            let key = context_key(browser, frame);
+            LISTEN_EVENTS.lock().unwrap().remove(&key);
+            BRP_PROMISES.lock().unwrap().remove(&key);
+        }
+    }
+
     fn on_process_message_received(
         &self,
-        _browser: Option<&mut Browser>,
+        browser: Option<&mut Browser>,
         frame: Option<&mut Frame>,
         _: ProcessId,
         message: Option<&mut ProcessMessage>,
     ) -> c_int {
         if let Some(message) = message
             && let Some(frame) = frame
+            && let Some(browser) = browser
             && let Some(ctx) = frame.v8_context()
         {
             match message.name().into_string().as_str() {
                 PROCESS_MESSAGE_BRP => {
-                    handle_brp_message(message, ctx);
+                    handle_brp_message(message, browser, frame, ctx);
                 }
                 PROCESS_MESSAGE_HOST_EMIT => {
-                    handle_listen_message(message, ctx);
+                    handle_listen_message(message, browser, frame, ctx);
                 }
                 _ => {}
             }
@@ -184,18 +203,34 @@ fn register_cef_api_extension() {
     );
 }
 
-fn handle_brp_message(message: &ProcessMessage, ctx: V8Context) {
+fn context_key(browser: &Browser, frame: &Frame) -> ContextKey {
+    (browser.identifier(), frame.identifier().into_string())
+}
+
+fn handle_brp_message(
+    message: &ProcessMessage,
+    browser: &mut Browser,
+    frame: &mut Frame,
+    ctx: V8Context,
+) {
     let Some(argument_list) = message.argument_list() else {
         return;
     };
     let id = argument_list.string(0).into_string();
     let payload = argument_list.string(1).into_string();
-    let Ok(Some(promise)) = BRP_PROMISES.lock().map(|mut p| p.remove(&id)) else {
+
+    let key = context_key(browser, frame);
+    let promise = BRP_PROMISES
+        .lock()
+        .ok()
+        .and_then(|mut promises| promises.get_mut(&key)?.remove(&id));
+    let Some(promise) = promise else {
         return;
     };
 
-    if let Ok(brp_result) = serde_json::from_str::<BrpResult>(&payload) {
-        ctx.enter();
+    if let Ok(brp_result) = serde_json::from_str::<BrpResult>(&payload)
+        && ctx.enter() != 0
+    {
         match brp_result {
             Ok(v) => {
                 promise.resolve_promise(json_to_v8(v).as_mut());
@@ -208,31 +243,41 @@ fn handle_brp_message(message: &ProcessMessage, ctx: V8Context) {
     }
 }
 
-fn handle_listen_message(message: &ProcessMessage, mut ctx: V8Context) {
+fn handle_listen_message(
+    message: &ProcessMessage,
+    browser: &mut Browser,
+    frame: &mut Frame,
+    mut ctx: V8Context,
+) {
     let Some(argument_list) = message.argument_list() else {
         return;
     };
     let id = argument_list.string(0).into_string();
     let payload = argument_list.string(1).into_string();
 
-    ctx.enter();
-    if let Ok(value) = serde_json::from_str::<serde_json::Value>(&payload)
-        && let Ok(events) = LISTEN_EVENTS.lock()
+    let key = context_key(browser, frame);
+    let callback = LISTEN_EVENTS
+        .lock()
+        .ok()
+        .and_then(|events| events.get(&key)?.get(&id).cloned());
+    let Some(callback) = callback else {
+        return;
+    };
+
+    if ctx.enter() != 0
+        && let Ok(value) = serde_json::from_str::<serde_json::Value>(&payload)
     {
         let mut obj = v8_value_create_object(
             Some(&mut V8DefaultAccessorBuilder::build()),
             Some(&mut V8DefaultInterceptorBuilder::build()),
         );
-        let Some(callback) = events.get(&id) else {
-            return;
-        };
         callback.execute_function_with_context(
             Some(&mut ctx),
             obj.as_mut(),
             Some(&[json_to_v8(value)]),
         );
+        ctx.exit();
     }
-    ctx.exit();
 }
 
 fn register_extensions_from_command_line() {
