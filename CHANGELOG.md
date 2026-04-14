@@ -1,3 +1,19 @@
+## [Unreleased]
+
+### Features
+
+- Added HiDPI / `device_scale_factor` support. Implemented CEF's `RenderHandler::screen_info` so webview textures render at the display's native physical resolution on Retina and Windows-scaled monitors. A new `WebviewDpiPlugin` (included in `CefPlugin`) seeds `WebviewDpr` on every webview from its `HostWindow` at spawn and refreshes it on `WindowScaleFactorChanged`, including multi-window setups. Alpha-channel hit-testing now correctly converts DIP coordinates to physical pixels. New `hidpi` example. (#45)
+
+### Breaking Changes
+
+- `WebviewSize` is now interpreted as **logical pixels (DIP)**, matching CSS viewport semantics. On HiDPI displays the backing texture is allocated at `WebviewSize × DPR` physical pixels — reduce `WebviewSize` if GPU memory matters. `WebviewResizable::min_size`, `max_size`, and `edge_thickness` are likewise DIP now (numeric defaults unchanged). The `WebviewDpr` component has moved from `bevy_cef::resize` to `bevy_cef::common` (still re-exported through the prelude). (#45)
+
+## v0.7.0
+
+### Features
+
+- Added `ResizePlugin` for drag-to-resize of 3D mesh webviews. Users add `WebviewResizable` to a webview entity to enable edge/corner resize handles with configurable edge thickness, min/max size constraints, and aspect-ratio locking (always, never, or shift-key toggle). Cursor icon updates automatically on hover. New `resize` example.
+
 ## v0.6.0
 
 ### Features

@@ -66,9 +66,14 @@ A standard Bevy mesh component. The webview texture is painted onto this mesh. Y
 
 This material receives the webview texture from CEF and applies it to the mesh. `WebviewExtendStandardMaterial` extends Bevy's `StandardMaterial`, so it responds to lighting and supports all the usual material properties.
 
-:::caution WebviewSize is texture resolution, not mesh size
+:::caution WebviewSize is the logical-pixel viewport, not the mesh size
 
-`WebviewSize` controls the **pixel resolution** of the rendered web content (default 800x800). It does not affect the physical size of the 3D mesh. To make the webview appear larger or smaller in the scene, scale the mesh or change the plane dimensions -- not `WebviewSize`. Increasing `WebviewSize` gives you sharper text and images at the cost of more GPU memory.
+`WebviewSize` controls the **logical pixel (DIP)** resolution of the rendered
+web content (default 800×800). It does not affect the physical size of the
+3D mesh. To make the webview appear larger in the scene, scale the mesh or
+change the plane dimensions — not `WebviewSize`. On HiDPI displays the actual
+GPU texture is automatically scaled up by the display's pixel ratio, so
+content stays sharp without manual tuning.
 
 :::
 

@@ -15,7 +15,7 @@ impl Plugin for DragPlugin {
         app.insert_resource(DraggableRegionSender(tx))
             .insert_resource(DraggableRegionReceiver(rx))
             .init_resource::<DragState>()
-            .init_resource::<DragEndPending>()
+            .init_resource::<InteractionEndPending>()
             .add_systems(PreUpdate, receive_drag_regions)
             .add_systems(
                 Update,
@@ -58,7 +58,7 @@ pub(crate) struct DraggableRegions {
 /// Tracks a webview that just finished a drag, waiting one frame to send
 /// mouse_leave=false with the correct (post-drag) GlobalTransform.
 #[derive(Resource, Default)]
-pub(crate) struct DragEndPending {
+pub(crate) struct InteractionEndPending {
     pub(crate) webview: Option<Entity>,
 }
 
@@ -212,6 +212,7 @@ fn on_drag_press(
 }
 
 /// Attach drag-press observer to newly-created mesh webviews with a Transform.
+/// Resizable webviews are excluded — they use the unified observer in `ResizePlugin`.
 fn attach_drag_observers(
     mut commands: Commands,
     webviews: Query<
@@ -219,6 +220,7 @@ fn attach_drag_observers(
         (
             Added<WebviewSource>,
             With<Transform>,
+            Without<crate::resize::components::WebviewResizable>,
             Or<(With<Mesh3d>, With<Mesh2d>)>,
         ),
     >,
@@ -247,7 +249,7 @@ fn drag_tracking_system(
     if !mouse_button.pressed(MouseButton::Left) {
         *drag_state = DragState::Idle;
         commands.entity(webview).remove::<DraggingState>();
-        commands.insert_resource(DragEndPending {
+        commands.insert_resource(InteractionEndPending {
             webview: Some(webview),
         });
         return;
@@ -277,7 +279,7 @@ fn drag_tracking_system(
 /// Runs one frame after drag end to send mouse_leave=false to CEF with the
 /// restored (post-drag) cursor-to-texture mapping.
 fn restore_hover_after_drag(
-    mut pending: ResMut<DragEndPending>,
+    mut pending: ResMut<InteractionEndPending>,
     windows: Query<&Window>,
     pointer: WebviewPointer,
     #[cfg(not(target_os = "windows"))] browsers: NonSend<bevy_cef_core::prelude::Browsers>,

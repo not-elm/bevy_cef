@@ -56,7 +56,12 @@ Without `Pickable`, the webview will render but will not respond to mouse input.
 
 ## Controlling the Display Size
 
-The `Sprite::custom_size` field controls how large the webview appears on screen, in world units. The `WebviewSize` component (default 800x800) controls the pixel resolution of the rendered web content. For sharp text, increase `WebviewSize` while keeping `custom_size` at your desired display dimensions.
+`Sprite::custom_size` controls how large the webview appears on screen, in
+world units. `WebviewSize` (default 800×800 DIP) controls the logical-pixel
+viewport size the web page sees. On HiDPI displays the backing texture is
+automatically allocated at `WebviewSize × device_pixel_ratio`, so increasing
+`WebviewSize` is usually unnecessary for sharpness — only do it if the page
+is designed for a specific viewport size (e.g. 1920×1080).
 
 ```rust
 commands.spawn((

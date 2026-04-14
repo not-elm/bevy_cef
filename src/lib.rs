@@ -6,22 +6,27 @@ mod drag;
 mod keyboard;
 mod mute;
 mod navigation;
+mod resize;
 mod system_param;
 mod webview;
 mod zoom;
 
-use crate::common::{LocalHostPlugin, MessageLoopPlugin, WebviewCoreComponentsPlugin};
+use crate::common::{
+    LocalHostPlugin, MessageLoopPlugin, WebviewCoreComponentsPlugin, WebviewDpiPlugin,
+};
 use crate::cursor_icon::SystemCursorIconPlugin;
 use crate::drag::DragPlugin;
 use crate::keyboard::KeyboardPlugin;
 use crate::mute::AudioMutePlugin;
 use crate::prelude::{IpcPlugin, NavigationPlugin, WebviewPlugin};
+use crate::resize::plugin::ResizePlugin;
 use crate::zoom::ZoomPlugin;
 use bevy::prelude::*;
 use bevy_cef_core::prelude::{CefExtensions, CommandLineConfig};
 use bevy_remote::RemotePlugin;
 
 pub mod prelude {
+    pub use crate::resize::components::{AspectLockMode, WebviewResizable};
     pub use crate::{CefPlugin, RunOnMainThread, common::*, navigation::*, webview::prelude::*};
     pub use bevy_cef_core::prelude::{CefExtensions, CommandLineConfig};
 }
@@ -48,11 +53,13 @@ impl Plugin for CefPlugin {
                 root_cache_path: self.root_cache_path.clone(),
             },
             WebviewCoreComponentsPlugin,
+            WebviewDpiPlugin,
             WebviewPlugin,
             IpcPlugin,
             KeyboardPlugin,
             SystemCursorIconPlugin,
             DragPlugin,
+            ResizePlugin,
             NavigationPlugin,
             ZoomPlugin,
             AudioMutePlugin,

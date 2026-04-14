@@ -1,6 +1,6 @@
 use crate::common::localhost::responser::{InlineHtmlId, InlineHtmlStore};
 use crate::common::{
-    HostWindow, IpcEventRawSender, ResolvedWebviewUri, WebviewSize, WebviewSource,
+    HostWindow, IpcEventRawSender, ResolvedWebviewUri, WebviewDpr, WebviewSize, WebviewSource,
 };
 use crate::cursor_icon::SystemCursorIconSender;
 use crate::prelude::PreloadScripts;
@@ -23,7 +23,7 @@ use crate::common::CommandChannelReceiver;
 use crate::common::TextureSenderRes;
 
 mod mesh;
-mod webview_sprite;
+pub(crate) mod webview_sprite;
 
 pub mod prelude {
     pub use crate::webview::{
@@ -97,11 +97,38 @@ impl Default for BeginFrameInterval {
     }
 }
 
+/// System ordering for the webview lifecycle.
+#[derive(SystemSet, Clone, Debug, Hash, PartialEq, Eq)]
+pub enum WebviewSet {
+    /// Resize drag tracking writes DisplaySize.
+    ResizeInteraction,
+    /// Seeds and refreshes WebviewDpr from host window scale factors.
+    DpiSeed,
+    /// Derives WebviewSize from pipeline components.
+    DerivePipeline,
+    /// Creates CEF browser instances.
+    CreateBrowser,
+    /// Commits WebviewSize changes to CEF via browsers.resize().
+    CommitResize,
+}
+
 pub struct WebviewPlugin;
 
 impl Plugin for WebviewPlugin {
     fn build(&self, app: &mut App) {
         app.register_type::<RequestShowDevTool>();
+
+        app.configure_sets(
+            Update,
+            (
+                WebviewSet::ResizeInteraction,
+                WebviewSet::DpiSeed,
+                WebviewSet::DerivePipeline,
+                WebviewSet::CreateBrowser,
+                WebviewSet::CommitResize,
+            )
+                .chain(),
+        );
 
         // macOS/Linux: direct NonSend<Browsers>
         #[cfg(not(target_os = "windows"))]
@@ -113,8 +140,10 @@ impl Plugin for WebviewPlugin {
                 .add_systems(
                     Update,
                     (
-                        resize.run_if(any_resized),
-                        create_webview.run_if(added_webview),
+                        resize.run_if(any_resized).in_set(WebviewSet::CommitResize),
+                        create_webview
+                            .run_if(added_webview)
+                            .in_set(WebviewSet::CreateBrowser),
                         navigate_on_source_change,
                     ),
                 )
@@ -155,8 +184,12 @@ impl Plugin for WebviewPlugin {
                 .add_systems(
                     Update,
                     (
-                        resize_win.run_if(any_resized),
-                        create_webview_win.run_if(added_webview),
+                        resize_win
+                            .run_if(any_resized)
+                            .in_set(WebviewSet::CommitResize),
+                        create_webview_win
+                            .run_if(added_webview)
+                            .in_set(WebviewSet::CreateBrowser),
                         navigate_on_source_change_win,
                     ),
                 )
@@ -225,6 +258,7 @@ fn create_webview(
             Entity,
             &ResolvedWebviewUri,
             &WebviewSize,
+            &WebviewDpr,
             &PreloadScripts,
             Option<&HostWindow>,
         ),
@@ -234,7 +268,7 @@ fn create_webview(
 ) {
     WINIT_WINDOWS.with(|winit_windows| {
         let winit_windows = winit_windows.borrow();
-        for (entity, uri, size, initialize_scripts, host_window) in webviews.iter() {
+        for (entity, uri, size, dpr, initialize_scripts, host_window) in webviews.iter() {
             let host_window = host_window
                 .and_then(|w| winit_windows.get_window(w.0))
                 .or_else(|| winit_windows.get_window(primary_window.single().ok()?))
@@ -246,6 +280,7 @@ fn create_webview(
                 entity,
                 &uri.0,
                 size.0,
+                dpr.0,
                 requester.clone(),
                 ipc_event_sender.0.clone(),
                 brp_sender.clone(),
@@ -332,6 +367,7 @@ fn create_webview_win(
             Entity,
             &ResolvedWebviewUri,
             &WebviewSize,
+            &WebviewDpr,
             &PreloadScripts,
             Option<&HostWindow>,
         ),
@@ -341,7 +377,7 @@ fn create_webview_win(
 ) {
     WINIT_WINDOWS.with(|winit_windows| {
         let winit_windows = winit_windows.borrow();
-        for (entity, uri, size, initialize_scripts, host_window) in webviews.iter() {
+        for (entity, uri, size, dpr, initialize_scripts, host_window) in webviews.iter() {
             let host_window = host_window
                 .and_then(|w| winit_windows.get_window(w.0))
                 .or_else(|| winit_windows.get_window(primary_window.single().ok()?))
@@ -353,6 +389,7 @@ fn create_webview_win(
                 entity,
                 &uri.0,
                 size.0,
+                dpr.0,
                 requester.clone(),
                 ipc_event_sender.0.clone(),
                 brp_sender.clone(),
