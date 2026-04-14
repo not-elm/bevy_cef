@@ -39,6 +39,8 @@ use crate::browser_process::browsers::devtool_render_handler::DevToolRenderHandl
 use crate::browser_process::display_handler::{DisplayHandlerBuilder, SystemCursorIconSenderInner};
 #[cfg(not(target_os = "windows"))]
 use crate::browser_process::drag_handler::{DragHandlerBuilder, DraggableRegionSenderInner};
+#[cfg(not(target_os = "windows"))]
+use crate::browser_process::load_handler::{LoadHandlerBuilder, LoadHandlerSenderInner};
 pub use keyboard::*;
 
 pub struct WebviewBrowser {
@@ -71,6 +73,7 @@ impl Browsers {
         brp_sender: Sender<BrpMessage>,
         system_cursor_icon_sender: SystemCursorIconSenderInner,
         drag_regions_sender: DraggableRegionSenderInner,
+        load_handler_sender: LoadHandlerSenderInner,
         initialize_scripts: &[String],
         _window_handle: Option<RawWindowHandle>,
     ) {
@@ -100,6 +103,7 @@ impl Browsers {
                 brp_sender,
                 system_cursor_icon_sender,
                 drag_regions_sender,
+                load_handler_sender,
             )),
             Some(&uri.into()),
             Some(&BrowserSettings {
@@ -508,6 +512,7 @@ impl Browsers {
         brp_sender: Sender<BrpMessage>,
         system_cursor_icon_sender: SystemCursorIconSenderInner,
         drag_regions_sender: DraggableRegionSenderInner,
+        load_handler_sender: LoadHandlerSenderInner,
     ) -> Client {
         ClientHandlerBuilder::new(RenderHandlerBuilder::build(
             webview,
@@ -518,6 +523,7 @@ impl Browsers {
         ))
         .with_display_handler(DisplayHandlerBuilder::build(system_cursor_icon_sender))
         .with_drag_handler(DragHandlerBuilder::build(webview, drag_regions_sender))
+        .with_load_handler(LoadHandlerBuilder::build(webview, load_handler_sender))
         .with_message_handler(JsEmitEventHandler::new(webview, ipc_event_sender))
         .with_message_handler(BrpHandler::new(brp_sender))
         .build()
