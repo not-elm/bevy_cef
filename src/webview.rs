@@ -253,6 +253,7 @@ fn create_webview(
     brp_sender: Res<BrpSender>,
     cursor_icon_sender: Res<SystemCursorIconSender>,
     drag_regions_sender: Res<crate::drag::DraggableRegionSender>,
+    load_handler_sender: Res<crate::navigation::LoadHandlerSender>,
     webviews: Query<
         (
             Entity,
@@ -286,6 +287,7 @@ fn create_webview(
                 brp_sender.clone(),
                 cursor_icon_sender.clone(),
                 drag_regions_sender.0.clone(),
+                load_handler_sender.0.clone(),
                 &initialize_scripts.0,
                 host_window,
             );
@@ -362,6 +364,7 @@ fn create_webview_win(
     brp_sender: Res<BrpSender>,
     cursor_icon_sender: Res<SystemCursorIconSender>,
     drag_regions_sender: Res<crate::drag::DraggableRegionSender>,
+    load_handler_sender: Res<crate::navigation::LoadHandlerSender>,
     webviews: Query<
         (
             Entity,
@@ -395,6 +398,7 @@ fn create_webview_win(
                 brp_sender.clone(),
                 cursor_icon_sender.clone(),
                 drag_regions_sender.0.clone(),
+                load_handler_sender.0.clone(),
                 &initialize_scripts.0,
                 host_window,
             );
