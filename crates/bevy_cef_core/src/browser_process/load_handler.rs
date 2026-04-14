@@ -107,13 +107,13 @@ impl ImplLoadHandler for LoadHandlerBuilder {
         frame: Option<&mut Frame>,
         http_status_code: c_int,
     ) {
-        if let Some(frame) = frame {
-            if frame.is_main() != 0 {
-                let _ = self.sender.send_blocking(LoadHandlerMessage::Finished {
-                    webview: self.webview,
-                    http_status_code: http_status_code as i32,
-                });
-            }
+        if let Some(frame) = frame
+            && frame.is_main() != 0
+        {
+            let _ = self.sender.send_blocking(LoadHandlerMessage::Finished {
+                webview: self.webview,
+                http_status_code,
+            });
         }
     }
 
@@ -125,15 +125,15 @@ impl ImplLoadHandler for LoadHandlerBuilder {
         _error_text: Option<&CefString>,
         failed_url: Option<&CefString>,
     ) {
-        if let Some(frame) = frame {
-            if frame.is_main() != 0 {
-                let raw: cef_dll_sys::cef_errorcode_t = error_code.into();
-                let _ = self.sender.send_blocking(LoadHandlerMessage::Error {
-                    webview: self.webview,
-                    error_code: raw as i32,
-                    url: failed_url.map(|u| u.to_string()).unwrap_or_default(),
-                });
-            }
+        if let Some(frame) = frame
+            && frame.is_main() != 0
+        {
+            let raw: cef_dll_sys::cef_errorcode_t = error_code.into();
+            let _ = self.sender.send_blocking(LoadHandlerMessage::Error {
+                webview: self.webview,
+                error_code: raw as i32,
+                url: failed_url.map(|u| u.to_string()).unwrap_or_default(),
+            });
         }
     }
 
