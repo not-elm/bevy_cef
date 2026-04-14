@@ -33,6 +33,7 @@ use crate::browser_process::cef_command::CefCommand;
 use crate::browser_process::client_handler::{BrpHandler, IpcEventRaw, JsEmitEventHandler};
 use crate::browser_process::display_handler::{DisplayHandlerBuilder, SystemCursorIconSenderInner};
 use crate::browser_process::drag_handler::{DragHandlerBuilder, DraggableRegionSenderInner};
+use crate::browser_process::load_handler::{LoadHandlerBuilder, LoadHandlerSenderInner};
 use crate::browser_process::localhost::{LocalSchemaHandlerBuilder, Requester};
 use crate::browser_process::renderer_handler::{
     RenderHandlerBuilder, RenderTextureMessage, SharedDpr, SharedViewSize, TextureSender,
@@ -82,6 +83,7 @@ impl BrowsersCefSide {
                 brp_sender,
                 system_cursor_icon_sender,
                 drag_regions_sender,
+                load_handler_sender,
                 initialize_scripts,
                 window_handle,
             } => {
@@ -97,6 +99,7 @@ impl BrowsersCefSide {
                     brp_sender,
                     system_cursor_icon_sender,
                     drag_regions_sender,
+                    load_handler_sender,
                     &initialize_scripts,
                     raw_handle,
                 );
@@ -165,6 +168,7 @@ impl BrowsersCefSide {
         brp_sender: Sender<BrpMessage>,
         system_cursor_icon_sender: SystemCursorIconSenderInner,
         drag_regions_sender: DraggableRegionSenderInner,
+        load_handler_sender: LoadHandlerSenderInner,
         initialize_scripts: &[String],
         #[allow(deprecated)] _window_handle: Option<RawWindowHandle>,
     ) {
@@ -192,6 +196,7 @@ impl BrowsersCefSide {
                 brp_sender,
                 system_cursor_icon_sender,
                 drag_regions_sender,
+                load_handler_sender,
             )),
             Some(&uri.into()),
             Some(&BrowserSettings {
@@ -503,6 +508,7 @@ impl BrowsersCefSide {
         brp_sender: Sender<BrpMessage>,
         system_cursor_icon_sender: SystemCursorIconSenderInner,
         drag_regions_sender: DraggableRegionSenderInner,
+        load_handler_sender: LoadHandlerSenderInner,
     ) -> Client {
         ClientHandlerBuilder::new(RenderHandlerBuilder::build(
             webview,
@@ -512,6 +518,7 @@ impl BrowsersCefSide {
         ))
         .with_display_handler(DisplayHandlerBuilder::build(system_cursor_icon_sender))
         .with_drag_handler(DragHandlerBuilder::build(webview, drag_regions_sender))
+        .with_load_handler(LoadHandlerBuilder::build(webview, load_handler_sender))
         .with_message_handler(JsEmitEventHandler::new(webview, ipc_event_sender))
         .with_message_handler(BrpHandler::new(brp_sender))
         .build()
