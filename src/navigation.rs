@@ -5,7 +5,9 @@ use bevy::prelude::*;
 use bevy_cef_core::prelude::Browsers;
 #[cfg(target_os = "windows")]
 use bevy_cef_core::prelude::BrowsersProxy;
-use bevy_cef_core::prelude::{LoadHandlerMessage, LoadHandlerSenderInner};
+use bevy_cef_core::prelude::{
+    AddressChangedMessage, AddressChangedSenderInner, LoadHandlerMessage, LoadHandlerSenderInner,
+};
 use serde::{Deserialize, Serialize};
 
 pub(super) struct NavigationPlugin;
@@ -13,8 +15,11 @@ pub(super) struct NavigationPlugin;
 impl Plugin for NavigationPlugin {
     fn build(&self, app: &mut App) {
         let (tx, rx) = async_channel::unbounded();
+        let (addr_tx, addr_rx) = async_channel::unbounded();
         app.insert_resource(LoadHandlerSender(tx))
             .insert_resource(LoadHandlerReceiver(rx))
+            .insert_resource(AddressChangedSender(addr_tx))
+            .insert_resource(AddressChangedReceiver(addr_rx))
             .register_type::<RequestGoBack>()
             .register_type::<RequestGoForward>()
             .register_type::<RequestNavigate>()
@@ -23,7 +28,8 @@ impl Plugin for NavigationPlugin {
             .register_type::<LoadStarted>()
             .register_type::<LoadFinished>()
             .register_type::<LoadError>()
-            .add_systems(PreUpdate, drain_load_events);
+            .register_type::<AddressChanged>()
+            .add_systems(PreUpdate, (drain_load_events, drain_address_changed));
 
         #[cfg(not(target_os = "windows"))]
         app.add_observer(apply_request_go_back)
@@ -103,8 +109,24 @@ pub struct LoadError {
     pub url: String,
 }
 
+/// Fired when a webview's URL changes (including hash/fragment changes).
+#[derive(Debug, EntityEvent, Clone, Reflect, Serialize, Deserialize)]
+pub struct AddressChanged {
+    #[event_target]
+    pub webview: Entity,
+    pub url: String,
+    pub can_go_back: bool,
+    pub can_go_forward: bool,
+}
+
 #[derive(Resource, Debug, Deref)]
 pub(crate) struct LoadHandlerSender(pub(crate) LoadHandlerSenderInner);
+
+#[derive(Resource, Debug, Deref)]
+pub(crate) struct AddressChangedSender(pub(crate) AddressChangedSenderInner);
+
+#[derive(Resource, Debug)]
+struct AddressChangedReceiver(Receiver<AddressChangedMessage>);
 
 #[derive(Resource, Debug)]
 struct LoadHandlerReceiver(Receiver<LoadHandlerMessage>);
@@ -158,6 +180,20 @@ fn drain_load_events(mut commands: Commands, receiver: Res<LoadHandlerReceiver>)
                 );
             }
         }
+    }
+}
+
+fn drain_address_changed(mut commands: Commands, receiver: Res<AddressChangedReceiver>) {
+    while let Ok(msg) = receiver.0.try_recv() {
+        commands.trigger_with(
+            AddressChanged {
+                webview: msg.webview,
+                url: msg.url,
+                can_go_back: msg.can_go_back,
+                can_go_forward: msg.can_go_forward,
+            },
+            EntityTrigger,
+        );
     }
 }
 
