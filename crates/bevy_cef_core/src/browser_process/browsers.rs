@@ -326,6 +326,32 @@ impl Browsers {
         }
     }
 
+    /// Returns whether the webview can navigate back in history.
+    ///
+    /// Returns `false` if the entity is not a known browser.
+    ///
+    /// ## Reference
+    ///
+    /// - [`CanGoBack`](https://cef-builds.spotifycdn.com/docs/122.0/classCefBrowser.html#a3a4f4327a498a8b6a498abb9e2b2ecf3)
+    pub fn can_go_back(&self, webview: &Entity) -> bool {
+        self.browsers
+            .get(webview)
+            .is_some_and(|b| b.client.can_go_back() == 1)
+    }
+
+    /// Returns whether the webview can navigate forward in history.
+    ///
+    /// Returns `false` if the entity is not a known browser.
+    ///
+    /// ## Reference
+    ///
+    /// - [`CanGoForward`](https://cef-builds.spotifycdn.com/docs/122.0/classCefBrowser.html#a6537bcc556f449284e3c1b76c8d26de1)
+    pub fn can_go_forward(&self, webview: &Entity) -> bool {
+        self.browsers
+            .get(webview)
+            .is_some_and(|b| b.client.can_go_forward() == 1)
+    }
+
     /// Navigate a specific webview to a new URL.
     pub fn navigate(&self, webview: &Entity, url: &str) {
         if let Some(browser) = self.browsers.get(webview)

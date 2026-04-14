@@ -1,3 +1,9 @@
+## v0.8.0
+
+### Features
+
+- Added `can_go_back` / `can_go_forward` public methods to `Browsers` for querying webview navigation history state.
+
 ## v0.7.0
 
 ### Features

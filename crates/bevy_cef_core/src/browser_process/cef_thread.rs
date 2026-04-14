@@ -243,6 +243,18 @@ impl BrowsersCefSide {
         }
     }
 
+    fn can_go_back(&self, entity: &Entity) -> bool {
+        self.browsers
+            .get(entity)
+            .is_some_and(|b| b.client.can_go_back() == 1)
+    }
+
+    fn can_go_forward(&self, entity: &Entity) -> bool {
+        self.browsers
+            .get(entity)
+            .is_some_and(|b| b.client.can_go_forward() == 1)
+    }
+
     fn reload_webview(&self, entity: &Entity) {
         if let Some(browser) = self.browsers.get(entity)
             && let Some(frame) = browser.client.main_frame()

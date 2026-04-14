@@ -16,7 +16,7 @@ resolver = "2"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.7.0"
+version = "0.8.0"
 edition = "2024"
 license = "Apache-2.0 OR MIT"
 authors = ["notelm"]
@@ -39,7 +39,7 @@ bevy_remote = "0.18"
 cef = { version = "145.6.1+145.0.28" }
 cef-dll-sys = { version = "145.6.1+145.0.28", features = ["sandbox"] }
 bevy_cef = { path = ".", version = "0.7.0" }
-bevy_cef_core = { path = "crates/bevy_cef_core", version = "0.7.0" }
+bevy_cef_core = { path = "crates/bevy_cef_core", version = "0.8.0" }
 async-channel = { version = "2.5" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1" }
