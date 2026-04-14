@@ -2,12 +2,20 @@ use crate::prelude::{BRP_PROMISES, LISTEN_EVENTS, PROCESS_MESSAGE_BRP, PROCESS_M
 use crate::util::{IntoString, v8_value_to_json};
 use cef::rc::{Rc, RcImpl};
 use cef::{
-    CefString, ImplFrame, ImplListValue, ImplProcessMessage, ImplV8Context, ImplV8Handler,
-    ImplV8Value, ProcessId, V8Value, WrapV8Handler, process_message_create, sys,
+    CefString, ImplBrowser, ImplFrame, ImplListValue, ImplProcessMessage, ImplV8Context,
+    ImplV8Handler, ImplV8Value, ProcessId, V8Value, WrapV8Handler, process_message_create, sys,
     v8_context_get_current_context, v8_value_create_promise, v8_value_create_string,
 };
 use cef_dll_sys::cef_process_id_t;
 use std::os::raw::c_int;
+
+/// Extracts the context key (browser_id, frame_id) from the current V8 context.
+fn current_context_key() -> Option<(i32, String)> {
+    let context = v8_context_get_current_context()?;
+    let browser = context.browser()?;
+    let frame = context.frame()?;
+    Some((browser.identifier(), frame.identifier().into_string()))
+}
 
 /// Handles the `window.cef` JavaScript API functions.
 ///
@@ -95,6 +103,9 @@ impl CefApiHandler {
         let Some(frame) = context.frame() else {
             return 0;
         };
+        let Some(key) = current_context_key() else {
+            return 0;
+        };
 
         if let Some(mut process) = process_message_create(Some(&PROCESS_MESSAGE_BRP.into()))
             && let Some(promise) = v8_value_create_promise()
@@ -114,8 +125,12 @@ impl CefApiHandler {
                     Some(&mut process),
                 );
                 ret.replace(promise.clone());
-                let mut promises = BRP_PROMISES.lock().unwrap();
-                promises.insert(id, promise);
+                BRP_PROMISES
+                    .lock()
+                    .unwrap()
+                    .entry(key)
+                    .or_default()
+                    .insert(id, promise);
             } else {
                 let mut exception =
                     v8_value_create_string(Some(&"Failed to execute BRP request".into()));
@@ -150,6 +165,9 @@ impl CefApiHandler {
     }
 
     fn execute_listen(&self, arguments: Option<&[Option<V8Value>]>) -> c_int {
+        let Some(key) = current_context_key() else {
+            return 0;
+        };
         if let Some(arguments) = arguments
             && let Some(Some(id)) = arguments.first()
             && id.is_string().is_positive()
@@ -159,6 +177,8 @@ impl CefApiHandler {
             LISTEN_EVENTS
                 .lock()
                 .unwrap()
+                .entry(key)
+                .or_default()
                 .insert(id.string_value().into_string(), callback.clone());
         }
         1
