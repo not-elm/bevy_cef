@@ -228,8 +228,9 @@ fn handle_brp_message(
         return;
     };
 
-    if let Ok(brp_result) = serde_json::from_str::<BrpResult>(&payload) {
-        ctx.enter();
+    if let Ok(brp_result) = serde_json::from_str::<BrpResult>(&payload)
+        && ctx.enter() != 0
+    {
         match brp_result {
             Ok(v) => {
                 promise.resolve_promise(json_to_v8(v).as_mut());
@@ -263,8 +264,9 @@ fn handle_listen_message(
         return;
     };
 
-    ctx.enter();
-    if let Ok(value) = serde_json::from_str::<serde_json::Value>(&payload) {
+    if ctx.enter() != 0
+        && let Ok(value) = serde_json::from_str::<serde_json::Value>(&payload)
+    {
         let mut obj = v8_value_create_object(
             Some(&mut V8DefaultAccessorBuilder::build()),
             Some(&mut V8DefaultInterceptorBuilder::build()),
@@ -274,8 +276,8 @@ fn handle_listen_message(
             obj.as_mut(),
             Some(&[json_to_v8(value)]),
         );
+        ctx.exit();
     }
-    ctx.exit();
 }
 
 fn register_extensions_from_command_line() {
