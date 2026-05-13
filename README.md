@@ -96,6 +96,23 @@ fn main() {
 }
 ```
 
+### Linux
+
+CEF runs windowless on Linux, so X11, XWayland, and native Wayland sessions are all supported through Bevy's normal windowing.
+
+Install the system packages required by CEF, then install CEF and the dedicated render process binary in one step:
+
+```shell
+> sudo apt-get install --no-install-recommends \
+    libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libgbm1 \
+    libpango-1.0-0 libcairo2 libgtk-3-0
+> make setup-linux
+```
+
+`make setup-linux` runs `export-cef-dir` to populate `$HOME/.local/share/cef` and then installs `bevy_cef_render_process` into the same directory. On build, `build.rs` copies CEF's `.so`/`.pak`/`.dat`/`.bin` files and the render process binary next to your executable.
+
+If you do not install the render process binary, call `bevy_cef::prelude::early_exit_if_subprocess()` at the top of `main()` as on Windows.
+
 ## Examples
 
 See [`examples/`](./examples).
@@ -106,7 +123,7 @@ On macOS, you need to enable the `debug` feature:
 cargo run --example simple --features debug
 ```
 
-On Windows, no extra feature flag is needed:
+On Windows and Linux, no extra feature flag is needed:
 
 ```shell
 cargo run --example simple
@@ -114,11 +131,11 @@ cargo run --example simple
 
 ## 🌍 Platform Support
 
-| Platform | Status     |
-| -------- | ---------- |
-| macOS    | ✅ Full    |
-| Windows  | ✅ Full    |
-| Linux    | ⚠️ Planned |
+| Platform | Status                       |
+| -------- | ---------------------------- |
+| macOS    | ✅ Full                      |
+| Windows  | ✅ Full                      |
+| Linux    | ✅ Supported (windowless)    |
 
 ## 🤝 Contributing
 
