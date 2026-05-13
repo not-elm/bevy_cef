@@ -98,7 +98,7 @@ fn main() {
 
 ### Linux
 
-CEF runs windowless on Linux (no native X11/Wayland parent surface), so X11, XWayland, and native Wayland sessions are all supported through Bevy's normal windowing.
+CEF runs windowless on Linux, so X11, XWayland, and native Wayland sessions are all supported through Bevy's normal windowing.
 
 Install the system packages required by CEF, then install CEF and the dedicated render process binary in one step:
 

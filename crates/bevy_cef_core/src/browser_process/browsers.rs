@@ -94,7 +94,7 @@ impl Browsers {
                     Some(RawWindowHandle::AppKit(handle)) => handle.ns_view.as_ptr(),
                     _ => std::ptr::null_mut(),
                 },
-                // CEF on Linux is always windowless here; no native parent surface needed.
+                // Windowless rendering does not require a parent window handle on Linux.
                 #[cfg(target_os = "linux")]
                 parent_window: 0,
                 ..Default::default()

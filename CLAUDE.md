@@ -126,7 +126,7 @@ No automated tests. Testing done through examples:
 
 - **macOS**: Full support. Uses `objc` crate for window handling. CEF framework at `$HOME/.local/share/Chromium Embedded Framework.framework`
 - **Windows**: Full support. CEF at `$USERPROFILE/.local/share/cef`, auto-copied by build.rs. Separate render process binary recommended
-- **Linux**: Supported (windowless rendering only). CEF at `$HOME/.local/share/cef`, auto-copied by `build.rs`. Run `make setup-linux` to install CEF + `bevy_cef_render_process`. `--no-zygote` is set in the default `CommandLineConfig` to avoid `chrome-sandbox` dependencies (combined with `no_sandbox: true`). No native X11/Wayland parent surface plumbing; CEF receives `parent_window: 0`
+- **Linux**: Supported. CEF at `$HOME/.local/share/cef`, auto-copied by `build.rs`. Run `make setup-linux` to install CEF + `bevy_cef_render_process`. `--no-zygote` is set in the default `CommandLineConfig` to avoid `chrome-sandbox` dependencies (combined with `no_sandbox: true`).
 
 ## Version Compatibility
 
