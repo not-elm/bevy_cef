@@ -21,6 +21,10 @@ serde_json = { workspace = true }
 async-channel = { workspace = true }
 raw-window-handle = { workspace = true }
 
+# `linux/input-event-codes.h` constants (KEY_A etc.) for XKB native key code mapping.
+[target.'cfg(target_os = "linux")'.dependencies]
+input-linux-sys = { version = "0.9", default-features = false }
+
 [features]
 default = []
 debug = []

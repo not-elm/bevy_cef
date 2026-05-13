@@ -24,7 +24,7 @@ jobs:
         with:
           toolchain: stable
       - name: Install alsa and udev
-        run: sudo apt-get update; sudo apt-get install --no-install-recommends libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev pkg-config
+        run: sudo apt-get update; sudo apt-get install --no-install-recommends libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev pkg-config libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libgbm1 libpango-1.0-0 libcairo2 libgtk-3-0 cmake ninja-build
         if: runner.os == 'linux'
       - name: Build & run tests
         run: |
@@ -46,7 +46,7 @@ jobs:
         with:
           toolchain: stable
       - name: Install alsa and udev
-        run: sudo apt-get update; sudo apt-get install --no-install-recommends libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev pkg-config
+        run: sudo apt-get update; sudo apt-get install --no-install-recommends libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev pkg-config libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libgbm1 libpango-1.0-0 libcairo2 libgtk-3-0 cmake ninja-build
       - name: Run doc tests with all features (this also compiles README examples)
         run: cargo test --doc
   lint:
@@ -67,7 +67,7 @@ jobs:
           toolchain: stable
           components: rustfmt, clippy
       - name: Install alsa and udev
-        run: sudo apt-get update; sudo apt-get install --no-install-recommends libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev pkg-config
+        run: sudo apt-get update; sudo apt-get install --no-install-recommends libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev pkg-config libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libgbm1 libpango-1.0-0 libcairo2 libgtk-3-0 cmake ninja-build
       - name: Run clippy
         run: cargo clippy --workspace --all-targets --all-features -- -Dwarnings
       - name: Check format
