@@ -49,8 +49,25 @@ pub struct CefPlugin {
     pub custom_schemes: Vec<CefCustomScheme>,
 }
 
+impl std::fmt::Debug for CefPlugin {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CefPlugin")
+            .field("command_line_config", &self.command_line_config)
+            .field("extensions", &self.extensions)
+            .field("root_cache_path", &self.root_cache_path)
+            .field(
+                "custom_schemes",
+                &self.custom_schemes.iter().map(|s| &s.name).collect::<Vec<_>>(),
+            )
+            .finish()
+    }
+}
+
 impl Plugin for CefPlugin {
     fn build(&self, app: &mut App) {
+        // NOTE: Must run before MessageLoopPlugin::build, which calls cef_initialize.
+        // CEF's OnRegisterCustomSchemes fires during initialize; schemes registered
+        // afterward are silently ignored.
         bevy_cef_core::prelude::init_registered_schemes(self.custom_schemes.clone());
         app.add_plugins((
             LocalHostPlugin,
