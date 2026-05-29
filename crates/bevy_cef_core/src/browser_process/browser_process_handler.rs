@@ -69,7 +69,7 @@ impl ImplBrowserProcessHandler for BrowserProcessHandlerBuilder {
         command_line.append_switch(Some(&"ignore-ssl-errors".into()));
         command_line.append_switch(Some(&"enable-logging=stderr".into()));
         command_line.append_switch(Some(&"disable-web-security".into()));
-        // Pass extensions to render process via command line
+        // Pass extensions to the render process via command line.
         if !self.extensions.is_empty()
             && let Ok(json) = serde_json::to_string(&self.extensions.0)
         {
@@ -78,6 +78,13 @@ impl ImplBrowserProcessHandler for BrowserProcessHandlerBuilder {
                 Some(&json.as_str().into()),
             );
         }
+        // NOTE: The custom-scheme switch MUST be injected here, not in
+        // `App::on_before_command_line_processing`. This hook fires for every
+        // child process type (GPU, renderer, and the out-of-process
+        // utility/Network Service); `on_before_command_line_processing` only runs
+        // for the browser process here (`process_type` is always `None`). Moving
+        // it there leaves the Network Service without the scheme and floods
+        // `network.mojom.NetworkContext` validation errors. Verified empirically.
         if let Some(json) = crate::custom_scheme::current_scheme_decls_json() {
             command_line.append_switch_with_value(
                 Some(&crate::util::CUSTOM_SCHEMES_SWITCH.into()),

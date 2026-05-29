@@ -1,19 +1,26 @@
 //! Caller-registered custom scheme support: public types, a process-global
 //! registry, and a generic CEF factory/resource-handler adapter.
+//!
+//! Panics are contained at the FFI boundary (CEF trampolines are plain
+//! `extern "C"`, so an unwind across them is UB). A panic in the caller's
+//! `handle()` becomes a 500 response; a panic in the caller's reader `read()`
+//! becomes an `ERR_FAILED` (`bytes_read = -2`); a panic in any other CEF
+//! callback is swallowed (best-effort defaults). No panic crosses the FFI
+//! boundary.
 
-use cef_dll_sys::cef_scheme_options_t::{
-    CEF_SCHEME_OPTION_CORS_ENABLED, CEF_SCHEME_OPTION_CSP_BYPASSING,
-    CEF_SCHEME_OPTION_DISPLAY_ISOLATED, CEF_SCHEME_OPTION_FETCH_ENABLED,
-    CEF_SCHEME_OPTION_LOCAL, CEF_SCHEME_OPTION_SECURE, CEF_SCHEME_OPTION_STANDARD,
-};
+use crate::util::{CUSTOM_SCHEMES_SWITCH, IntoString};
 use cef::rc::Rc;
 use cef::{
-    Callback, CefString, ImplCommandLine, ImplRequest, ImplResponse, ImplResourceHandler,
+    Callback, CefString, ImplCommandLine, ImplRequest, ImplResourceHandler, ImplResponse,
     ImplSchemeHandlerFactory, Request, ResourceHandler, ResourceReadCallback, Response,
     SchemeHandlerFactory, WrapResourceHandler, WrapSchemeHandlerFactory, command_line_get_global,
     wrap_resource_handler, wrap_scheme_handler_factory,
 };
-use crate::util::{CUSTOM_SCHEMES_SWITCH, IntoString};
+use cef_dll_sys::cef_scheme_options_t::{
+    CEF_SCHEME_OPTION_CORS_ENABLED, CEF_SCHEME_OPTION_CSP_BYPASSING,
+    CEF_SCHEME_OPTION_DISPLAY_ISOLATED, CEF_SCHEME_OPTION_FETCH_ENABLED, CEF_SCHEME_OPTION_LOCAL,
+    CEF_SCHEME_OPTION_SECURE, CEF_SCHEME_OPTION_STANDARD,
+};
 use serde::{Deserialize, Serialize};
 use std::io::{self, Cursor, Read};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -109,14 +116,24 @@ struct ResponseState {
     len: Option<u64>,
 }
 
-/// Calls the handler with the request, isolating panics: a panic that unwinds
-/// across the CEF FFI boundary is UB, so a caught panic becomes a 500. (Only
-/// effective under `panic = "unwind"`; under `panic = "abort"` the process
+/// Runs `f` with unwinds caught at the FFI boundary, returning `None` on a
+/// caught panic after logging `context`. A panic that unwinds across the CEF
+/// `extern "C"` trampolines is UB, so every callback body funnels through here.
+/// (Only effective under `panic = "unwind"`; under `panic = "abort"` the process
 /// aborts before this runs.)
-fn invoke_handler(handler: &Arc<dyn CefSchemeHandler>, request: &CefSchemeRequest) -> ResponseState {
-    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| handler.handle(request)));
-    let response = outcome.unwrap_or_else(|_| {
-        eprintln!("bevy_cef: custom scheme handler panicked; returning 500");
+fn guard_ffi<T>(context: &str, f: impl FnOnce() -> T) -> Option<T> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(f))
+        .map_err(|_| eprintln!("bevy_cef: panic caught at custom-scheme FFI boundary ({context})"))
+        .ok()
+}
+
+/// Calls the handler with the request, isolating panics: a caught panic in
+/// `handle()` becomes a 500 response (see [`guard_ffi`]).
+fn invoke_handler(
+    handler: &Arc<dyn CefSchemeHandler>,
+    request: &CefSchemeRequest,
+) -> ResponseState {
+    let response = guard_ffi("handler.handle", || handler.handle(request)).unwrap_or_else(|| {
         CefSchemeResponse {
             status: 500,
             mime_type: "text/plain".to_string(),
@@ -213,7 +230,10 @@ fn dedup_by_name(schemes: Vec<CefCustomScheme>) -> Vec<CefCustomScheme> {
         if seen.insert(scheme.name.clone()) {
             out.push(scheme);
         } else {
-            eprintln!("bevy_cef: duplicate custom scheme name ignored: {}", scheme.name);
+            eprintln!(
+                "bevy_cef: duplicate custom scheme name ignored: {}",
+                scheme.name
+            );
         }
     }
     out
@@ -279,10 +299,9 @@ wrap_scheme_handler_factory! {
             _scheme_name: Option<&CefString>,
             _request: Option<&mut Request>,
         ) -> Option<ResourceHandler> {
-            Some(GenericResourceHandler::new(
-                self.handler.clone(),
-                Arc::new(Mutex::new(None)),
-            ))
+            guard_ffi("factory.create", || {
+                GenericResourceHandler::new(self.handler.clone(), Arc::new(Mutex::new(None)))
+            })
         }
     }
 }
@@ -322,35 +341,37 @@ wrap_resource_handler! {
             response_length: Option<&mut i64>,
             _redirect_url: Option<&mut CefString>,
         ) {
-            let Some(response) = response else {
-                return;
-            };
-            let Ok(guard) = self.state.lock() else {
-                response.set_status(500);
-                if let Some(out) = response_length {
-                    *out = 0;
+            guard_ffi("response_headers", || {
+                let Some(response) = response else {
+                    return;
+                };
+                let Ok(guard) = self.state.lock() else {
+                    response.set_status(500);
+                    if let Some(out) = response_length {
+                        *out = 0;
+                    }
+                    return;
+                };
+                let Some(state) = guard.as_ref() else {
+                    response.set_status(500);
+                    if let Some(out) = response_length {
+                        *out = 0;
+                    }
+                    return;
+                };
+                response.set_status(state.status as i32);
+                response.set_mime_type(Some(&CefString::from(state.mime_type.as_str())));
+                for (name, value) in &state.headers {
+                    response.set_header_by_name(
+                        Some(&CefString::from(name.as_str())),
+                        Some(&CefString::from(value.as_str())),
+                        1,
+                    );
                 }
-                return;
-            };
-            let Some(state) = guard.as_ref() else {
-                response.set_status(500);
                 if let Some(out) = response_length {
-                    *out = 0;
+                    *out = state.len.map(|l| l as i64).unwrap_or(-1);
                 }
-                return;
-            };
-            response.set_status(state.status as i32);
-            response.set_mime_type(Some(&CefString::from(state.mime_type.as_str())));
-            for (name, value) in &state.headers {
-                response.set_header_by_name(
-                    Some(&CefString::from(name.as_str())),
-                    Some(&CefString::from(value.as_str())),
-                    1,
-                );
-            }
-            if let Some(out) = response_length {
-                *out = state.len.map(|l| l as i64).unwrap_or(-1);
-            }
+            });
         }
 
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
@@ -381,27 +402,38 @@ wrap_resource_handler! {
             // owned by this call for its duration. The temporary `&mut [u8]` does not
             // outlive the call.
             let buf = unsafe { std::slice::from_raw_parts_mut(data_out, bytes_to_read as usize) };
-            match state.reader.read(buf) {
-                Ok(0) => {
+            // A panic in the caller's reader must not unwind across the FFI
+            // boundary; map it to ERR_FAILED, the same as an I/O error.
+            let read_result = guard_ffi("reader.read", || state.reader.read(buf));
+            match read_result {
+                Some(Ok(0)) => {
                     *bytes_read = 0;
                     0
                 }
-                Ok(n) => {
+                Some(Ok(n)) => {
                     *bytes_read = n as i32;
                     1
                 }
-                Err(e) => {
+                Some(Err(e)) => {
                     eprintln!("bevy_cef: custom scheme read failed: {e}");
-                    *bytes_read = 0;
+                    // `bytes_read < 0` signals failure (ERR_FAILED); `bytes_read = 0`
+                    // with return 0 would mean clean EOF and silently truncate.
+                    *bytes_read = -2;
+                    0
+                }
+                None => {
+                    *bytes_read = -2;
                     0
                 }
             }
         }
 
         fn cancel(&self) {
-            if let Ok(mut guard) = self.state.lock() {
-                *guard = None;
-            }
+            guard_ffi("cancel", || {
+                if let Ok(mut guard) = self.state.lock() {
+                    *guard = None;
+                }
+            });
         }
     }
 }
@@ -536,7 +568,12 @@ mod tests {
     #[test]
     fn invoke_handler_streams_bytes_with_status_and_len() {
         let handler: std::sync::Arc<dyn CefSchemeHandler> = std::sync::Arc::new(BytesHandler);
-        let mut state = invoke_handler(&handler, &CefSchemeRequest { url: "demo://x/".into() });
+        let mut state = invoke_handler(
+            &handler,
+            &CefSchemeRequest {
+                url: "demo://x/".into(),
+            },
+        );
         assert_eq!(state.status, 200);
         assert_eq!(state.len, Some(2));
         let mut s = String::new();
@@ -545,18 +582,39 @@ mod tests {
     }
 
     #[test]
+    fn guard_ffi_returns_some_on_success() {
+        assert_eq!(guard_ffi("ok", || 7), Some(7));
+    }
+
+    #[test]
+    fn guard_ffi_returns_none_on_panic() {
+        // The default panic hook still prints a backtrace to stderr; that is
+        // expected and harmless for this test.
+        let caught: Option<()> = guard_ffi("boom", || panic!("boom"));
+        assert!(caught.is_none());
+    }
+
+    #[test]
     fn invoke_handler_converts_panic_to_500() {
         // The default panic hook still prints a backtrace to stderr; that is
         // expected and harmless for this test.
         let handler: std::sync::Arc<dyn CefSchemeHandler> = std::sync::Arc::new(PanicHandler);
-        let state = invoke_handler(&handler, &CefSchemeRequest { url: "demo://x/".into() });
+        let state = invoke_handler(
+            &handler,
+            &CefSchemeRequest {
+                url: "demo://x/".into(),
+            },
+        );
         assert_eq!(state.status, 500);
     }
 
     #[test]
     fn options_bitor_combines_bits() {
         let combined = CefSchemeOptions::STANDARD | CefSchemeOptions::SECURE;
-        assert_eq!(combined.0, CefSchemeOptions::STANDARD.0 | CefSchemeOptions::SECURE.0);
+        assert_eq!(
+            combined.0,
+            CefSchemeOptions::STANDARD.0 | CefSchemeOptions::SECURE.0
+        );
         assert_ne!(combined.0 & CefSchemeOptions::STANDARD.0, 0);
         assert_ne!(combined.0 & CefSchemeOptions::SECURE.0, 0);
     }
