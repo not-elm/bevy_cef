@@ -302,7 +302,19 @@ mod macos {
         ) -> bool;
     }
 
+    #[cfg(feature = "debug")]
+    use objc::runtime::Method;
+
+    #[cfg(feature = "debug")]
+    unsafe extern "C" {
+        fn class_getInstanceMethod(cls: *const Class, sel: Sel) -> *mut Method;
+        fn method_exchangeImplementations(m1: *mut Method, m2: *mut Method);
+    }
+
     static IS_HANDLING_SEND_EVENT: AtomicBool = AtomicBool::new(false);
+
+    #[cfg(feature = "debug")]
+    static TERMINATE_REQUESTED: AtomicBool = AtomicBool::new(false);
 
     extern "C" fn is_handling_send_event(_: &Object, _: Sel) -> bool {
         IS_HANDLING_SEND_EVENT.load(Ordering::Relaxed)
@@ -310,6 +322,47 @@ mod macos {
 
     extern "C" fn set_handling_send_event(_: &Object, _: Sel, flag: bool) {
         IS_HANDLING_SEND_EVENT.swap(flag, Ordering::Relaxed);
+    }
+
+    #[cfg(feature = "debug")]
+    extern "C" fn swizzled_terminate(_: &Object, _: Sel, _sender: *mut Object) {
+        // Intentionally does NOT call the original terminate:.
+        // Calling it would post NSApplicationWillTerminateNotification and
+        // re-trigger the winit `applicationWillTerminate:` panic.
+        TERMINATE_REQUESTED.store(true, Ordering::Relaxed);
+    }
+
+    #[cfg(feature = "debug")]
+    fn install_terminate_swizzle() {
+        unsafe {
+            let cls = Class::get("NSApplication").expect("NSApplication class not found");
+
+            // Register our IMP under a unique placeholder selector.
+            let placeholder_sel = sel!(cef_swizzled_terminate:);
+            let added = class_addMethod(
+                cls as *const _,
+                placeholder_sel,
+                swizzled_terminate as *const c_void,
+                c"v@:@".as_ptr() as *const c_char,
+            );
+            assert!(
+                added,
+                "Failed to add cef_swizzled_terminate: to NSApplication"
+            );
+
+            let terminate_method = class_getInstanceMethod(cls as *const _, sel!(terminate:));
+            assert!(
+                !terminate_method.is_null(),
+                "terminate: method not found on NSApplication"
+            );
+            let swizzled_method = class_getInstanceMethod(cls as *const _, placeholder_sel);
+            assert!(
+                !swizzled_method.is_null(),
+                "cef_swizzled_terminate: method not found after class_addMethod"
+            );
+
+            method_exchangeImplementations(terminate_method, swizzled_method);
+        }
     }
 
     pub fn install_cef_app_protocol() {
@@ -335,6 +388,9 @@ mod macos {
                 success2,
                 "Failed to add setHandlingSendEvent: to NSApplication"
             );
+
+            #[cfg(feature = "debug")]
+            install_terminate_swizzle();
         }
     }
 }
