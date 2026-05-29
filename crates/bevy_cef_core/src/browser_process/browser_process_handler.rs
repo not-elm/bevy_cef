@@ -78,6 +78,12 @@ impl ImplBrowserProcessHandler for BrowserProcessHandlerBuilder {
                 Some(&json.as_str().into()),
             );
         }
+        if let Some(json) = crate::custom_scheme::current_scheme_decls_json() {
+            command_line.append_switch_with_value(
+                Some(&crate::util::CUSTOM_SCHEMES_SWITCH.into()),
+                Some(&json.as_str().into()),
+            );
+        }
     }
 
     fn on_schedule_message_pump_work(&self, delay_ms: i64) {
