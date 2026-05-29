@@ -89,6 +89,12 @@ impl Plugin for MessageLoopPlugin {
         {
             app.insert_non_send_resource(MessageLoopWorkingReceiver(rx));
             app.add_systems(Main, cef_do_message_loop_work);
+
+            #[cfg(all(target_os = "macos", feature = "debug"))]
+            app.add_systems(
+                Main,
+                macos::observe_terminate_request.before(cef_do_message_loop_work),
+            );
         }
 
         app.insert_non_send_resource(RunOnMainThread)
