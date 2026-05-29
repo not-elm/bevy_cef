@@ -303,6 +303,9 @@ mod macos {
     }
 
     #[cfg(feature = "debug")]
+    use bevy::prelude::{AppExit, MessageWriter, info};
+
+    #[cfg(feature = "debug")]
     use objc::runtime::Method;
 
     #[cfg(feature = "debug")]
@@ -391,6 +394,17 @@ mod macos {
 
             #[cfg(feature = "debug")]
             install_terminate_swizzle();
+        }
+    }
+
+    #[cfg(feature = "debug")]
+    pub(super) fn observe_terminate_request(mut writer: MessageWriter<AppExit>) {
+        // `swap(false, Relaxed)` atomically reads-and-clears the flag, so AppExit
+        // is emitted exactly once even if this system runs again before shutdown
+        // completes.
+        if TERMINATE_REQUESTED.swap(false, Ordering::Relaxed) {
+            info!("Termination intercepted, requesting AppExit");
+            writer.write(AppExit::from_code(130));
         }
     }
 }
