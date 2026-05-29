@@ -82,6 +82,13 @@ impl ImplApp for BrowserProcessAppBuilder {
     fn on_register_custom_schemes(&self, registrar: Option<&mut SchemeRegistrar>) {
         if let Some(registrar) = registrar {
             registrar.add_custom_scheme(Some(&SCHEME_CEF.into()), cef_scheme_flags() as _);
+            for scheme in crate::custom_scheme::registered_schemes() {
+                let ok =
+                    registrar.add_custom_scheme(Some(&scheme.name.as_str().into()), scheme.options.0 as _);
+                if ok == 0 {
+                    eprintln!("bevy_cef: add_custom_scheme failed (browser process): {}", scheme.name);
+                }
+            }
         }
     }
 
