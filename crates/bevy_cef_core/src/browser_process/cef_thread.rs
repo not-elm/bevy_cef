@@ -500,6 +500,14 @@ impl BrowsersCefSide {
                 Some(&HOST_CEF.into()),
                 Some(&mut LocalSchemaHandlerBuilder::build(requester)),
             );
+            for scheme in crate::custom_scheme::registered_schemes() {
+                let domain = scheme.domain.as_deref().map(cef::CefString::from);
+                context.register_scheme_handler_factory(
+                    Some(&scheme.name.as_str().into()),
+                    domain.as_ref(),
+                    Some(&mut crate::custom_scheme::make_factory(scheme.handler.clone())),
+                );
+            }
         }
         context
     }
