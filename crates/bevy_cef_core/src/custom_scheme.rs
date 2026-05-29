@@ -92,6 +92,42 @@ fn body_to_reader(body: CefSchemeBody) -> (Box<dyn Read + Send>, Option<u64>) {
     }
 }
 
+/// The materialized response for one in-flight request: headers metadata plus a
+/// single draining reader. Stored across the CEF `open → headers → read`
+/// callback sequence.
+struct ResponseState {
+    status: u16,
+    mime_type: String,
+    headers: Vec<(String, String)>,
+    reader: Box<dyn Read + Send>,
+    len: Option<u64>,
+}
+
+/// Calls the handler with the request, isolating panics: a panic that unwinds
+/// across the CEF FFI boundary is UB, so a caught panic becomes a 500. (Only
+/// effective under `panic = "unwind"`; under `panic = "abort"` the process
+/// aborts before this runs.)
+fn invoke_handler(handler: &Arc<dyn CefSchemeHandler>, request: &CefSchemeRequest) -> ResponseState {
+    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| handler.handle(request)));
+    let response = outcome.unwrap_or_else(|_| {
+        eprintln!("bevy_cef: custom scheme handler panicked; returning 500");
+        CefSchemeResponse {
+            status: 500,
+            mime_type: "text/plain".to_string(),
+            headers: Vec::new(),
+            body: CefSchemeBody::Bytes(b"500 Internal Server Error".to_vec()),
+        }
+    });
+    let (reader, len) = body_to_reader(response.body);
+    ResponseState {
+        status: response.status,
+        mime_type: response.mime_type,
+        headers: response.headers,
+        reader,
+        len,
+    }
+}
+
 /// The request handed to a [`CefSchemeHandler`]. v1 carries only the URL;
 /// method/headers can be added later without breaking consumers (they only
 /// read `&CefSchemeRequest`).
@@ -317,6 +353,40 @@ mod tests {
     #[test]
     fn decls_json_for_empty_is_none() {
         assert!(decls_json_for(&[]).is_none());
+    }
+
+    struct BytesHandler;
+    impl CefSchemeHandler for BytesHandler {
+        fn handle(&self, _request: &CefSchemeRequest) -> CefSchemeResponse {
+            CefSchemeResponse::bytes("text/plain", b"ok".to_vec())
+        }
+    }
+
+    struct PanicHandler;
+    impl CefSchemeHandler for PanicHandler {
+        fn handle(&self, _request: &CefSchemeRequest) -> CefSchemeResponse {
+            panic!("handler boom")
+        }
+    }
+
+    #[test]
+    fn invoke_handler_streams_bytes_with_status_and_len() {
+        let handler: std::sync::Arc<dyn CefSchemeHandler> = std::sync::Arc::new(BytesHandler);
+        let mut state = invoke_handler(&handler, &CefSchemeRequest { url: "demo://x/".into() });
+        assert_eq!(state.status, 200);
+        assert_eq!(state.len, Some(2));
+        let mut s = String::new();
+        state.reader.read_to_string(&mut s).unwrap();
+        assert_eq!(s, "ok");
+    }
+
+    #[test]
+    fn invoke_handler_converts_panic_to_500() {
+        // The default panic hook still prints a backtrace to stderr; that is
+        // expected and harmless for this test.
+        let handler: std::sync::Arc<dyn CefSchemeHandler> = std::sync::Arc::new(PanicHandler);
+        let state = invoke_handler(&handler, &CefSchemeRequest { url: "demo://x/".into() });
+        assert_eq!(state.status, 500);
     }
 
     #[test]
