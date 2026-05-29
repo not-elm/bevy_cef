@@ -11,11 +11,13 @@
 use crate::util::{CUSTOM_SCHEMES_SWITCH, IntoString};
 use cef::rc::Rc;
 use cef::{
-    Callback, CefString, ImplCommandLine, ImplRequest, ImplResourceHandler, ImplResponse,
-    ImplSchemeHandlerFactory, Request, ResourceHandler, ResourceReadCallback, Response,
-    SchemeHandlerFactory, WrapResourceHandler, WrapSchemeHandlerFactory, command_line_get_global,
-    wrap_resource_handler, wrap_scheme_handler_factory,
+    Callback, CefString, Errorcode, ImplCommandLine, ImplRequest, ImplResourceHandler,
+    ImplResponse, ImplSchemeHandlerFactory, Request, ResourceHandler, ResourceReadCallback,
+    ResourceSkipCallback, Response, SchemeHandlerFactory, WrapResourceHandler,
+    WrapSchemeHandlerFactory, command_line_get_global, wrap_resource_handler,
+    wrap_scheme_handler_factory,
 };
+use cef_dll_sys::cef_errorcode_t;
 use cef_dll_sys::cef_scheme_options_t::{
     CEF_SCHEME_OPTION_CORS_ENABLED, CEF_SCHEME_OPTION_CSP_BYPASSING,
     CEF_SCHEME_OPTION_DISPLAY_ISOLATED, CEF_SCHEME_OPTION_FETCH_ENABLED, CEF_SCHEME_OPTION_LOCAL,
@@ -31,6 +33,16 @@ use std::sync::{Arc, Mutex, OnceLock};
 /// The constants enumerate the full `cef_scheme_options_t` set (including
 /// `CSP_BYPASSING`), sourced the same way as `util::cef_scheme_flags`, so the
 /// list cannot silently drift. `bitflags` is intentionally not pulled in.
+///
+/// # Choosing flags
+///
+/// Most schemes want at least `STANDARD` (enables host-based routing and URL
+/// canonicalization). A typical combination for a secure, fetch-capable scheme
+/// is `STANDARD | SECURE | CORS_ENABLED | FETCH_ENABLED`. `Default::default()`
+/// (== 0 / no flags) gives a non-standard scheme: CEF will not canonicalize
+/// URLs or perform host matching, so `domain` restrictions are silently ignored
+/// and URLs may be misrouted. Use `Default` only when a non-standard scheme is
+/// intentional.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CefSchemeOptions(pub u32);
 
@@ -56,6 +68,9 @@ impl std::ops::BitOr for CefSchemeOptions {
 pub enum CefSchemeBody {
     Empty,
     Bytes(Vec<u8>),
+    /// `len`, when `Some`, MUST equal the exact number of bytes the reader will
+    /// yield; a mismatch causes CEF to surface `ERR_CONTENT_LENGTH_MISMATCH`.
+    /// Use `None` when the length is not known in advance.
     Reader {
         reader: Box<dyn Read + Send>,
         len: Option<u64>,
@@ -118,9 +133,9 @@ struct ResponseState {
 
 /// Runs `f` with unwinds caught at the FFI boundary, returning `None` on a
 /// caught panic after logging `context`. A panic that unwinds across the CEF
-/// `extern "C"` trampolines is UB, so every callback body funnels through here.
-/// (Only effective under `panic = "unwind"`; under `panic = "abort"` the process
-/// aborts before this runs.)
+/// `extern "C"` trampolines is UB, so every user-reachable callback path funnels
+/// through here. (Only effective under `panic = "unwind"`; under `panic = "abort"`
+/// the process aborts before this runs.)
 fn guard_ffi<T>(context: &str, f: impl FnOnce() -> T) -> Option<T> {
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(f))
         .map_err(|_| eprintln!("bevy_cef: panic caught at custom-scheme FFI boundary ({context})"))
@@ -175,8 +190,12 @@ pub struct CefCustomScheme {
     /// Scheme name without `://`, e.g. `"demo"`.
     pub name: String,
     pub options: CefSchemeOptions,
-    /// `None` matches all hosts (standard schemes); `Some(host)` restricts to
-    /// that host.
+    /// `None` matches all hosts; `Some(host)` restricts to that specific host.
+    ///
+    /// This behavior requires `options` to include [`CefSchemeOptions::STANDARD`].
+    /// For non-standard schemes CEF does not canonicalize URLs or perform
+    /// host-based routing, so this field is silently ignored regardless of its
+    /// value.
     pub domain: Option<String>,
     pub handler: Arc<dyn CefSchemeHandler>,
 }
@@ -212,10 +231,16 @@ fn parse_decls_json(json: &str) -> Vec<CefSchemeDecl> {
 /// subprocess (which reads declarations from the command line instead).
 static REGISTERED: OnceLock<Vec<CefCustomScheme>> = OnceLock::new();
 
-/// Installs the custom schemes for this process. Idempotent: a second call is
-/// ignored. De-duplicates by name (first wins). Call before CEF initialization.
+/// Installs the custom schemes for this process. Set-once per process: called
+/// by `CefPlugin::build` before CEF initialization; a second call is ignored
+/// with a warning, and any schemes passed in that call are silently dropped.
+/// De-duplicates by name (first wins). Call before CEF initialization.
 pub fn init_registered_schemes(schemes: Vec<CefCustomScheme>) {
-    let _ = REGISTERED.set(dedup_by_name(schemes));
+    if REGISTERED.set(dedup_by_name(schemes)).is_err() {
+        eprintln!(
+            "bevy_cef: init_registered_schemes called more than once; later custom schemes ignored"
+        );
+    }
 }
 
 /// The custom schemes registered in this process (empty if none / not yet set).
@@ -347,6 +372,7 @@ wrap_resource_handler! {
                 };
                 let Ok(guard) = self.state.lock() else {
                     response.set_status(500);
+                    response.set_error(Errorcode::from(cef_errorcode_t::ERR_FAILED));
                     if let Some(out) = response_length {
                         *out = 0;
                     }
@@ -354,6 +380,7 @@ wrap_resource_handler! {
                 };
                 let Some(state) = guard.as_ref() else {
                     response.set_status(500);
+                    response.set_error(Errorcode::from(cef_errorcode_t::ERR_FAILED));
                     if let Some(out) = response_length {
                         *out = 0;
                     }
@@ -372,6 +399,71 @@ wrap_resource_handler! {
                     *out = state.len.map(|l| l as i64).unwrap_or(-1);
                 }
             });
+        }
+
+        /// Discards up to `bytes_to_skip` bytes from the response body by
+        /// reading and throwing away data.
+        ///
+        /// # Range-request limitation
+        ///
+        /// Full 206/Content-Range partial-content negotiation is NOT
+        /// implemented: the handler always responds 200-style. `skip()` only
+        /// corrects the byte-window offset when CEF issues a skip call (e.g.
+        /// after a Range header); the net stack may still see a 200 response
+        /// rather than 206.
+        fn skip(
+            &self,
+            bytes_to_skip: i64,
+            bytes_skipped: Option<&mut i64>,
+            _callback: Option<&mut ResourceSkipCallback>,
+        ) -> i32 {
+            let Some(bytes_skipped) = bytes_skipped else {
+                return 0;
+            };
+            if bytes_to_skip <= 0 {
+                *bytes_skipped = 0;
+                return 1;
+            }
+            let Ok(mut guard) = self.state.lock() else {
+                *bytes_skipped = -2;
+                return 0;
+            };
+            let Some(state) = guard.as_mut() else {
+                *bytes_skipped = -2;
+                return 0;
+            };
+            let mut buf = [0u8; 4096];
+            let mut remaining = bytes_to_skip as u64;
+            let result = guard_ffi("reader.skip", || {
+                let mut total: u64 = 0;
+                while remaining > 0 {
+                    let to_read = remaining.min(buf.len() as u64) as usize;
+                    match state.reader.read(&mut buf[..to_read]) {
+                        Ok(0) => break,
+                        Ok(n) => {
+                            total += n as u64;
+                            remaining -= n as u64;
+                        }
+                        Err(e) => return Err(e),
+                    }
+                }
+                Ok(total)
+            });
+            match result {
+                Some(Ok(n)) => {
+                    *bytes_skipped = n as i64;
+                    1
+                }
+                Some(Err(e)) => {
+                    eprintln!("bevy_cef: custom scheme skip failed: {e}");
+                    *bytes_skipped = -2;
+                    0
+                }
+                None => {
+                    *bytes_skipped = -2;
+                    0
+                }
+            }
         }
 
         #[allow(clippy::not_unsafe_ptr_arg_deref)]
@@ -402,8 +494,8 @@ wrap_resource_handler! {
             // owned by this call for its duration. The temporary `&mut [u8]` does not
             // outlive the call.
             let buf = unsafe { std::slice::from_raw_parts_mut(data_out, bytes_to_read as usize) };
-            // A panic in the caller's reader must not unwind across the FFI
-            // boundary; map it to ERR_FAILED, the same as an I/O error.
+            // NOTE: A panic in the caller's reader must not unwind across the FFI
+            // boundary — doing so is UB; map it to ERR_FAILED, same as an I/O error.
             let read_result = guard_ffi("reader.read", || state.reader.read(buf));
             match read_result {
                 Some(Ok(0)) => {
@@ -626,5 +718,62 @@ mod tests {
             CefSchemeOptions::CSP_BYPASSING.0,
             CEF_SCHEME_OPTION_CSP_BYPASSING as u32
         );
+    }
+
+    #[test]
+    fn skip_discards_bytes_and_leaves_remainder_readable() {
+        let data = b"SKIP_MEremaining";
+        let (mut reader, _len) =
+            body_to_reader(CefSchemeBody::Bytes(data.to_vec()));
+        let skip_n = 7u64;
+        let mut remaining = skip_n;
+        let mut buf = [0u8; 4096];
+        let result = guard_ffi("reader.skip_test", || {
+            let mut total: u64 = 0;
+            while remaining > 0 {
+                let to_read = remaining.min(buf.len() as u64) as usize;
+                match reader.read(&mut buf[..to_read]) {
+                    Ok(0) => break,
+                    Ok(n) => {
+                        total += n as u64;
+                        remaining -= n as u64;
+                    }
+                    Err(e) => return Err(e),
+                }
+            }
+            Ok(total)
+        });
+        assert_eq!(result.and_then(|r| r.ok()), Some(7));
+        let mut rest = String::new();
+        reader.read_to_string(&mut rest).unwrap();
+        assert_eq!(rest, "remaining");
+    }
+
+    #[test]
+    fn skip_zero_is_noop() {
+        let (mut reader, _len) =
+            body_to_reader(CefSchemeBody::Bytes(b"hello".to_vec()));
+        let skip_n = 0u64;
+        let mut remaining = skip_n;
+        let mut buf = [0u8; 4096];
+        let result = guard_ffi("reader.skip_zero", || {
+            let mut total: u64 = 0;
+            while remaining > 0 {
+                let to_read = remaining.min(buf.len() as u64) as usize;
+                match reader.read(&mut buf[..to_read]) {
+                    Ok(0) => break,
+                    Ok(n) => {
+                        total += n as u64;
+                        remaining -= n as u64;
+                    }
+                    Err(e) => return Err(e),
+                }
+            }
+            Ok(total)
+        });
+        assert_eq!(result.and_then(|r| r.ok()), Some(0));
+        let mut rest = String::new();
+        reader.read_to_string(&mut rest).unwrap();
+        assert_eq!(rest, "hello");
     }
 }

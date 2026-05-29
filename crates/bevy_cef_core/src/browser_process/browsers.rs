@@ -504,11 +504,17 @@ impl Browsers {
             );
             for scheme in crate::custom_scheme::registered_schemes() {
                 let domain = scheme.domain.as_deref().map(cef::CefString::from);
-                context.register_scheme_handler_factory(
+                let ok = context.register_scheme_handler_factory(
                     Some(&scheme.name.as_str().into()),
                     domain.as_ref(),
                     Some(&mut crate::custom_scheme::make_factory(scheme.handler.clone())),
                 );
+                if ok == 0 {
+                    eprintln!(
+                        "bevy_cef: register_scheme_handler_factory failed for scheme '{}'",
+                        scheme.name
+                    );
+                }
             }
         }
         context

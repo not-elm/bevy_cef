@@ -2,6 +2,7 @@ use crate::browser_process::CefExtensions;
 use crate::browser_process::CommandLineConfig;
 use crate::browser_process::MessageLoopTimer;
 use crate::browser_process::browser_process_handler::BrowserProcessHandlerBuilder;
+use crate::custom_scheme::CefSchemeOptions;
 use crate::util::{SCHEME_CEF, cef_scheme_flags};
 use cef::rc::{Rc, RcImpl};
 use cef::{
@@ -83,6 +84,13 @@ impl ImplApp for BrowserProcessAppBuilder {
         if let Some(registrar) = registrar {
             registrar.add_custom_scheme(Some(&SCHEME_CEF.into()), cef_scheme_flags() as _);
             for scheme in crate::custom_scheme::registered_schemes() {
+                if scheme.options.0 & CefSchemeOptions::STANDARD.0 == 0 {
+                    eprintln!(
+                        "bevy_cef: scheme '{}' does not have STANDARD set — domain matching \
+                         and URL canonicalization will not work as documented",
+                        scheme.name
+                    );
+                }
                 let ok =
                     registrar.add_custom_scheme(Some(&scheme.name.as_str().into()), scheme.options.0 as _);
                 if ok == 0 {
