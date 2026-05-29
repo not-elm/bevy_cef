@@ -6,9 +6,11 @@ use cef_dll_sys::cef_scheme_options_t::{
     CEF_SCHEME_OPTION_DISPLAY_ISOLATED, CEF_SCHEME_OPTION_FETCH_ENABLED,
     CEF_SCHEME_OPTION_LOCAL, CEF_SCHEME_OPTION_SECURE, CEF_SCHEME_OPTION_STANDARD,
 };
+use cef::{ImplCommandLine, command_line_get_global};
+use crate::util::{CUSTOM_SCHEMES_SWITCH, IntoString};
 use serde::{Deserialize, Serialize};
 use std::io::{self, Cursor, Read};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 /// Option flags for a custom scheme. A thin serializable wrapper over a raw
 /// `u32` mask so the declaration can cross to the render subprocess.
@@ -123,9 +125,9 @@ pub struct CefCustomScheme {
 /// Serializable declaration half — the only part that crosses to the render
 /// subprocess (the handler `Arc<dyn>` cannot be serialized). Private DTO.
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
-struct CefSchemeDecl {
-    name: String,
-    options: CefSchemeOptions,
+pub(crate) struct CefSchemeDecl {
+    pub(crate) name: String,
+    pub(crate) options: CefSchemeOptions,
 }
 
 impl From<&CefCustomScheme> for CefSchemeDecl {
@@ -144,6 +146,70 @@ fn parse_decls_json(json: &str) -> Vec<CefSchemeDecl> {
         eprintln!("bevy_cef: failed to parse custom-scheme switch JSON: {}", e);
         Vec::new()
     })
+}
+
+/// Process-global set-once registry of custom schemes. Populated in the browser
+/// process by `CefPlugin::build` before CEF init; empty in the render
+/// subprocess (which reads declarations from the command line instead).
+static REGISTERED: OnceLock<Vec<CefCustomScheme>> = OnceLock::new();
+
+/// Installs the custom schemes for this process. Idempotent: a second call is
+/// ignored. De-duplicates by name (first wins). Call before CEF initialization.
+pub fn init_registered_schemes(schemes: Vec<CefCustomScheme>) {
+    let _ = REGISTERED.set(dedup_by_name(schemes));
+}
+
+/// The custom schemes registered in this process (empty if none / not yet set).
+pub(crate) fn registered_schemes() -> &'static [CefCustomScheme] {
+    REGISTERED.get().map(Vec::as_slice).unwrap_or(&[])
+}
+
+fn dedup_by_name(schemes: Vec<CefCustomScheme>) -> Vec<CefCustomScheme> {
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for scheme in schemes {
+        if seen.insert(scheme.name.clone()) {
+            out.push(scheme);
+        } else {
+            eprintln!("bevy_cef: duplicate custom scheme name ignored: {}", scheme.name);
+        }
+    }
+    out
+}
+
+/// Serializes declarations (name + flags) to JSON for the child-process switch.
+/// `None` when there are no schemes (so no switch is appended).
+fn decls_json_for(schemes: &[CefCustomScheme]) -> Option<String> {
+    if schemes.is_empty() {
+        return None;
+    }
+    let decls: Vec<CefSchemeDecl> = schemes.iter().map(CefSchemeDecl::from).collect();
+    serde_json::to_string(&decls).ok()
+}
+
+/// JSON of the schemes registered in this (browser) process, for switch
+/// injection. `None` if none are registered.
+pub(crate) fn current_scheme_decls_json() -> Option<String> {
+    decls_json_for(registered_schemes())
+}
+
+/// Reads custom-scheme declarations from this process's command line (set by the
+/// parent via [`CUSTOM_SCHEMES_SWITCH`]). Used by the render process, which has
+/// no access to the browser-process registry.
+pub(crate) fn decls_from_command_line() -> Vec<CefSchemeDecl> {
+    let Some(cmd) = command_line_get_global() else {
+        return Vec::new();
+    };
+    if cmd.has_switch(Some(&CUSTOM_SCHEMES_SWITCH.into())) == 0 {
+        return Vec::new();
+    }
+    let json = cmd
+        .switch_value(Some(&CUSTOM_SCHEMES_SWITCH.into()))
+        .into_string();
+    if json.is_empty() {
+        return Vec::new();
+    }
+    parse_decls_json(&json)
 }
 
 #[cfg(test)]
@@ -213,6 +279,44 @@ mod tests {
     #[test]
     fn parse_decls_json_bad_input_is_empty() {
         assert!(parse_decls_json("not json").is_empty());
+    }
+
+    #[test]
+    fn dedup_keeps_first_occurrence_by_name() {
+        let first = CefCustomScheme {
+            name: "x".to_string(),
+            options: CefSchemeOptions::STANDARD,
+            domain: None,
+            handler: std::sync::Arc::new(Dummy),
+        };
+        let second = CefCustomScheme {
+            name: "x".to_string(),
+            options: CefSchemeOptions::SECURE,
+            domain: Some("host".to_string()),
+            handler: std::sync::Arc::new(Dummy),
+        };
+        let out = dedup_by_name(vec![first, second]);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].options, CefSchemeOptions::STANDARD);
+    }
+
+    #[test]
+    fn decls_to_json_then_parse_round_trips() {
+        let schemes = vec![CefCustomScheme {
+            name: "demo".to_string(),
+            options: CefSchemeOptions::STANDARD,
+            domain: None,
+            handler: std::sync::Arc::new(Dummy),
+        }];
+        let json = decls_json_for(&schemes).expect("non-empty");
+        let parsed = parse_decls_json(&json);
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].name, "demo");
+    }
+
+    #[test]
+    fn decls_json_for_empty_is_none() {
+        assert!(decls_json_for(&[]).is_none());
     }
 
     #[test]
