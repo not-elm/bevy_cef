@@ -227,11 +227,6 @@ fn cef_do_message_loop_work(
     mut max_delay_timer: Local<MessageLoopWorkingMaxDelayTimer>,
     mut last_execution: Local<Option<std::time::Instant>>,
 ) {
-    // macOS+debug: `macos::observe_terminate_request` is ordered to run before this
-    // system so AppExit is queued before the next CEF pump tick. The NSApplication
-    // terminate: swizzle in `macos::install_terminate_swizzle` prevents
-    // NSApplicationWillTerminateNotification from firing and crashing winit. Release
-    // builds skip the swizzle and remain vulnerable to the crash on Cmd-Q / Ctrl+C.
     while let Ok(t) = receiver.try_recv() {
         timer.replace(t);
     }
@@ -351,7 +346,6 @@ mod macos {
         unsafe {
             let cls = Class::get("NSApplication").expect("NSApplication class not found");
 
-            // Register our IMP under a unique placeholder selector.
             let placeholder_sel = sel!(cef_swizzled_terminate:);
             let added = class_addMethod(
                 cls as *const _,
@@ -408,11 +402,11 @@ mod macos {
         }
     }
 
+    /// `swap(false, Relaxed)` atomically reads-and-clears the flag, so AppExit
+    /// is emitted exactly once even if this system runs again before shutdown
+    /// completes.
     #[cfg(feature = "debug")]
     pub(super) fn observe_terminate_request(mut writer: MessageWriter<AppExit>) {
-        // `swap(false, Relaxed)` atomically reads-and-clears the flag, so AppExit
-        // is emitted exactly once even if this system runs again before shutdown
-        // completes.
         if TERMINATE_REQUESTED.swap(false, Ordering::Relaxed) {
             info!("Termination intercepted, requesting AppExit");
             writer.write(AppExit::from_code(130));
