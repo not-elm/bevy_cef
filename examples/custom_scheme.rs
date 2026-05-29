@@ -10,13 +10,14 @@ use bevy::prelude::*;
 use bevy_cef::prelude::*;
 
 /// Serves `demo://app/<path>` from a directory seeded at startup.
+/// Note: minimal demo — a real handler should canonicalize the resolved
+/// path and verify it stays within `root`.
 struct DemoHandler {
     root: PathBuf,
 }
 
 impl CefSchemeHandler for DemoHandler {
     fn handle(&self, request: &CefSchemeRequest) -> CefSchemeResponse {
-        // demo://app/index.html -> <root>/index.html
         let rel = request
             .url
             .strip_prefix("demo://app/")
@@ -79,7 +80,7 @@ fn main() {
                 ..default()
             },
         ))
-        .add_systems(Startup, (spawn_camera, spawn_light, spawn_webview))
+        .add_systems(Startup, (spawn_camera, spawn_directional_light, spawn_webview))
         .run();
 }
 
@@ -90,7 +91,7 @@ fn spawn_camera(mut commands: Commands) {
     ));
 }
 
-fn spawn_light(mut commands: Commands) {
+fn spawn_directional_light(mut commands: Commands) {
     commands.spawn((
         DirectionalLight::default(),
         Transform::from_translation(Vec3::new(1., 1., 1.)).looking_at(Vec3::ZERO, Vec3::Y),
