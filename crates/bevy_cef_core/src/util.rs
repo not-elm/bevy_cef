@@ -19,6 +19,7 @@ use std::env::home_dir;
 use std::path::PathBuf;
 
 pub const EXTENSIONS_SWITCH: &str = "bevy-cef-extensions";
+pub const CUSTOM_SCHEMES_SWITCH: &str = "bevy-cef-custom-schemes";
 
 pub const SCHEME_CEF: &str = "cef";
 

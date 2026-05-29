@@ -3,6 +3,7 @@ mod browser_process;
 #[cfg(target_os = "macos")]
 mod debug;
 
+pub mod custom_scheme;
 mod render_process;
 mod util;
 
@@ -24,6 +25,7 @@ pub mod prelude {
     pub use crate::render_process::app::*;
     pub use crate::render_process::execute_render_process;
     pub use crate::render_process::render_process_handler::*;
+    pub use crate::custom_scheme::CefSchemeOptions;
     pub use crate::util::*;
     pub use cef::DraggableRegion;
     pub use cef::Rect;
