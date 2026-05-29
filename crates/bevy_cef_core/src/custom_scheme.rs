@@ -7,6 +7,7 @@ use cef_dll_sys::cef_scheme_options_t::{
     CEF_SCHEME_OPTION_LOCAL, CEF_SCHEME_OPTION_SECURE, CEF_SCHEME_OPTION_STANDARD,
 };
 use serde::{Deserialize, Serialize};
+use std::io::{self, Cursor, Read};
 
 /// Option flags for a custom scheme. A thin serializable wrapper over a raw
 /// `u32` mask so the declaration can cross to the render subprocess.
@@ -34,9 +35,93 @@ impl std::ops::BitOr for CefSchemeOptions {
     }
 }
 
+/// Response body. `Reader` streams large bodies without buffering; `Bytes`
+/// covers the small in-memory case; `Empty` is a zero-length body.
+pub enum CefSchemeBody {
+    Empty,
+    Bytes(Vec<u8>),
+    Reader {
+        reader: Box<dyn Read + Send>,
+        len: Option<u64>,
+    },
+}
+
+/// A handler's reply for one request.
+pub struct CefSchemeResponse {
+    pub status: u16,
+    pub mime_type: String,
+    pub headers: Vec<(String, String)>,
+    pub body: CefSchemeBody,
+}
+
+impl CefSchemeResponse {
+    /// A 404 `text/plain` response with a short body.
+    pub fn not_found() -> Self {
+        Self {
+            status: 404,
+            mime_type: "text/plain".to_string(),
+            headers: Vec::new(),
+            body: CefSchemeBody::Bytes(b"404 Not Found".to_vec()),
+        }
+    }
+
+    /// A 200 response carrying in-memory bytes with the given MIME type.
+    pub fn bytes(mime_type: impl Into<String>, data: Vec<u8>) -> Self {
+        Self {
+            status: 200,
+            mime_type: mime_type.into(),
+            headers: Vec::new(),
+            body: CefSchemeBody::Bytes(data),
+        }
+    }
+}
+
+/// Collapses any body variant into one `Read` source plus an optional known
+/// length, so `read()` has a single draining path.
+fn body_to_reader(body: CefSchemeBody) -> (Box<dyn Read + Send>, Option<u64>) {
+    match body {
+        CefSchemeBody::Empty => (Box::new(io::empty()), Some(0)),
+        CefSchemeBody::Bytes(data) => {
+            let len = data.len() as u64;
+            (Box::new(Cursor::new(data)), Some(len))
+        }
+        CefSchemeBody::Reader { reader, len } => (reader, len),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Read;
+
+    #[test]
+    fn body_to_reader_bytes_reports_len_and_content() {
+        let (mut reader, len) = body_to_reader(CefSchemeBody::Bytes(b"hello".to_vec()));
+        assert_eq!(len, Some(5));
+        let mut s = String::new();
+        reader.read_to_string(&mut s).unwrap();
+        assert_eq!(s, "hello");
+    }
+
+    #[test]
+    fn body_to_reader_empty_is_zero_len_eof() {
+        let (mut reader, len) = body_to_reader(CefSchemeBody::Empty);
+        assert_eq!(len, Some(0));
+        let mut buf = [0u8; 4];
+        assert_eq!(reader.read(&mut buf).unwrap(), 0);
+    }
+
+    #[test]
+    fn not_found_is_404() {
+        assert_eq!(CefSchemeResponse::not_found().status, 404);
+    }
+
+    #[test]
+    fn bytes_constructor_is_200_with_mime() {
+        let r = CefSchemeResponse::bytes("text/css", b"body{}".to_vec());
+        assert_eq!(r.status, 200);
+        assert_eq!(r.mime_type, "text/css");
+    }
 
     #[test]
     fn options_bitor_combines_bits() {

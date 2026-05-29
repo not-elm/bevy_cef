@@ -25,7 +25,7 @@ pub mod prelude {
     pub use crate::render_process::app::*;
     pub use crate::render_process::execute_render_process;
     pub use crate::render_process::render_process_handler::*;
-    pub use crate::custom_scheme::CefSchemeOptions;
+    pub use crate::custom_scheme::{CefSchemeBody, CefSchemeOptions, CefSchemeResponse};
     pub use crate::util::*;
     pub use cef::DraggableRegion;
     pub use cef::Rect;
