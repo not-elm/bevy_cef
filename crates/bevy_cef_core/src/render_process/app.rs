@@ -41,6 +41,13 @@ impl ImplApp for RenderProcessAppBuilder {
     fn on_register_custom_schemes(&self, registrar: Option<&mut SchemeRegistrar>) {
         if let Some(registrar) = registrar {
             registrar.add_custom_scheme(Some(&SCHEME_CEF.into()), cef_scheme_flags() as _);
+            for decl in crate::custom_scheme::decls_from_command_line() {
+                let ok =
+                    registrar.add_custom_scheme(Some(&decl.name.as_str().into()), decl.options.0 as _);
+                if ok == 0 {
+                    eprintln!("bevy_cef: add_custom_scheme failed (render process): {}", decl.name);
+                }
+            }
         }
     }
 
