@@ -6,11 +6,17 @@ use cef_dll_sys::cef_scheme_options_t::{
     CEF_SCHEME_OPTION_DISPLAY_ISOLATED, CEF_SCHEME_OPTION_FETCH_ENABLED,
     CEF_SCHEME_OPTION_LOCAL, CEF_SCHEME_OPTION_SECURE, CEF_SCHEME_OPTION_STANDARD,
 };
-use cef::{ImplCommandLine, command_line_get_global};
+use cef::rc::Rc;
+use cef::{
+    Callback, CefString, ImplCommandLine, ImplRequest, ImplResponse, ImplResourceHandler,
+    ImplSchemeHandlerFactory, Request, ResourceHandler, ResourceReadCallback, Response,
+    SchemeHandlerFactory, WrapResourceHandler, WrapSchemeHandlerFactory, command_line_get_global,
+    wrap_resource_handler, wrap_scheme_handler_factory,
+};
 use crate::util::{CUSTOM_SCHEMES_SWITCH, IntoString};
 use serde::{Deserialize, Serialize};
 use std::io::{self, Cursor, Read};
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 
 /// Option flags for a custom scheme. A thin serializable wrapper over a raw
 /// `u32` mask so the declaration can cross to the render subprocess.
@@ -81,8 +87,6 @@ impl CefSchemeResponse {
 
 /// Collapses any body variant into one `Read` source plus an optional known
 /// length, so `read()` has a single draining path.
-// consumed by the CEF adapter + lifecycle wiring in later commits
-#[allow(dead_code)]
 fn body_to_reader(body: CefSchemeBody) -> (Box<dyn Read + Send>, Option<u64>) {
     match body {
         CefSchemeBody::Empty => (Box::new(io::empty()), Some(0)),
@@ -97,8 +101,6 @@ fn body_to_reader(body: CefSchemeBody) -> (Box<dyn Read + Send>, Option<u64>) {
 /// The materialized response for one in-flight request: headers metadata plus a
 /// single draining reader. Stored across the CEF `open → headers → read`
 /// callback sequence.
-// consumed by the CEF adapter + lifecycle wiring in later commits
-#[allow(dead_code)]
 struct ResponseState {
     status: u16,
     mime_type: String,
@@ -111,8 +113,6 @@ struct ResponseState {
 /// across the CEF FFI boundary is UB, so a caught panic becomes a 500. (Only
 /// effective under `panic = "unwind"`; under `panic = "abort"` the process
 /// aborts before this runs.)
-// consumed by the CEF adapter + lifecycle wiring in later commits
-#[allow(dead_code)]
 fn invoke_handler(handler: &Arc<dyn CefSchemeHandler>, request: &CefSchemeRequest) -> ResponseState {
     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| handler.handle(request)));
     let response = outcome.unwrap_or_else(|_| {
@@ -268,6 +268,149 @@ pub(crate) fn decls_from_command_line() -> Vec<CefSchemeDecl> {
         return Vec::new();
     }
     parse_decls_json(&json)
+}
+
+/// Builds the opaque `SchemeHandlerFactory` for a caller's handler, ready to
+/// hand to `RequestContext::register_scheme_handler_factory`.
+// consumed by the per-RequestContext registration wiring in a later commit
+#[allow(dead_code)]
+pub(crate) fn make_factory(handler: Arc<dyn CefSchemeHandler>) -> SchemeHandlerFactory {
+    GenericSchemeHandlerFactory::new(handler)
+}
+
+wrap_scheme_handler_factory! {
+    struct GenericSchemeHandlerFactory {
+        handler: Arc<dyn CefSchemeHandler>,
+    }
+
+    impl SchemeHandlerFactory {
+        fn create(
+            &self,
+            _browser: Option<&mut cef::Browser>,
+            _frame: Option<&mut cef::Frame>,
+            _scheme_name: Option<&CefString>,
+            _request: Option<&mut Request>,
+        ) -> Option<ResourceHandler> {
+            Some(GenericResourceHandler::new(
+                self.handler.clone(),
+                Arc::new(Mutex::new(None)),
+            ))
+        }
+    }
+}
+
+wrap_resource_handler! {
+    struct GenericResourceHandler {
+        handler: Arc<dyn CefSchemeHandler>,
+        state: Arc<Mutex<Option<ResponseState>>>,
+    }
+
+    impl ResourceHandler {
+        fn open(
+            &self,
+            request: Option<&mut Request>,
+            handle_request: Option<&mut i32>,
+            _callback: Option<&mut Callback>,
+        ) -> i32 {
+            if let Some(handle_request) = handle_request {
+                *handle_request = 1;
+            }
+            let Some(request) = request else {
+                return 0;
+            };
+            let scheme_request = CefSchemeRequest {
+                url: request.url().into_string(),
+            };
+            let response = invoke_handler(&self.handler, &scheme_request);
+            if let Ok(mut guard) = self.state.lock() {
+                *guard = Some(response);
+            }
+            1
+        }
+
+        fn response_headers(
+            &self,
+            response: Option<&mut Response>,
+            response_length: Option<&mut i64>,
+            _redirect_url: Option<&mut CefString>,
+        ) {
+            let Some(response) = response else {
+                return;
+            };
+            let Ok(guard) = self.state.lock() else {
+                return;
+            };
+            let Some(state) = guard.as_ref() else {
+                response.set_status(500);
+                if let Some(out) = response_length {
+                    *out = 0;
+                }
+                return;
+            };
+            response.set_status(state.status as i32);
+            response.set_mime_type(Some(&CefString::from(state.mime_type.as_str())));
+            for (name, value) in &state.headers {
+                response.set_header_by_name(
+                    Some(&CefString::from(name.as_str())),
+                    Some(&CefString::from(value.as_str())),
+                    1,
+                );
+            }
+            if let Some(out) = response_length {
+                *out = state.len.map(|l| l as i64).unwrap_or(-1);
+            }
+        }
+
+        #[allow(clippy::not_unsafe_ptr_arg_deref)]
+        fn read(
+            &self,
+            data_out: *mut u8,
+            bytes_to_read: i32,
+            bytes_read: Option<&mut i32>,
+            _callback: Option<&mut ResourceReadCallback>,
+        ) -> i32 {
+            let Some(bytes_read) = bytes_read else {
+                return 0;
+            };
+            if bytes_to_read <= 0 {
+                *bytes_read = 0;
+                return 0;
+            }
+            let Ok(mut guard) = self.state.lock() else {
+                *bytes_read = 0;
+                return 0;
+            };
+            let Some(state) = guard.as_mut() else {
+                *bytes_read = 0;
+                return 0;
+            };
+            // SAFETY: `data_out` is a CEF-owned buffer of at least
+            // `bytes_to_read` bytes for the duration of this call; the temporary
+            // `&mut [u8]` does not outlive it.
+            let buf = unsafe { std::slice::from_raw_parts_mut(data_out, bytes_to_read as usize) };
+            match state.reader.read(buf) {
+                Ok(0) => {
+                    *bytes_read = 0;
+                    0
+                }
+                Ok(n) => {
+                    *bytes_read = n as i32;
+                    1
+                }
+                Err(e) => {
+                    eprintln!("bevy_cef: custom scheme read failed: {e}");
+                    *bytes_read = 0;
+                    0
+                }
+            }
+        }
+
+        fn cancel(&self) {
+            if let Ok(mut guard) = self.state.lock() {
+                *guard = None;
+            }
+        }
+    }
 }
 
 #[cfg(test)]
