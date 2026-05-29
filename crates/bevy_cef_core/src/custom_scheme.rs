@@ -312,9 +312,6 @@ wrap_resource_handler! {
             handle_request: Option<&mut i32>,
             _callback: Option<&mut Callback>,
         ) -> i32 {
-            if let Some(handle_request) = handle_request {
-                *handle_request = 1;
-            }
             let Some(request) = request else {
                 return 0;
             };
@@ -324,6 +321,9 @@ wrap_resource_handler! {
             let response = invoke_handler(&self.handler, &scheme_request);
             if let Ok(mut guard) = self.state.lock() {
                 *guard = Some(response);
+            }
+            if let Some(handle_request) = handle_request {
+                *handle_request = 1;
             }
             1
         }
@@ -338,6 +338,10 @@ wrap_resource_handler! {
                 return;
             };
             let Ok(guard) = self.state.lock() else {
+                response.set_status(500);
+                if let Some(out) = response_length {
+                    *out = 0;
+                }
                 return;
             };
             let Some(state) = guard.as_ref() else {
@@ -384,9 +388,10 @@ wrap_resource_handler! {
                 *bytes_read = 0;
                 return 0;
             };
-            // SAFETY: `data_out` is a CEF-owned buffer of at least
-            // `bytes_to_read` bytes for the duration of this call; the temporary
-            // `&mut [u8]` does not outlive it.
+            // SAFETY: CEF guarantees that when `bytes_to_read > 0` the `data_out` pointer is
+            // non-null, valid for writes of exactly `bytes_to_read` bytes, and exclusively
+            // owned by this call for its duration. The temporary `&mut [u8]` does not
+            // outlive the call.
             let buf = unsafe { std::slice::from_raw_parts_mut(data_out, bytes_to_read as usize) };
             match state.reader.read(buf) {
                 Ok(0) => {
