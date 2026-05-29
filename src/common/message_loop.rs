@@ -227,6 +227,11 @@ fn cef_do_message_loop_work(
     mut max_delay_timer: Local<MessageLoopWorkingMaxDelayTimer>,
     mut last_execution: Local<Option<std::time::Instant>>,
 ) {
+    // macOS+debug: `macos::observe_terminate_request` is ordered to run before this
+    // system so AppExit is queued before the next CEF pump tick. The NSApplication
+    // terminate: swizzle in `macos::install_terminate_swizzle` prevents
+    // NSApplicationWillTerminateNotification from firing and crashing winit. Release
+    // builds skip the swizzle and remain vulnerable to the crash on Cmd-Q / Ctrl+C.
     while let Ok(t) = receiver.try_recv() {
         timer.replace(t);
     }
