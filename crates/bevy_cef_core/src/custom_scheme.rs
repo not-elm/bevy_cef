@@ -8,6 +8,7 @@ use cef_dll_sys::cef_scheme_options_t::{
 };
 use serde::{Deserialize, Serialize};
 use std::io::{self, Cursor, Read};
+use std::sync::Arc;
 
 /// Option flags for a custom scheme. A thin serializable wrapper over a raw
 /// `u32` mask so the declaration can cross to the render subprocess.
@@ -89,6 +90,62 @@ fn body_to_reader(body: CefSchemeBody) -> (Box<dyn Read + Send>, Option<u64>) {
     }
 }
 
+/// The request handed to a [`CefSchemeHandler`]. v1 carries only the URL;
+/// method/headers can be added later without breaking consumers (they only
+/// read `&CefSchemeRequest`).
+pub struct CefSchemeRequest {
+    pub url: String,
+}
+
+/// Caller-implemented request servicing for a custom scheme.
+///
+/// `handle` runs on a CEF resource-handler worker thread — not the Bevy thread,
+/// and not CEF's IO or UI thread. It may run concurrently across requests, so
+/// implementors share state via `Arc` / `Arc<RwLock<…>>` rather than touching
+/// the Bevy `World`.
+pub trait CefSchemeHandler: Send + Sync + 'static {
+    fn handle(&self, request: &CefSchemeRequest) -> CefSchemeResponse;
+}
+
+/// One complete custom-scheme registration: declaration (build-time) + handler
+/// (runtime). Pass these to `CefPlugin { custom_schemes, .. }`.
+#[derive(Clone)]
+pub struct CefCustomScheme {
+    /// Scheme name without `://`, e.g. `"demo"`.
+    pub name: String,
+    pub options: CefSchemeOptions,
+    /// `None` matches all hosts (standard schemes); `Some(host)` restricts to
+    /// that host.
+    pub domain: Option<String>,
+    pub handler: Arc<dyn CefSchemeHandler>,
+}
+
+/// Serializable declaration half — the only part that crosses to the render
+/// subprocess (the handler `Arc<dyn>` cannot be serialized). Private DTO.
+#[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
+struct CefSchemeDecl {
+    name: String,
+    options: CefSchemeOptions,
+}
+
+impl From<&CefCustomScheme> for CefSchemeDecl {
+    fn from(scheme: &CefCustomScheme) -> Self {
+        Self {
+            name: scheme.name.clone(),
+            options: scheme.options,
+        }
+    }
+}
+
+/// Parses the switch JSON into declarations, logging and yielding an empty
+/// vec on malformed input.
+fn parse_decls_json(json: &str) -> Vec<CefSchemeDecl> {
+    serde_json::from_str(json).unwrap_or_else(|e| {
+        eprintln!("bevy_cef: failed to parse custom-scheme switch JSON: {}", e);
+        Vec::new()
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -121,6 +178,41 @@ mod tests {
         let r = CefSchemeResponse::bytes("text/css", b"body{}".to_vec());
         assert_eq!(r.status, 200);
         assert_eq!(r.mime_type, "text/css");
+    }
+
+    struct Dummy;
+    impl CefSchemeHandler for Dummy {
+        fn handle(&self, _request: &CefSchemeRequest) -> CefSchemeResponse {
+            CefSchemeResponse::not_found()
+        }
+    }
+
+    #[test]
+    fn decl_projects_name_and_options() {
+        let scheme = CefCustomScheme {
+            name: "demo".to_string(),
+            options: CefSchemeOptions::STANDARD,
+            domain: None,
+            handler: std::sync::Arc::new(Dummy),
+        };
+        let decl = CefSchemeDecl::from(&scheme);
+        assert_eq!(decl.name, "demo");
+        assert_eq!(decl.options, CefSchemeOptions::STANDARD);
+    }
+
+    #[test]
+    fn decl_json_round_trip() {
+        let decls = vec![CefSchemeDecl {
+            name: "demo".to_string(),
+            options: CefSchemeOptions::STANDARD | CefSchemeOptions::SECURE,
+        }];
+        let json = serde_json::to_string(&decls).unwrap();
+        assert_eq!(parse_decls_json(&json), decls);
+    }
+
+    #[test]
+    fn parse_decls_json_bad_input_is_empty() {
+        assert!(parse_decls_json("not json").is_empty());
     }
 
     #[test]
