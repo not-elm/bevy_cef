@@ -6,9 +6,10 @@ use crate::util::v8_accessor::V8DefaultAccessorBuilder;
 use crate::util::v8_interceptor::V8DefaultInterceptorBuilder;
 use cef::rc::ConvertParam;
 use cef::{
-    CefStringList, CefStringUserfreeUtf16, CefStringUtf16, ImplV8Value, V8Propertyattribute,
-    v8_value_create_array, v8_value_create_bool, v8_value_create_double, v8_value_create_int,
-    v8_value_create_null, v8_value_create_object, v8_value_create_string,
+    CefStringList, CefStringUserfreeUtf16, CefStringUtf16, ImplCommandLine, ImplV8Value,
+    V8Propertyattribute, command_line_get_global, v8_value_create_array, v8_value_create_bool,
+    v8_value_create_double, v8_value_create_int, v8_value_create_null, v8_value_create_object,
+    v8_value_create_string,
 };
 use cef_dll_sys::_cef_string_utf16_t;
 use cef_dll_sys::cef_scheme_options_t::{
@@ -119,6 +120,33 @@ pub fn v8_value_to_json(v8: &cef::V8Value) -> Option<serde_json::Value> {
         Some(serde_json::Value::Object(object))
     } else {
         None
+    }
+}
+
+/// Reads a command-line switch whose value is a JSON-encoded `T`.
+///
+/// Returns `None` if the global command line is unavailable, the switch is
+/// absent, the switch value is empty, or JSON parsing fails. The raw JSON
+/// string is logged on parse failure so the caller does not need to repeat
+/// error handling.
+pub fn read_switch_json<T: serde::de::DeserializeOwned>(switch: &str) -> Option<T> {
+    let cmd = command_line_get_global()?;
+    if cmd.has_switch(Some(&switch.into())) == 0 {
+        return None;
+    }
+    let json = cmd.switch_value(Some(&switch.into())).into_string();
+    if json.is_empty() {
+        return None;
+    }
+    match serde_json::from_str::<T>(&json) {
+        Ok(v) => Some(v),
+        Err(e) => {
+            eprintln!(
+                "bevy_cef: failed to parse JSON for switch '--{}': {} (raw: {})",
+                switch, e, json
+            );
+            None
+        }
     }
 }
 

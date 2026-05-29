@@ -8,13 +8,13 @@
 //! callback is swallowed (best-effort defaults). No panic crosses the FFI
 //! boundary.
 
-use crate::util::{CUSTOM_SCHEMES_SWITCH, IntoString};
+use crate::util::{CUSTOM_SCHEMES_SWITCH, IntoString, read_switch_json};
 use cef::rc::Rc;
 use cef::{
-    Callback, CefString, Errorcode, ImplCommandLine, ImplRequest, ImplResourceHandler,
-    ImplResponse, ImplSchemeHandlerFactory, Request, ResourceHandler, ResourceReadCallback,
-    ResourceSkipCallback, Response, SchemeHandlerFactory, WrapResourceHandler,
-    WrapSchemeHandlerFactory, command_line_get_global, wrap_resource_handler,
+    Callback, CefString, Errorcode, ImplRequest, ImplRequestContext, ImplResourceHandler,
+    ImplResponse, ImplSchemeHandlerFactory, Request, RequestContext, ResourceHandler,
+    ResourceReadCallback, ResourceSkipCallback, Response, SchemeHandlerFactory,
+    WrapResourceHandler, WrapSchemeHandlerFactory, wrap_resource_handler,
     wrap_scheme_handler_factory,
 };
 use cef_dll_sys::cef_errorcode_t;
@@ -219,6 +219,7 @@ impl From<&CefCustomScheme> for CefSchemeDecl {
 
 /// Parses the switch JSON into declarations, logging and yielding an empty
 /// vec on malformed input.
+#[cfg_attr(not(test), allow(dead_code))]
 fn parse_decls_json(json: &str) -> Vec<CefSchemeDecl> {
     serde_json::from_str(json).unwrap_or_else(|e| {
         eprintln!("bevy_cef: failed to parse custom-scheme switch JSON: {}", e);
@@ -282,27 +283,45 @@ fn decls_json_for(schemes: &[CefCustomScheme]) -> Option<String> {
 
 /// JSON of the schemes registered in this (browser) process, for switch
 /// injection. `None` if none are registered.
+///
+/// The result is computed once and cached; subsequent calls clone the cached
+/// value. `registered_schemes()` is set-once, so re-serializing on every
+/// child-process launch would be wasteful.
 pub(crate) fn current_scheme_decls_json() -> Option<String> {
-    decls_json_for(registered_schemes())
+    static CACHE: OnceLock<Option<String>> = OnceLock::new();
+    CACHE
+        .get_or_init(|| decls_json_for(registered_schemes()))
+        .clone()
 }
 
 /// Reads custom-scheme declarations from this process's command line (set by the
 /// parent via [`CUSTOM_SCHEMES_SWITCH`]). Used by the render process, which has
 /// no access to the browser-process registry.
 pub(crate) fn decls_from_command_line() -> Vec<CefSchemeDecl> {
-    let Some(cmd) = command_line_get_global() else {
-        return Vec::new();
-    };
-    if cmd.has_switch(Some(&CUSTOM_SCHEMES_SWITCH.into())) == 0 {
-        return Vec::new();
+    read_switch_json::<Vec<CefSchemeDecl>>(CUSTOM_SCHEMES_SWITCH).unwrap_or_default()
+}
+
+/// Registers a factory for every custom scheme in [`registered_schemes()`] on
+/// the given `RequestContext`. Logs a warning for each failed registration.
+///
+/// Call this after registering the built-in `cef://localhost` factory — the
+/// localhost registration is intentionally left in the call sites because it
+/// requires a `requester` that is not available here.
+pub(crate) fn register_custom_scheme_factories(context: &mut RequestContext) {
+    for scheme in registered_schemes() {
+        let domain = scheme.domain.as_deref().map(CefString::from);
+        let ok = context.register_scheme_handler_factory(
+            Some(&scheme.name.as_str().into()),
+            domain.as_ref(),
+            Some(&mut make_factory(scheme.handler.clone())),
+        );
+        if ok == 0 {
+            eprintln!(
+                "bevy_cef: register_scheme_handler_factory failed for scheme '{}'",
+                scheme.name
+            );
+        }
     }
-    let json = cmd
-        .switch_value(Some(&CUSTOM_SCHEMES_SWITCH.into()))
-        .into_string();
-    if json.is_empty() {
-        return Vec::new();
-    }
-    parse_decls_json(&json)
 }
 
 /// Builds the opaque `SchemeHandlerFactory` for a caller's handler, ready to
@@ -334,6 +353,11 @@ wrap_scheme_handler_factory! {
 wrap_resource_handler! {
     struct GenericResourceHandler {
         handler: Arc<dyn CefSchemeHandler>,
+        // NOTE: The Mutex is REQUIRED: CEF invokes this handler's callbacks
+        // in sequence but not from a dedicated thread — successive calls
+        // (open → response_headers → read → cancel) may land on different
+        // threads, so synchronization is necessary. Do not replace with a
+        // non-Sync cell.
         state: Arc<Mutex<Option<ResponseState>>>,
     }
 
@@ -418,9 +442,15 @@ wrap_resource_handler! {
             _callback: Option<&mut ResourceSkipCallback>,
         ) -> i32 {
             let Some(bytes_skipped) = bytes_skipped else {
+                // NOTE: CEF always provides the out-param, so this branch is
+                // unreachable in practice. Returning 0 (not -2) here because
+                // there is no out-param to write the failure signal into.
                 return 0;
             };
             if bytes_to_skip <= 0 {
+                // NOTE: Synchronous zero-skip: write 0 and return 1 (done).
+                // CEF interprets `bytes_skipped == 0` with return 1 as "skipped
+                // nothing, complete" — not as an error.
                 *bytes_skipped = 0;
                 return 1;
             }

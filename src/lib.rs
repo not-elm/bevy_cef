@@ -59,7 +59,7 @@ impl std::fmt::Debug for CefPlugin {
                 "custom_schemes",
                 &self.custom_schemes.iter().map(|s| &s.name).collect::<Vec<_>>(),
             )
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
