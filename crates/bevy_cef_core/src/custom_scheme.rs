@@ -81,6 +81,8 @@ impl CefSchemeResponse {
 
 /// Collapses any body variant into one `Read` source plus an optional known
 /// length, so `read()` has a single draining path.
+// consumed by the CEF adapter + lifecycle wiring in later commits
+#[allow(dead_code)]
 fn body_to_reader(body: CefSchemeBody) -> (Box<dyn Read + Send>, Option<u64>) {
     match body {
         CefSchemeBody::Empty => (Box::new(io::empty()), Some(0)),
@@ -95,6 +97,8 @@ fn body_to_reader(body: CefSchemeBody) -> (Box<dyn Read + Send>, Option<u64>) {
 /// The materialized response for one in-flight request: headers metadata plus a
 /// single draining reader. Stored across the CEF `open → headers → read`
 /// callback sequence.
+// consumed by the CEF adapter + lifecycle wiring in later commits
+#[allow(dead_code)]
 struct ResponseState {
     status: u16,
     mime_type: String,
@@ -107,6 +111,8 @@ struct ResponseState {
 /// across the CEF FFI boundary is UB, so a caught panic becomes a 500. (Only
 /// effective under `panic = "unwind"`; under `panic = "abort"` the process
 /// aborts before this runs.)
+// consumed by the CEF adapter + lifecycle wiring in later commits
+#[allow(dead_code)]
 fn invoke_handler(handler: &Arc<dyn CefSchemeHandler>, request: &CefSchemeRequest) -> ResponseState {
     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| handler.handle(request)));
     let response = outcome.unwrap_or_else(|_| {
@@ -162,8 +168,8 @@ pub struct CefCustomScheme {
 /// subprocess (the handler `Arc<dyn>` cannot be serialized). Private DTO.
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
 pub(crate) struct CefSchemeDecl {
-    pub(crate) name: String,
-    pub(crate) options: CefSchemeOptions,
+    name: String,
+    options: CefSchemeOptions,
 }
 
 impl From<&CefCustomScheme> for CefSchemeDecl {
@@ -177,6 +183,8 @@ impl From<&CefCustomScheme> for CefSchemeDecl {
 
 /// Parses the switch JSON into declarations, logging and yielding an empty
 /// vec on malformed input.
+// consumed by the CEF adapter + lifecycle wiring in later commits
+#[allow(dead_code)]
 fn parse_decls_json(json: &str) -> Vec<CefSchemeDecl> {
     serde_json::from_str(json).unwrap_or_else(|e| {
         eprintln!("bevy_cef: failed to parse custom-scheme switch JSON: {}", e);
@@ -196,6 +204,8 @@ pub fn init_registered_schemes(schemes: Vec<CefCustomScheme>) {
 }
 
 /// The custom schemes registered in this process (empty if none / not yet set).
+// consumed by the CEF adapter + lifecycle wiring in later commits
+#[allow(dead_code)]
 pub(crate) fn registered_schemes() -> &'static [CefCustomScheme] {
     REGISTERED.get().map(Vec::as_slice).unwrap_or(&[])
 }
@@ -215,16 +225,26 @@ fn dedup_by_name(schemes: Vec<CefCustomScheme>) -> Vec<CefCustomScheme> {
 
 /// Serializes declarations (name + flags) to JSON for the child-process switch.
 /// `None` when there are no schemes (so no switch is appended).
+// consumed by the CEF adapter + lifecycle wiring in later commits
+#[allow(dead_code)]
 fn decls_json_for(schemes: &[CefCustomScheme]) -> Option<String> {
     if schemes.is_empty() {
         return None;
     }
     let decls: Vec<CefSchemeDecl> = schemes.iter().map(CefSchemeDecl::from).collect();
-    serde_json::to_string(&decls).ok()
+    match serde_json::to_string(&decls) {
+        Ok(json) => Some(json),
+        Err(e) => {
+            eprintln!("bevy_cef: failed to serialize custom-scheme declarations: {e}");
+            None
+        }
+    }
 }
 
 /// JSON of the schemes registered in this (browser) process, for switch
 /// injection. `None` if none are registered.
+// consumed by the CEF adapter + lifecycle wiring in later commits
+#[allow(dead_code)]
 pub(crate) fn current_scheme_decls_json() -> Option<String> {
     decls_json_for(registered_schemes())
 }
@@ -232,6 +252,8 @@ pub(crate) fn current_scheme_decls_json() -> Option<String> {
 /// Reads custom-scheme declarations from this process's command line (set by the
 /// parent via [`CUSTOM_SCHEMES_SWITCH`]). Used by the render process, which has
 /// no access to the browser-process registry.
+// consumed by the CEF adapter + lifecycle wiring in later commits
+#[allow(dead_code)]
 pub(crate) fn decls_from_command_line() -> Vec<CefSchemeDecl> {
     let Some(cmd) = command_line_get_global() else {
         return Vec::new();
@@ -272,7 +294,9 @@ mod tests {
 
     #[test]
     fn not_found_is_404() {
-        assert_eq!(CefSchemeResponse::not_found().status, 404);
+        let r = CefSchemeResponse::not_found();
+        assert_eq!(r.status, 404);
+        assert_eq!(r.mime_type, "text/plain");
     }
 
     #[test]
@@ -280,6 +304,10 @@ mod tests {
         let r = CefSchemeResponse::bytes("text/css", b"body{}".to_vec());
         assert_eq!(r.status, 200);
         assert_eq!(r.mime_type, "text/css");
+        let (mut reader, _len) = body_to_reader(r.body);
+        let mut body = Vec::new();
+        reader.read_to_end(&mut body).unwrap();
+        assert_eq!(body, b"body{}");
     }
 
     struct Dummy;
