@@ -107,6 +107,9 @@ pub enum CefCommand {
         event: cef::KeyEvent,
     },
 
+    /// Set the CEF input focus state for a webview.
+    SetFocus { webview: Entity, focused: bool },
+
     /// Emit a host event to the webview's JS context.
     EmitEvent {
         webview: Entity,
@@ -296,6 +299,14 @@ impl BrowsersProxy {
         let _ = self.tx.send_blocking(CefCommand::SendKey {
             webview: *webview,
             event,
+        });
+    }
+
+    /// Enqueue a focus-state change for a webview's browser.
+    pub fn set_focus(&self, webview: &Entity, focused: bool) {
+        let _ = self.tx.send_blocking(CefCommand::SetFocus {
+            webview: *webview,
+            focused,
         });
     }
 

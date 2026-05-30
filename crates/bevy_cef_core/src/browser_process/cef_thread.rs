@@ -136,6 +136,7 @@ impl BrowsersCefSide {
                 delta,
             } => self.send_mouse_wheel(&webview, position, delta),
             CefCommand::SendKey { webview, event } => self.send_key(&webview, event),
+            CefCommand::SetFocus { webview, focused } => self.set_focus(&webview, focused),
             CefCommand::EmitEvent { webview, id, event } => {
                 self.emit_event(&webview, id, &event);
             }
@@ -375,6 +376,16 @@ impl BrowsersCefSide {
     fn send_key(&self, webview: &Entity, event: cef::KeyEvent) {
         if let Some(browser) = self.get_focused_browser(webview) {
             browser.host.send_key_event(Some(&event));
+        }
+    }
+
+    /// Sets the CEF input focus state for a webview's browser.
+    ///
+    /// Uses a direct lookup (not `get_focused_browser`) because this is what
+    /// *grants* focus; gating on existing focus would make focusing impossible.
+    fn set_focus(&self, webview: &Entity, focused: bool) {
+        if let Some(browser) = self.browsers.get(webview) {
+            browser.host.set_focus(focused as _);
         }
     }
 
