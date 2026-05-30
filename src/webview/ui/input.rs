@@ -14,13 +14,24 @@ use bevy_cef_core::prelude::Browsers;
 #[cfg(target_os = "windows")]
 use bevy_cef_core::prelude::BrowsersProxy;
 
-/// Attaches the UI input observers (and a `RelativeCursorPosition`) to each
-/// newly-added UI webview node so the user only needs to spawn
+/// Attaches the UI input observers (and a `RelativeCursorPosition`) to each UI
+/// webview node so the user only needs to spawn
 /// `MaterialNode<WebviewUiMaterial> + WebviewSource`.
+///
+/// Fires in whichever frame the second of the two defining components arrives,
+/// so a node that gains `WebviewSource` and `MaterialNode<WebviewUiMaterial>` on
+/// different frames is still wired exactly once.
 #[cfg(not(target_os = "windows"))]
 pub(super) fn setup_ui_observers(
     mut commands: Commands,
-    webviews: Query<Entity, (Added<WebviewSource>, With<MaterialNode<WebviewUiMaterial>>)>,
+    webviews: Query<
+        Entity,
+        (
+            Or<(Added<WebviewSource>, Added<MaterialNode<WebviewUiMaterial>>)>,
+            With<WebviewSource>,
+            With<MaterialNode<WebviewUiMaterial>>,
+        ),
+    >,
 ) {
     for entity in webviews.iter() {
         commands
@@ -37,7 +48,14 @@ pub(super) fn setup_ui_observers(
 #[cfg(target_os = "windows")]
 pub(super) fn setup_ui_observers_win(
     mut commands: Commands,
-    webviews: Query<Entity, (Added<WebviewSource>, With<MaterialNode<WebviewUiMaterial>>)>,
+    webviews: Query<
+        Entity,
+        (
+            Or<(Added<WebviewSource>, Added<MaterialNode<WebviewUiMaterial>>)>,
+            With<WebviewSource>,
+            With<MaterialNode<WebviewUiMaterial>>,
+        ),
+    >,
 ) {
     for entity in webviews.iter() {
         commands

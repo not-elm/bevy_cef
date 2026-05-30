@@ -61,8 +61,15 @@ fn apply_webview_focus(
     if !focused.is_changed() {
         return;
     }
+    // NOTE: a `None` focus must be a no-op, never a blur-all. `init_resource`
+    // marks the resource changed on the first frame; blurring every browser
+    // there would unfocus the bootstrap webview CEF auto-focused, leaving the
+    // app keyboard-dead until the first click.
+    let Some(target) = focused.0 else {
+        return;
+    };
     for webview in webviews.iter() {
-        browsers.set_focus(&webview, focused.0 == Some(webview));
+        browsers.set_focus(&webview, webview == target);
     }
 }
 
@@ -75,8 +82,15 @@ fn apply_webview_focus_win(
     if !focused.is_changed() {
         return;
     }
+    // NOTE: a `None` focus must be a no-op, never a blur-all. `init_resource`
+    // marks the resource changed on the first frame; blurring every browser
+    // there would unfocus the bootstrap webview CEF auto-focused, leaving the
+    // app keyboard-dead until the first click.
+    let Some(target) = focused.0 else {
+        return;
+    };
     for webview in webviews.iter() {
-        proxy.set_focus(&webview, focused.0 == Some(webview));
+        proxy.set_focus(&webview, webview == target);
     }
 }
 
