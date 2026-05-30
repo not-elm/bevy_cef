@@ -8,6 +8,7 @@ use bevy::asset::load_internal_asset;
 use bevy::prelude::*;
 use bevy_cef_core::prelude::RenderTextureMessage;
 
+mod input;
 mod material;
 
 pub use material::WebviewUiMaterial;
@@ -23,6 +24,11 @@ impl Plugin for UiWebviewPlugin {
             "ui/webview_ui.wgsl",
             Shader::from_wgsl
         );
+
+        if !app.is_plugin_added::<bevy::ui::picking_backend::UiPickingPlugin>() {
+            app.add_plugins(bevy::ui::picking_backend::UiPickingPlugin);
+        }
+
         app.add_plugins(UiMaterialPlugin::<WebviewUiMaterial>::default())
             .add_systems(
                 PostUpdate,
@@ -31,6 +37,12 @@ impl Plugin for UiWebviewPlugin {
                     update_webview_ui_size.after(bevy::ui::UiSystems::Layout),
                 ),
             );
+
+        #[cfg(not(target_os = "windows"))]
+        app.add_systems(Update, input::setup_ui_observers);
+
+        #[cfg(target_os = "windows")]
+        app.add_systems(Update, input::setup_ui_observers_win);
     }
 }
 
