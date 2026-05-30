@@ -13,7 +13,7 @@ mod material;
 pub use material::WebviewUiMaterial;
 
 /// Adds the `bevy_ui` webview display path. Sibling to `MeshWebviewPlugin`.
-pub struct UiWebviewPlugin;
+pub(in crate::webview) struct UiWebviewPlugin;
 
 impl Plugin for UiWebviewPlugin {
     fn build(&self, app: &mut App) {
@@ -24,7 +24,13 @@ impl Plugin for UiWebviewPlugin {
             Shader::from_wgsl
         );
         app.add_plugins(UiMaterialPlugin::<WebviewUiMaterial>::default())
-            .add_systems(PostUpdate, (render_ui_surface, update_webview_ui_size));
+            .add_systems(
+                PostUpdate,
+                (
+                    render_ui_surface.run_if(on_message::<RenderTextureMessage>),
+                    update_webview_ui_size.after(bevy::ui::UiSystems::Layout),
+                ),
+            );
     }
 }
 
