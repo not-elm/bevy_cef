@@ -22,6 +22,7 @@ use crate::common::CommandChannelReceiver;
 #[cfg(target_os = "windows")]
 use crate::common::TextureSenderRes;
 
+pub(crate) mod alpha;
 mod mesh;
 mod ui;
 pub(crate) mod webview_sprite;
