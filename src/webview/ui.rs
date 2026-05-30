@@ -1,13 +1,16 @@
 //! `bevy_ui` webview display path: renders a webview into a `MaterialNode<WebviewUiMaterial>`.
 
-use bevy::math::Vec2;
+use bevy::prelude::*;
 
 mod material;
 
 /// Converts a node's physical-pixel `ComputedNode` size to the logical DIP size
 /// `WebviewSize` expects. Returns `None` for a pre-layout / sub-pixel size so a
 /// 0-area surface is never requested.
-pub(crate) fn webview_size_from_computed(physical_size: Vec2, inverse_scale_factor: f32) -> Option<Vec2> {
+pub(crate) fn webview_size_from_computed(
+    physical_size: Vec2,
+    inverse_scale_factor: f32,
+) -> Option<Vec2> {
     let logical = physical_size * inverse_scale_factor;
     if logical.x < 1.0 || logical.y < 1.0 {
         None
@@ -19,7 +22,6 @@ pub(crate) fn webview_size_from_computed(physical_size: Vec2, inverse_scale_fact
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bevy::math::Vec2;
 
     #[test]
     fn converts_physical_to_logical() {
