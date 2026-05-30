@@ -1,8 +1,32 @@
 //! `bevy_ui` webview display path: renders a webview into a `MaterialNode<WebviewUiMaterial>`.
 
+use crate::prelude::{
+    WebviewDpr, WebviewSize, WebviewSource, WebviewSurface, update_webview_image,
+};
+use crate::webview::ui::material::WEBVIEW_UI_SHADER_HANDLE;
+use bevy::asset::load_internal_asset;
 use bevy::prelude::*;
+use bevy_cef_core::prelude::RenderTextureMessage;
 
 mod material;
+
+pub use material::WebviewUiMaterial;
+
+/// Adds the `bevy_ui` webview display path. Sibling to `MeshWebviewPlugin`.
+pub struct UiWebviewPlugin;
+
+impl Plugin for UiWebviewPlugin {
+    fn build(&self, app: &mut App) {
+        load_internal_asset!(
+            app,
+            WEBVIEW_UI_SHADER_HANDLE,
+            "ui/webview_ui.wgsl",
+            Shader::from_wgsl
+        );
+        app.add_plugins(UiMaterialPlugin::<WebviewUiMaterial>::default())
+            .add_systems(PostUpdate, (render_ui_surface, update_webview_ui_size));
+    }
+}
 
 /// Converts a node's physical-pixel `ComputedNode` size to the logical DIP size
 /// `WebviewSize` expects. Returns `None` for a pre-layout / sub-pixel size so a
@@ -16,6 +40,56 @@ pub(crate) fn webview_size_from_computed(
         None
     } else {
         Some(logical)
+    }
+}
+
+/// Copies each incoming CEF frame into the corresponding entity's
+/// `WebviewUiMaterial` surface, allocating the `Image` on first frame. Mirrors
+/// the mesh path's `render` system. Runs in `PostUpdate`.
+fn render_ui_surface(
+    mut commands: Commands,
+    mut er: MessageReader<RenderTextureMessage>,
+    mut images: ResMut<Assets<Image>>,
+    mut materials: ResMut<Assets<WebviewUiMaterial>>,
+    webviews: Query<&MaterialNode<WebviewUiMaterial>>,
+) {
+    for texture in er.read() {
+        if let Ok(handle) = webviews.get(texture.webview)
+            && let Some(material) = materials.get_mut(handle.id())
+            && let Some(image) = {
+                let image_handle = material
+                    .surface
+                    .get_or_insert_with(|| images.add(Image::default()));
+                commands
+                    .entity(texture.webview)
+                    .insert(WebviewSurface(image_handle.clone()));
+                images.get_mut(image_handle.id())
+            }
+        {
+            update_webview_image(texture, image);
+        }
+    }
+}
+
+/// Writes `WebviewSize` (logical DIP) from each UI webview node's `ComputedNode`
+/// (physical px). Runs in `PostUpdate` after layout; `set_if_neq` avoids a
+/// needless CEF resize when the size is unchanged. Re-runs on DPR change too.
+fn update_webview_ui_size(
+    mut webviews: Query<
+        (&ComputedNode, &mut WebviewSize),
+        (
+            With<WebviewSource>,
+            With<MaterialNode<WebviewUiMaterial>>,
+            Or<(Changed<ComputedNode>, Changed<WebviewDpr>)>,
+        ),
+    >,
+) {
+    for (computed, mut size) in webviews.iter_mut() {
+        if let Some(logical) =
+            webview_size_from_computed(computed.size(), computed.inverse_scale_factor())
+        {
+            size.set_if_neq(WebviewSize(logical));
+        }
     }
 }
 
