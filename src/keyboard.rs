@@ -1,4 +1,5 @@
 use crate::common::WebviewSource;
+use crate::focus::FocusedWebview;
 use bevy::input::keyboard::KeyboardInput;
 use bevy::prelude::*;
 #[cfg(not(target_os = "windows"))]
@@ -101,9 +102,11 @@ fn send_key_event(
     mut is_ime_composing: ResMut<IsImeComposing>,
     input: Res<ButtonInput<KeyCode>>,
     browsers: NonSend<Browsers>,
+    focused: Res<FocusedWebview>,
     webviews: Query<Entity, With<WebviewSource>>,
 ) {
     let modifiers = keyboard_modifiers(&input);
+    let target = focused.0.filter(|e| webviews.get(*e).is_ok());
     for event in er.read() {
         if (event.key_code == KeyCode::Enter || event.key_code == KeyCode::Backspace)
             && is_ime_commiting.0
@@ -117,7 +120,7 @@ fn send_key_event(
         }
         let key_events = create_cef_key_events(modifiers, &input, event);
         for key_event in key_events {
-            for webview in webviews.iter() {
+            if let Some(webview) = target {
                 browsers.send_key(&webview, key_event.clone());
             }
         }
@@ -162,9 +165,11 @@ fn send_key_event_win(
     mut is_ime_composing: ResMut<IsImeComposing>,
     input: Res<ButtonInput<KeyCode>>,
     proxy: Res<BrowsersProxy>,
+    focused: Res<FocusedWebview>,
     webviews: Query<Entity, With<WebviewSource>>,
 ) {
     let modifiers = keyboard_modifiers(&input);
+    let target = focused.0.filter(|e| webviews.get(*e).is_ok());
     for event in er.read() {
         if (event.key_code == KeyCode::Enter || event.key_code == KeyCode::Backspace)
             && is_ime_commiting.0
@@ -178,7 +183,7 @@ fn send_key_event_win(
         }
         let key_events = create_cef_key_events(modifiers, &input, event);
         for key_event in key_events {
-            for webview in webviews.iter() {
+            if let Some(webview) = target {
                 proxy.send_key(&webview, key_event.clone());
             }
         }
