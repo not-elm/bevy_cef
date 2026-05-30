@@ -3,6 +3,7 @@
 mod common;
 mod cursor_icon;
 mod drag;
+mod focus;
 mod keyboard;
 mod mute;
 mod navigation;
@@ -16,6 +17,7 @@ use crate::common::{
 };
 use crate::cursor_icon::SystemCursorIconPlugin;
 use crate::drag::DragPlugin;
+use crate::focus::FocusPlugin;
 use crate::keyboard::KeyboardPlugin;
 use crate::mute::AudioMutePlugin;
 use crate::prelude::{IpcPlugin, NavigationPlugin, WebviewPlugin};
@@ -26,6 +28,7 @@ use bevy_cef_core::prelude::{CefCustomScheme, CefExtensions, CommandLineConfig};
 use bevy_remote::RemotePlugin;
 
 pub mod prelude {
+    pub use crate::focus::FocusedWebview;
     pub use crate::resize::components::{AspectLockMode, WebviewResizable};
     pub use crate::{CefPlugin, RunOnMainThread, common::*, navigation::*, webview::prelude::*};
     pub use bevy_cef_core::prelude::{
@@ -67,6 +70,7 @@ impl Plugin for CefPlugin {
             WebviewPlugin,
             IpcPlugin,
             KeyboardPlugin,
+            FocusPlugin,
             SystemCursorIconPlugin,
             DragPlugin,
             ResizePlugin,

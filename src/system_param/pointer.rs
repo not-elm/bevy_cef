@@ -100,7 +100,7 @@ impl<C: Component> WebviewPointer<'_, '_, C> {
     }
 }
 
-fn find_webview_entity(
+pub(crate) fn find_webview_entity(
     entity: Entity,
     parents: &Query<(Option<&ChildOf>, Has<WebviewSource>)>,
 ) -> Option<Entity> {
