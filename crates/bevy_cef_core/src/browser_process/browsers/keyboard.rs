@@ -297,12 +297,15 @@ fn keycode_to_windows_vk(keycode: KeyCode) -> i32 {
 /// Returns a platform-specific native key code.
 ///
 /// - **macOS**: Returns the Carbon virtual key code (used directly by CEF).
+/// - **Linux**: Returns the XKB keycode (evdev scancode + 8).
 /// - **Windows**: Returns the Chromium-format scan code. Regular keys use the raw scan code
 ///   (e.g., 0x1E for KeyA). Extended keys use a 0xE0 prefix (e.g., 0xE053 for Delete).
 ///   CEF's `NativeKeycodeToDomCode()` uses this to derive `KeyboardEvent.code`.
 fn to_native_key_code(keycode: &KeyCode) -> u32 {
     if cfg!(target_os = "macos") {
         to_macos_key_code(keycode)
+    } else if cfg!(target_os = "linux") {
+        to_linux_native_key_code(keycode)
     } else {
         to_windows_native_key_code(keycode)
     }
@@ -422,6 +425,241 @@ fn to_macos_key_code(keycode: &KeyCode) -> u32 {
         KeyCode::NumpadDivide => 0x4B,
         _ => 0,
     }
+}
+
+/// Evdev scancodes from `<linux/input-event-codes.h>`. Values are stable kernel ABI.
+#[cfg(target_os = "linux")]
+mod evdev {
+    pub const KEY_ESC: u32 = 1;
+    pub const KEY_1: u32 = 2;
+    pub const KEY_2: u32 = 3;
+    pub const KEY_3: u32 = 4;
+    pub const KEY_4: u32 = 5;
+    pub const KEY_5: u32 = 6;
+    pub const KEY_6: u32 = 7;
+    pub const KEY_7: u32 = 8;
+    pub const KEY_8: u32 = 9;
+    pub const KEY_9: u32 = 10;
+    pub const KEY_0: u32 = 11;
+    pub const KEY_MINUS: u32 = 12;
+    pub const KEY_EQUAL: u32 = 13;
+    pub const KEY_BACKSPACE: u32 = 14;
+    pub const KEY_TAB: u32 = 15;
+    pub const KEY_Q: u32 = 16;
+    pub const KEY_W: u32 = 17;
+    pub const KEY_E: u32 = 18;
+    pub const KEY_R: u32 = 19;
+    pub const KEY_T: u32 = 20;
+    pub const KEY_Y: u32 = 21;
+    pub const KEY_U: u32 = 22;
+    pub const KEY_I: u32 = 23;
+    pub const KEY_O: u32 = 24;
+    pub const KEY_P: u32 = 25;
+    pub const KEY_LEFTBRACE: u32 = 26;
+    pub const KEY_RIGHTBRACE: u32 = 27;
+    pub const KEY_ENTER: u32 = 28;
+    pub const KEY_LEFTCTRL: u32 = 29;
+    pub const KEY_A: u32 = 30;
+    pub const KEY_S: u32 = 31;
+    pub const KEY_D: u32 = 32;
+    pub const KEY_F: u32 = 33;
+    pub const KEY_G: u32 = 34;
+    pub const KEY_H: u32 = 35;
+    pub const KEY_J: u32 = 36;
+    pub const KEY_K: u32 = 37;
+    pub const KEY_L: u32 = 38;
+    pub const KEY_SEMICOLON: u32 = 39;
+    pub const KEY_APOSTROPHE: u32 = 40;
+    pub const KEY_GRAVE: u32 = 41;
+    pub const KEY_LEFTSHIFT: u32 = 42;
+    pub const KEY_BACKSLASH: u32 = 43;
+    pub const KEY_Z: u32 = 44;
+    pub const KEY_X: u32 = 45;
+    pub const KEY_C: u32 = 46;
+    pub const KEY_V: u32 = 47;
+    pub const KEY_B: u32 = 48;
+    pub const KEY_N: u32 = 49;
+    pub const KEY_M: u32 = 50;
+    pub const KEY_COMMA: u32 = 51;
+    pub const KEY_DOT: u32 = 52;
+    pub const KEY_SLASH: u32 = 53;
+    pub const KEY_RIGHTSHIFT: u32 = 54;
+    pub const KEY_KPASTERISK: u32 = 55;
+    pub const KEY_LEFTALT: u32 = 56;
+    pub const KEY_SPACE: u32 = 57;
+    pub const KEY_CAPSLOCK: u32 = 58;
+    pub const KEY_F1: u32 = 59;
+    pub const KEY_F2: u32 = 60;
+    pub const KEY_F3: u32 = 61;
+    pub const KEY_F4: u32 = 62;
+    pub const KEY_F5: u32 = 63;
+    pub const KEY_F6: u32 = 64;
+    pub const KEY_F7: u32 = 65;
+    pub const KEY_F8: u32 = 66;
+    pub const KEY_F9: u32 = 67;
+    pub const KEY_F10: u32 = 68;
+    pub const KEY_NUMLOCK: u32 = 69;
+    pub const KEY_SCROLLLOCK: u32 = 70;
+    pub const KEY_KP7: u32 = 71;
+    pub const KEY_KP8: u32 = 72;
+    pub const KEY_KP9: u32 = 73;
+    pub const KEY_KPMINUS: u32 = 74;
+    pub const KEY_KP4: u32 = 75;
+    pub const KEY_KP5: u32 = 76;
+    pub const KEY_KP6: u32 = 77;
+    pub const KEY_KPPLUS: u32 = 78;
+    pub const KEY_KP1: u32 = 79;
+    pub const KEY_KP2: u32 = 80;
+    pub const KEY_KP3: u32 = 81;
+    pub const KEY_KP0: u32 = 82;
+    pub const KEY_KPDOT: u32 = 83;
+    pub const KEY_F11: u32 = 87;
+    pub const KEY_F12: u32 = 88;
+    pub const KEY_KPENTER: u32 = 96;
+    pub const KEY_RIGHTCTRL: u32 = 97;
+    pub const KEY_KPSLASH: u32 = 98;
+    pub const KEY_RIGHTALT: u32 = 100;
+    pub const KEY_HOME: u32 = 102;
+    pub const KEY_UP: u32 = 103;
+    pub const KEY_PAGEUP: u32 = 104;
+    pub const KEY_LEFT: u32 = 105;
+    pub const KEY_RIGHT: u32 = 106;
+    pub const KEY_END: u32 = 107;
+    pub const KEY_DOWN: u32 = 108;
+    pub const KEY_PAGEDOWN: u32 = 109;
+    pub const KEY_INSERT: u32 = 110;
+    pub const KEY_DELETE: u32 = 111;
+    pub const KEY_LEFTMETA: u32 = 125;
+    pub const KEY_RIGHTMETA: u32 = 126;
+}
+
+/// Returns the XKB keycode for the given key.
+///
+/// XKB keycodes equal the Linux evdev scancode plus 8 (X11 reserves keycodes 0-7,
+/// and the Wayland keyboard protocol uses the same convention via libxkbcommon).
+#[cfg(target_os = "linux")]
+fn to_linux_native_key_code(keycode: &KeyCode) -> u32 {
+    use evdev as ev;
+    const XKB_OFFSET: u32 = 8;
+    let evdev: u32 = match keycode {
+        // Letters
+        KeyCode::KeyA => ev::KEY_A,
+        KeyCode::KeyB => ev::KEY_B,
+        KeyCode::KeyC => ev::KEY_C,
+        KeyCode::KeyD => ev::KEY_D,
+        KeyCode::KeyE => ev::KEY_E,
+        KeyCode::KeyF => ev::KEY_F,
+        KeyCode::KeyG => ev::KEY_G,
+        KeyCode::KeyH => ev::KEY_H,
+        KeyCode::KeyI => ev::KEY_I,
+        KeyCode::KeyJ => ev::KEY_J,
+        KeyCode::KeyK => ev::KEY_K,
+        KeyCode::KeyL => ev::KEY_L,
+        KeyCode::KeyM => ev::KEY_M,
+        KeyCode::KeyN => ev::KEY_N,
+        KeyCode::KeyO => ev::KEY_O,
+        KeyCode::KeyP => ev::KEY_P,
+        KeyCode::KeyQ => ev::KEY_Q,
+        KeyCode::KeyR => ev::KEY_R,
+        KeyCode::KeyS => ev::KEY_S,
+        KeyCode::KeyT => ev::KEY_T,
+        KeyCode::KeyU => ev::KEY_U,
+        KeyCode::KeyV => ev::KEY_V,
+        KeyCode::KeyW => ev::KEY_W,
+        KeyCode::KeyX => ev::KEY_X,
+        KeyCode::KeyY => ev::KEY_Y,
+        KeyCode::KeyZ => ev::KEY_Z,
+        // Digits
+        KeyCode::Digit0 => ev::KEY_0,
+        KeyCode::Digit1 => ev::KEY_1,
+        KeyCode::Digit2 => ev::KEY_2,
+        KeyCode::Digit3 => ev::KEY_3,
+        KeyCode::Digit4 => ev::KEY_4,
+        KeyCode::Digit5 => ev::KEY_5,
+        KeyCode::Digit6 => ev::KEY_6,
+        KeyCode::Digit7 => ev::KEY_7,
+        KeyCode::Digit8 => ev::KEY_8,
+        KeyCode::Digit9 => ev::KEY_9,
+        // Function keys
+        KeyCode::F1 => ev::KEY_F1,
+        KeyCode::F2 => ev::KEY_F2,
+        KeyCode::F3 => ev::KEY_F3,
+        KeyCode::F4 => ev::KEY_F4,
+        KeyCode::F5 => ev::KEY_F5,
+        KeyCode::F6 => ev::KEY_F6,
+        KeyCode::F7 => ev::KEY_F7,
+        KeyCode::F8 => ev::KEY_F8,
+        KeyCode::F9 => ev::KEY_F9,
+        KeyCode::F10 => ev::KEY_F10,
+        KeyCode::F11 => ev::KEY_F11,
+        KeyCode::F12 => ev::KEY_F12,
+        // Special keys
+        KeyCode::Enter => ev::KEY_ENTER,
+        KeyCode::Space => ev::KEY_SPACE,
+        KeyCode::Backspace => ev::KEY_BACKSPACE,
+        KeyCode::Delete => ev::KEY_DELETE,
+        KeyCode::Tab => ev::KEY_TAB,
+        KeyCode::Escape => ev::KEY_ESC,
+        KeyCode::Insert => ev::KEY_INSERT,
+        KeyCode::Home => ev::KEY_HOME,
+        KeyCode::End => ev::KEY_END,
+        KeyCode::PageUp => ev::KEY_PAGEUP,
+        KeyCode::PageDown => ev::KEY_PAGEDOWN,
+        // Arrow keys
+        KeyCode::ArrowLeft => ev::KEY_LEFT,
+        KeyCode::ArrowUp => ev::KEY_UP,
+        KeyCode::ArrowRight => ev::KEY_RIGHT,
+        KeyCode::ArrowDown => ev::KEY_DOWN,
+        // Modifier keys
+        KeyCode::ShiftLeft => ev::KEY_LEFTSHIFT,
+        KeyCode::ShiftRight => ev::KEY_RIGHTSHIFT,
+        KeyCode::ControlLeft => ev::KEY_LEFTCTRL,
+        KeyCode::ControlRight => ev::KEY_RIGHTCTRL,
+        KeyCode::AltLeft => ev::KEY_LEFTALT,
+        KeyCode::AltRight => ev::KEY_RIGHTALT,
+        KeyCode::SuperLeft => ev::KEY_LEFTMETA,
+        KeyCode::SuperRight => ev::KEY_RIGHTMETA,
+        // Lock keys
+        KeyCode::CapsLock => ev::KEY_CAPSLOCK,
+        KeyCode::NumLock => ev::KEY_NUMLOCK,
+        KeyCode::ScrollLock => ev::KEY_SCROLLLOCK,
+        // Punctuation
+        KeyCode::Semicolon => ev::KEY_SEMICOLON,
+        KeyCode::Equal => ev::KEY_EQUAL,
+        KeyCode::Comma => ev::KEY_COMMA,
+        KeyCode::Minus => ev::KEY_MINUS,
+        KeyCode::Period => ev::KEY_DOT,
+        KeyCode::Slash => ev::KEY_SLASH,
+        KeyCode::Backquote => ev::KEY_GRAVE,
+        KeyCode::BracketLeft => ev::KEY_LEFTBRACE,
+        KeyCode::Backslash => ev::KEY_BACKSLASH,
+        KeyCode::BracketRight => ev::KEY_RIGHTBRACE,
+        KeyCode::Quote => ev::KEY_APOSTROPHE,
+        // Numpad
+        KeyCode::Numpad0 => ev::KEY_KP0,
+        KeyCode::Numpad1 => ev::KEY_KP1,
+        KeyCode::Numpad2 => ev::KEY_KP2,
+        KeyCode::Numpad3 => ev::KEY_KP3,
+        KeyCode::Numpad4 => ev::KEY_KP4,
+        KeyCode::Numpad5 => ev::KEY_KP5,
+        KeyCode::Numpad6 => ev::KEY_KP6,
+        KeyCode::Numpad7 => ev::KEY_KP7,
+        KeyCode::Numpad8 => ev::KEY_KP8,
+        KeyCode::Numpad9 => ev::KEY_KP9,
+        KeyCode::NumpadMultiply => ev::KEY_KPASTERISK,
+        KeyCode::NumpadAdd => ev::KEY_KPPLUS,
+        KeyCode::NumpadSubtract => ev::KEY_KPMINUS,
+        KeyCode::NumpadDecimal => ev::KEY_KPDOT,
+        KeyCode::NumpadDivide => ev::KEY_KPSLASH,
+        KeyCode::NumpadEnter => ev::KEY_KPENTER,
+        _ => return 0,
+    };
+    evdev + XKB_OFFSET
+}
+
+#[cfg(not(target_os = "linux"))]
+fn to_linux_native_key_code(_keycode: &KeyCode) -> u32 {
+    0
 }
 
 /// Returns the Chromium-format Windows scan code for the given key.

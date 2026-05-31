@@ -22,5 +22,17 @@ async-channel = { workspace = true }
 raw-window-handle = { workspace = true }
 
 [features]
-default = []
+default = ["browser"]
 debug = []
+# Enables the browser-process side of the integration: webview lifecycle,
+# materials, input handling, asset scheme, etc. Pulls in the Bevy renderer
+# features needed by that code. Disable this for the render-process subprocess
+# binary, which only needs `bevy::platform` for shared types.
+browser = [
+    "bevy/bevy_asset",
+    "bevy/bevy_log",
+    "bevy/bevy_pbr",
+    "bevy/bevy_sprite",
+    "bevy/bevy_window",
+    "bevy/picking",
+]

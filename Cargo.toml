@@ -26,20 +26,15 @@ keywords = ["bevy", "cef", "web", "rendering"]
 categories = ["game-development", "web-programming", "graphics"]
 
 [workspace.dependencies]
-bevy = { version = "0.18", default-features = false, features = [
-    "bevy_log",
-    "bevy_window",
-    "bevy_asset",
-    "bevy_sprite",
-    "bevy_pbr",
-    "bevy_winit",
-    "picking",
-] }
+# Bare minimum. Each member crate enables exactly the bevy features it uses.
+# The render-process binaries only need `bevy::platform` (always available).
+# The browser-side library and top-level crate light up renderer features.
+bevy = { version = "0.18", default-features = false }
 bevy_remote = "0.18"
 cef = { version = "145.6.1+145.0.28" }
 cef-dll-sys = { version = "145.6.1+145.0.28", features = ["sandbox"] }
 bevy_cef = { path = ".", version = "0.8.1" }
-bevy_cef_core = { path = "crates/bevy_cef_core", version = "0.9.0-dev" }
+bevy_cef_core = { path = "crates/bevy_cef_core", version = "0.9.0-dev", default-features = false }
 async-channel = { version = "2.5" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1" }
@@ -49,10 +44,10 @@ anyhow = "1"
 plist = "1"
 
 [dependencies]
-bevy = { workspace = true }
+bevy = { workspace = true, features = ["bevy_winit"] }
 bevy_remote = { workspace = true }
 cef = { workspace = true }
-bevy_cef_core = { workspace = true }
+bevy_cef_core = { workspace = true, features = ["browser"] }
 async-channel = { version = "2.5" }
 serde = { workspace = true }
 serde_json = { workspace = true }

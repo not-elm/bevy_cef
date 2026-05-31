@@ -35,6 +35,11 @@ impl Default for CommandLineConfig {
             switches: vec![
                 #[cfg(all(target_os = "macos", debug_assertions))]
                 "use-mock-keychain",
+                // Without this Chromium tries to launch a zygote process on Linux even
+                // with `no_sandbox: true`, which fails with "No such file or directory"
+                // in `ZygoteHostImpl` (see issue #9).
+                #[cfg(target_os = "linux")]
+                "no-zygote",
             ],
             switch_values: Vec::new(),
         }
