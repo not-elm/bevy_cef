@@ -57,19 +57,30 @@ fn apply_webview_focus(
     focused: Res<FocusedWebview>,
     browsers: NonSend<Browsers>,
     webviews: Query<Entity, With<WebviewSource>>,
+    mut prev: Local<Option<Entity>>,
 ) {
     if !focused.is_changed() {
         return;
     }
-    // NOTE: a `None` focus must be a no-op, never a blur-all. `init_resource`
-    // marks the resource changed on the first frame; blurring every browser
-    // there would unfocus the bootstrap webview CEF auto-focused, leaving the
-    // app keyboard-dead until the first click.
-    let Some(target) = focused.0 else {
-        return;
-    };
-    for webview in webviews.iter() {
-        browsers.set_focus(&webview, webview == target);
+    match focused.0 {
+        Some(target) => {
+            for webview in webviews.iter() {
+                browsers.set_focus(&webview, webview == target);
+            }
+            *prev = Some(target);
+        }
+        // NOTE: blur ONLY the previously-focused webview, never blur-all.
+        // `init_resource` marks this changed with `None` on the first frame, but
+        // `prev` is still `None` then, so a webview CEF auto-focused at startup
+        // is left alone (blurring it would leave the app keyboard-dead until the
+        // first click). A genuine Some→None transition — focus moved to a
+        // non-webview (e.g. a terminal pane in an embedder) — releases CEF focus
+        // on the webview that held it so its DOM element/caret is dropped.
+        None => {
+            if let Some(p) = prev.take() {
+                browsers.set_focus(&p, false);
+            }
+        }
     }
 }
 
@@ -78,19 +89,26 @@ fn apply_webview_focus_win(
     focused: Res<FocusedWebview>,
     proxy: Res<BrowsersProxy>,
     webviews: Query<Entity, With<WebviewSource>>,
+    mut prev: Local<Option<Entity>>,
 ) {
     if !focused.is_changed() {
         return;
     }
-    // NOTE: a `None` focus must be a no-op, never a blur-all. `init_resource`
-    // marks the resource changed on the first frame; blurring every browser
-    // there would unfocus the bootstrap webview CEF auto-focused, leaving the
-    // app keyboard-dead until the first click.
-    let Some(target) = focused.0 else {
-        return;
-    };
-    for webview in webviews.iter() {
-        proxy.set_focus(&webview, webview == target);
+    match focused.0 {
+        Some(target) => {
+            for webview in webviews.iter() {
+                proxy.set_focus(&webview, webview == target);
+            }
+            *prev = Some(target);
+        }
+        // NOTE: blur ONLY the previously-focused webview, never blur-all (see
+        // the non-Windows variant for the first-frame rationale). A genuine
+        // Some→None transition releases CEF focus on the webview that held it.
+        None => {
+            if let Some(p) = prev.take() {
+                proxy.set_focus(&p, false);
+            }
+        }
     }
 }
 
