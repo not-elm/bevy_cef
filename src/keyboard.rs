@@ -120,8 +120,19 @@ fn send_key_event(
         }
         let key_events = create_cef_key_events(modifiers, &input, event);
         for key_event in key_events {
-            if let Some(webview) = target {
-                browsers.send_key(&webview, key_event.clone());
+            match target {
+                // An explicit focus wins: deliver only to that webview.
+                Some(webview) => browsers.send_key(&webview, key_event.clone()),
+                // No resolved focus (before the first click, or after the focused
+                // webview despawned): fall back to the CEF-focus-gated path so a
+                // browser CEF auto-focused at startup still receives keys. `send_key`
+                // only reaches browsers with a focused frame, so this scopes itself
+                // rather than truly broadcasting (see `src/focus.rs`).
+                None => {
+                    for webview in webviews.iter() {
+                        browsers.send_key(&webview, key_event.clone());
+                    }
+                }
             }
         }
     }
@@ -183,8 +194,19 @@ fn send_key_event_win(
         }
         let key_events = create_cef_key_events(modifiers, &input, event);
         for key_event in key_events {
-            if let Some(webview) = target {
-                proxy.send_key(&webview, key_event.clone());
+            match target {
+                // An explicit focus wins: deliver only to that webview.
+                Some(webview) => proxy.send_key(&webview, key_event.clone()),
+                // No resolved focus (before the first click, or after the focused
+                // webview despawned): fall back to the CEF-focus-gated path so a
+                // browser CEF auto-focused at startup still receives keys. `send_key`
+                // only reaches browsers with a focused frame, so this scopes itself
+                // rather than truly broadcasting (see `src/focus.rs`).
+                None => {
+                    for webview in webviews.iter() {
+                        proxy.send_key(&webview, key_event.clone());
+                    }
+                }
             }
         }
     }
