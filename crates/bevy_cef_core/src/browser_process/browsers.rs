@@ -212,6 +212,16 @@ impl Browsers {
         }
     }
 
+    /// Sets the CEF input focus state for a webview's browser.
+    ///
+    /// Uses a direct lookup (not `get_focused_browser`) because this is what
+    /// *grants* focus; gating on existing focus would make focusing impossible.
+    pub fn set_focus(&self, webview: &Entity, focused: bool) {
+        if let Some(browser) = self.browsers.get(webview) {
+            browser.host.set_focus(focused as _);
+        }
+    }
+
     pub fn emit_event(&self, webview: &Entity, id: impl Into<String>, event: &serde_json::Value) {
         if let Some(mut process_message) =
             process_message_create(Some(&PROCESS_MESSAGE_HOST_EMIT.into()))

@@ -5,6 +5,7 @@ use crate::common::{
 use crate::cursor_icon::SystemCursorIconSender;
 use crate::prelude::PreloadScripts;
 use crate::webview::mesh::MeshWebviewPlugin;
+use crate::webview::ui::UiWebviewPlugin;
 use bevy::ecs::lifecycle::HookContext;
 use bevy::ecs::world::DeferredWorld;
 use bevy::prelude::*;
@@ -22,12 +23,15 @@ use crate::common::CommandChannelReceiver;
 #[cfg(target_os = "windows")]
 use crate::common::TextureSenderRes;
 
+pub(crate) mod alpha;
 mod mesh;
+mod ui;
 pub(crate) mod webview_sprite;
 
 pub mod prelude {
     pub use crate::webview::{
         BeginFrameInterval, RequestCloseDevtool, RequestShowDevTool, WebviewPlugin, mesh::*,
+        ui::WebviewUiMaterial,
     };
 }
 
@@ -135,7 +139,7 @@ impl Plugin for WebviewPlugin {
         {
             app.init_non_send_resource::<Browsers>()
                 .init_resource::<BeginFrameInterval>()
-                .add_plugins((MeshWebviewPlugin,))
+                .add_plugins((MeshWebviewPlugin, UiWebviewPlugin))
                 .add_systems(Main, send_external_begin_frame)
                 .add_systems(
                     Update,
@@ -156,7 +160,7 @@ impl Plugin for WebviewPlugin {
         // Register conditional drain system that posts CefPostTask(TID_UI).
         #[cfg(target_os = "windows")]
         {
-            app.add_plugins((MeshWebviewPlugin,));
+            app.add_plugins((MeshWebviewPlugin, UiWebviewPlugin));
 
             // Initialise the thread-local BrowsersCefSide on the CEF UI thread
             // with the texture sender so that created browsers can deliver
