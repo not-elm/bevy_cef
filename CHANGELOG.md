@@ -3,6 +3,7 @@
 ### Bug Fixes
 
 - macOS (debug builds): fixed the crash-report dialog that appeared when force-terminating an example with Ctrl+C. `-[NSApplication terminate:]` is now swizzled to set an internal flag instead of posting `NSApplicationWillTerminateNotification`; a Bevy system in `Main` reads the flag and emits `AppExit::from_code(130)`, routing through the existing `cef_shutdown` path. This avoids the re-entrancy panic in winit's `applicationWillTerminate:` observer that previously produced SIGABRT. Gated behind `feature = "debug"`; release builds remain vulnerable to the same crash on Cmd-Q / Ctrl+C.
+- macOS / non-Windows: in-page DOM `keydown` events now fire. `create_cef_key_events` previously emitted only a `CHAR` event on key press off Windows, which delivered text input but never a DOM `keydown`, so page-side keyboard handlers and shortcuts never ran. A key press now emits a `RAWKEYDOWN` (which drives `keydown`) followed by `CHAR` for character keys, mirroring the native WM_KEYDOWN → WM_CHAR sequence already used on Windows. On macOS the key-down additionally carries `character` / `unmodified_character`, because CEF builds the native `NSEvent` from `native_key_code` + `character` and reclassifies a key event whose `character` and `unmodified_character` are both `0` as `NSFlagsChanged` — which never produces a `keydown`. The `CHAR` text-input path and Windows behavior are unchanged.
 
 ### Features
 

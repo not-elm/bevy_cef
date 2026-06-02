@@ -36,9 +36,12 @@ pub fn keyboard_modifiers(input: &ButtonInput<KeyCode>) -> u32 {
 
 /// Converts a Bevy `KeyboardInput` into one or more CEF key events.
 ///
-/// On Windows, character key presses produce two events (RAWKEYDOWN then CHAR)
-/// to match the native WM_KEYDOWN → WM_CHAR sequence. This ensures both DOM
-/// `keydown` and text input work correctly. All other cases produce a single event.
+/// A key press emits a `RAWKEYDOWN` — which drives the DOM `keydown` event — on
+/// every platform; a character-producing key additionally emits a following
+/// `CHAR` (which drives text input), mirroring the native WM_KEYDOWN → WM_CHAR
+/// sequence. A release emits a single `KEYUP`. Emitting only `CHAR` (the prior
+/// non-Windows behavior) delivered text input but never a DOM `keydown`, so
+/// in-page `keydown` handlers and keyboard shortcuts never fired off Windows.
 pub fn create_cef_key_events(
     modifiers: u32,
     _input: &ButtonInput<KeyCode>,
@@ -47,20 +50,10 @@ pub fn create_cef_key_events(
     let native_key_code = to_native_key_code(&key_event.key_code) as _;
     let vk_code = keycode_to_windows_vk(key_event.key_code);
 
-    let is_windows_char_key = cfg!(target_os = "windows")
-        && key_event.state == ButtonState::Pressed
-        && !is_not_character_key_code(&key_event.key_code);
-
-    if is_windows_char_key {
-        let character = key_event
-            .text
-            .as_ref()
-            .and_then(|text| text.chars().next())
-            .unwrap_or('\0') as u16;
-
-        let base = cef_key_event_t {
+    if key_event.state == ButtonState::Released {
+        return vec![cef::KeyEvent::from(cef_key_event_t {
             size: core::mem::size_of::<cef_key_event_t>(),
-            type_: cef_key_event_type_t::KEYEVENT_RAWKEYDOWN,
+            type_: cef_key_event_type_t::KEYEVENT_KEYUP,
             modifiers,
             windows_key_code: vk_code,
             native_key_code,
@@ -68,56 +61,58 @@ pub fn create_cef_key_events(
             unmodified_character: 0,
             is_system_key: false as _,
             focus_on_editable_field: false as _,
-        };
-
-        if character != 0 {
-            let char_event = cef_key_event_t {
-                type_: cef_key_event_type_t::KEYEVENT_CHAR,
-                windows_key_code: character as i32,
-                character,
-                unmodified_character: character,
-                ..base
-            };
-            vec![cef::KeyEvent::from(base), cef::KeyEvent::from(char_event)]
-        } else {
-            vec![cef::KeyEvent::from(base)]
-        }
-    } else {
-        let key_type = match key_event.state {
-            ButtonState::Pressed if cfg!(target_os = "windows") => {
-                cef_key_event_type_t::KEYEVENT_RAWKEYDOWN
-            }
-            ButtonState::Pressed => cef_key_event_type_t::KEYEVENT_CHAR,
-            ButtonState::Released => cef_key_event_type_t::KEYEVENT_KEYUP,
-        };
-        let character = if key_type == cef_key_event_type_t::KEYEVENT_CHAR {
-            key_event
-                .text
-                .as_ref()
-                .and_then(|text| text.chars().next())
-                .unwrap_or('\0') as u16
-        } else {
-            0
-        };
-        let windows_key_code =
-            if cfg!(target_os = "windows") && key_type == cef_key_event_type_t::KEYEVENT_CHAR {
-                character as i32
-            } else {
-                vk_code
-            };
-
-        vec![cef::KeyEvent::from(cef_key_event_t {
-            size: core::mem::size_of::<cef_key_event_t>(),
-            type_: key_type,
-            modifiers,
-            windows_key_code,
-            native_key_code,
-            character,
-            unmodified_character: character,
-            is_system_key: false as _,
-            focus_on_editable_field: false as _,
-        })]
+        })];
     }
+
+    let character = key_event
+        .text
+        .as_ref()
+        .and_then(|text| text.chars().next())
+        .unwrap_or('\0') as u16;
+
+    // NOTE: macOS builds the native key event from native_key_code + character
+    // and ignores windows_key_code; a RAWKEYDOWN whose character AND
+    // unmodified_character are both 0 is reclassified as NSFlagsChanged (a
+    // modifier-key change) and never dispatches a DOM `keydown`. So the macOS
+    // key-down MUST carry the character. Windows derives the down event from
+    // windows_key_code and keeps its character at 0 (the following CHAR carries
+    // it, mirroring the native WM_KEYDOWN → WM_CHAR sequence).
+    let key_down_character = if cfg!(target_os = "macos") { character } else { 0 };
+
+    let raw_key_down = cef_key_event_t {
+        size: core::mem::size_of::<cef_key_event_t>(),
+        type_: cef_key_event_type_t::KEYEVENT_RAWKEYDOWN,
+        modifiers,
+        windows_key_code: vk_code,
+        native_key_code,
+        character: key_down_character,
+        unmodified_character: key_down_character,
+        is_system_key: false as _,
+        focus_on_editable_field: false as _,
+    };
+
+    if is_not_character_key_code(&key_event.key_code) || character == 0 {
+        return vec![cef::KeyEvent::from(raw_key_down)];
+    }
+
+    // NOTE: the CHAR event keeps the prior per-platform windows_key_code
+    // (character on Windows, vk_code elsewhere) so existing text input is
+    // byte-for-byte unchanged; only the preceding RAWKEYDOWN is new.
+    let char_event = cef_key_event_t {
+        type_: cef_key_event_type_t::KEYEVENT_CHAR,
+        windows_key_code: if cfg!(target_os = "windows") {
+            character as i32
+        } else {
+            vk_code
+        },
+        character,
+        unmodified_character: character,
+        ..raw_key_down
+    };
+    vec![
+        cef::KeyEvent::from(raw_key_down),
+        cef::KeyEvent::from(char_event),
+    ]
 }
 
 fn is_not_character_key_code(keycode: &KeyCode) -> bool {
