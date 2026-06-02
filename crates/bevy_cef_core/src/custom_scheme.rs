@@ -108,65 +108,6 @@ impl CefSchemeResponse {
     }
 }
 
-/// Collapses any body variant into one `Read` source plus an optional known
-/// length, so `read()` has a single draining path.
-fn body_to_reader(body: CefSchemeBody) -> (Box<dyn Read + Send>, Option<u64>) {
-    match body {
-        CefSchemeBody::Empty => (Box::new(io::empty()), Some(0)),
-        CefSchemeBody::Bytes(data) => {
-            let len = data.len() as u64;
-            (Box::new(Cursor::new(data)), Some(len))
-        }
-        CefSchemeBody::Reader { reader, len } => (reader, len),
-    }
-}
-
-/// The materialized response for one in-flight request: headers metadata plus a
-/// single draining reader. Stored across the CEF `open → headers → read`
-/// callback sequence.
-struct ResponseState {
-    status: u16,
-    mime_type: String,
-    headers: Vec<(String, String)>,
-    reader: Box<dyn Read + Send>,
-    len: Option<u64>,
-}
-
-/// Runs `f` with unwinds caught at the FFI boundary, returning `None` on a
-/// caught panic after logging `context`. A panic that unwinds across the CEF
-/// `extern "C"` trampolines is UB, so every user-reachable callback path funnels
-/// through here. (Only effective under `panic = "unwind"`; under `panic = "abort"`
-/// the process aborts before this runs.)
-fn guard_ffi<T>(context: &str, f: impl FnOnce() -> T) -> Option<T> {
-    std::panic::catch_unwind(std::panic::AssertUnwindSafe(f))
-        .map_err(|_| cef_error!("panic caught at custom-scheme FFI boundary ({context})"))
-        .ok()
-}
-
-/// Calls the handler with the request, isolating panics: a caught panic in
-/// `handle()` becomes a 500 response (see [`guard_ffi`]).
-fn invoke_handler(
-    handler: &Arc<dyn CefSchemeHandler>,
-    request: &CefSchemeRequest,
-) -> ResponseState {
-    let response = guard_ffi("handler.handle", || handler.handle(request)).unwrap_or_else(|| {
-        CefSchemeResponse {
-            status: 500,
-            mime_type: "text/plain".to_string(),
-            headers: Vec::new(),
-            body: CefSchemeBody::Bytes(b"500 Internal Server Error".to_vec()),
-        }
-    });
-    let (reader, len) = body_to_reader(response.body);
-    ResponseState {
-        status: response.status,
-        mime_type: response.mime_type,
-        headers: response.headers,
-        reader,
-        len,
-    }
-}
-
 /// The request handed to a [`CefSchemeHandler`]. v1 carries only the URL;
 /// method/headers can be added later without breaking consumers (they only
 /// read `&CefSchemeRequest`).
@@ -218,16 +159,6 @@ impl From<&CefCustomScheme> for CefSchemeDecl {
     }
 }
 
-/// Parses the switch JSON into declarations, logging and yielding an empty
-/// vec on malformed input.
-#[cfg_attr(not(test), allow(dead_code))]
-fn parse_decls_json(json: &str) -> Vec<CefSchemeDecl> {
-    serde_json::from_str(json).unwrap_or_else(|e| {
-        cef_error!("failed to parse custom-scheme switch JSON: {}", e);
-        Vec::new()
-    })
-}
-
 /// Process-global set-once registry of custom schemes. Populated in the browser
 /// process by `CefPlugin::build` before CEF init; empty in the render
 /// subprocess (which reads declarations from the command line instead).
@@ -246,35 +177,6 @@ pub fn init_registered_schemes(schemes: Vec<CefCustomScheme>) {
 /// The custom schemes registered in this process (empty if none / not yet set).
 pub(crate) fn registered_schemes() -> &'static [CefCustomScheme] {
     REGISTERED.get().map(Vec::as_slice).unwrap_or(&[])
-}
-
-fn dedup_by_name(schemes: Vec<CefCustomScheme>) -> Vec<CefCustomScheme> {
-    let mut seen = std::collections::HashSet::new();
-    let mut out = Vec::new();
-    for scheme in schemes {
-        if seen.insert(scheme.name.clone()) {
-            out.push(scheme);
-        } else {
-            cef_warn!("duplicate custom scheme name ignored: {}", scheme.name);
-        }
-    }
-    out
-}
-
-/// Serializes declarations (name + flags) to JSON for the child-process switch.
-/// `None` when there are no schemes (so no switch is appended).
-fn decls_json_for(schemes: &[CefCustomScheme]) -> Option<String> {
-    if schemes.is_empty() {
-        return None;
-    }
-    let decls: Vec<CefSchemeDecl> = schemes.iter().map(CefSchemeDecl::from).collect();
-    match serde_json::to_string(&decls) {
-        Ok(json) => Some(json),
-        Err(e) => {
-            cef_error!("failed to serialize custom-scheme declarations: {e}");
-            None
-        }
-    }
 }
 
 /// JSON of the schemes registered in this (browser) process, for switch
@@ -552,6 +454,104 @@ wrap_resource_handler! {
                     *guard = None;
                 }
             });
+        }
+    }
+}
+
+/// The materialized response for one in-flight request: headers metadata plus a
+/// single draining reader. Stored across the CEF `open → headers → read`
+/// callback sequence.
+struct ResponseState {
+    status: u16,
+    mime_type: String,
+    headers: Vec<(String, String)>,
+    reader: Box<dyn Read + Send>,
+    len: Option<u64>,
+}
+
+/// Collapses any body variant into one `Read` source plus an optional known
+/// length, so `read()` has a single draining path.
+fn body_to_reader(body: CefSchemeBody) -> (Box<dyn Read + Send>, Option<u64>) {
+    match body {
+        CefSchemeBody::Empty => (Box::new(io::empty()), Some(0)),
+        CefSchemeBody::Bytes(data) => {
+            let len = data.len() as u64;
+            (Box::new(Cursor::new(data)), Some(len))
+        }
+        CefSchemeBody::Reader { reader, len } => (reader, len),
+    }
+}
+
+/// Runs `f` with unwinds caught at the FFI boundary, returning `None` on a
+/// caught panic after logging `context`. A panic that unwinds across the CEF
+/// `extern "C"` trampolines is UB, so every user-reachable callback path funnels
+/// through here. (Only effective under `panic = "unwind"`; under `panic = "abort"`
+/// the process aborts before this runs.)
+fn guard_ffi<T>(context: &str, f: impl FnOnce() -> T) -> Option<T> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(f))
+        .map_err(|_| cef_error!("panic caught at custom-scheme FFI boundary ({context})"))
+        .ok()
+}
+
+/// Calls the handler with the request, isolating panics: a caught panic in
+/// `handle()` becomes a 500 response (see [`guard_ffi`]).
+fn invoke_handler(
+    handler: &Arc<dyn CefSchemeHandler>,
+    request: &CefSchemeRequest,
+) -> ResponseState {
+    let response = guard_ffi("handler.handle", || handler.handle(request)).unwrap_or_else(|| {
+        CefSchemeResponse {
+            status: 500,
+            mime_type: "text/plain".to_string(),
+            headers: Vec::new(),
+            body: CefSchemeBody::Bytes(b"500 Internal Server Error".to_vec()),
+        }
+    });
+    let (reader, len) = body_to_reader(response.body);
+    ResponseState {
+        status: response.status,
+        mime_type: response.mime_type,
+        headers: response.headers,
+        reader,
+        len,
+    }
+}
+
+/// Parses the switch JSON into declarations, logging and yielding an empty
+/// vec on malformed input.
+#[cfg_attr(not(test), allow(dead_code))]
+fn parse_decls_json(json: &str) -> Vec<CefSchemeDecl> {
+    serde_json::from_str(json).unwrap_or_else(|e| {
+        cef_error!("failed to parse custom-scheme switch JSON: {}", e);
+        Vec::new()
+    })
+}
+
+fn dedup_by_name(schemes: Vec<CefCustomScheme>) -> Vec<CefCustomScheme> {
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for scheme in schemes {
+        if seen.insert(scheme.name.clone()) {
+            out.push(scheme);
+        } else {
+            cef_warn!("duplicate custom scheme name ignored: {}", scheme.name);
+        }
+    }
+    out
+}
+
+/// Serializes declarations (name + flags) to JSON for the child-process switch.
+/// `None` when there are no schemes (so no switch is appended).
+fn decls_json_for(schemes: &[CefCustomScheme]) -> Option<String> {
+    if schemes.is_empty() {
+        return None;
+    }
+    let decls: Vec<CefSchemeDecl> = schemes.iter().map(CefSchemeDecl::from).collect();
+    match serde_json::to_string(&decls) {
+        Ok(json) => Some(json),
+        Err(e) => {
+            cef_error!("failed to serialize custom-scheme declarations: {e}");
+            None
         }
     }
 }
