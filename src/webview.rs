@@ -5,6 +5,7 @@ use crate::common::{
 use crate::cursor_icon::SystemCursorIconSender;
 use crate::prelude::PreloadScripts;
 use crate::webview::mesh::MeshWebviewPlugin;
+use crate::webview::ui::UiWebviewPlugin;
 use bevy::ecs::lifecycle::HookContext;
 use bevy::ecs::world::DeferredWorld;
 use bevy::prelude::*;
@@ -136,8 +137,6 @@ impl Plugin for WebviewPlugin {
         // macOS/Linux: direct NonSend<Browsers>
         #[cfg(not(target_os = "windows"))]
         {
-            use crate::webview::ui::UiWebviewPlugin;
-
             app.init_non_send_resource::<Browsers>()
                 .init_resource::<BeginFrameInterval>()
                 .add_plugins((MeshWebviewPlugin, UiWebviewPlugin))
