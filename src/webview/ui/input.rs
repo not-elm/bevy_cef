@@ -75,6 +75,15 @@ fn ui_pos_to_dip(normalized: Vec2, computed_size: Vec2, inverse_scale_factor: f3
     (normalized + Vec2::splat(0.5)) * computed_size * inverse_scale_factor
 }
 
+/// Converts a `Pointer<Scroll>` delta into the pixel deltas CEF expects.
+/// Chromium's default line height is 3 lines × 40px = 120px per notch.
+fn scroll_delta(unit: MouseScrollUnit, x: f32, y: f32) -> Vec2 {
+    match unit {
+        MouseScrollUnit::Line => Vec2::new(x * 120.0, y * 120.0),
+        MouseScrollUnit::Pixel => Vec2::new(x, y),
+    }
+}
+
 /// Components every UI input handler reads off the observed webview node.
 type UiNode<'a> = (
     &'a RelativeCursorPosition,
@@ -180,11 +189,7 @@ fn on_ui_pointer_scroll(
     let Some(pos) = ui_pointer_pos(node, &images) else {
         return;
     };
-    let delta = match trigger.unit {
-        // CEF expects pixel deltas; Chromium default: 3 lines × 40px = 120px per notch
-        MouseScrollUnit::Line => Vec2::new(trigger.x * 120.0, trigger.y * 120.0),
-        MouseScrollUnit::Pixel => Vec2::new(trigger.x, trigger.y),
-    };
+    let delta = scroll_delta(trigger.unit, trigger.x, trigger.y);
     browsers.send_mouse_wheel(&trigger.entity, pos, delta);
 }
 
@@ -271,10 +276,7 @@ fn on_ui_pointer_scroll_win(
     let Some(pos) = ui_pointer_pos(node, &images) else {
         return;
     };
-    let delta = match trigger.unit {
-        MouseScrollUnit::Line => Vec2::new(trigger.x * 120.0, trigger.y * 120.0),
-        MouseScrollUnit::Pixel => Vec2::new(trigger.x, trigger.y),
-    };
+    let delta = scroll_delta(trigger.unit, trigger.x, trigger.y);
     proxy.send_mouse_wheel(&trigger.entity, pos, delta);
 }
 
