@@ -8,6 +8,7 @@
 //! callback is swallowed (best-effort defaults). No panic crosses the FFI
 //! boundary.
 
+use crate::macros::{cef_error, cef_warn};
 use crate::util::{CUSTOM_SCHEMES_SWITCH, IntoString, read_switch_json};
 use cef::rc::Rc;
 use cef::{
@@ -138,7 +139,7 @@ struct ResponseState {
 /// the process aborts before this runs.)
 fn guard_ffi<T>(context: &str, f: impl FnOnce() -> T) -> Option<T> {
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(f))
-        .map_err(|_| eprintln!("bevy_cef: panic caught at custom-scheme FFI boundary ({context})"))
+        .map_err(|_| cef_error!("panic caught at custom-scheme FFI boundary ({context})"))
         .ok()
 }
 
@@ -222,7 +223,7 @@ impl From<&CefCustomScheme> for CefSchemeDecl {
 #[cfg_attr(not(test), allow(dead_code))]
 fn parse_decls_json(json: &str) -> Vec<CefSchemeDecl> {
     serde_json::from_str(json).unwrap_or_else(|e| {
-        eprintln!("bevy_cef: failed to parse custom-scheme switch JSON: {}", e);
+        cef_error!("failed to parse custom-scheme switch JSON: {}", e);
         Vec::new()
     })
 }
@@ -238,9 +239,7 @@ static REGISTERED: OnceLock<Vec<CefCustomScheme>> = OnceLock::new();
 /// De-duplicates by name (first wins). Call before CEF initialization.
 pub fn init_registered_schemes(schemes: Vec<CefCustomScheme>) {
     if REGISTERED.set(dedup_by_name(schemes)).is_err() {
-        eprintln!(
-            "bevy_cef: init_registered_schemes called more than once; later custom schemes ignored"
-        );
+        cef_warn!("init_registered_schemes called more than once; later custom schemes ignored");
     }
 }
 
@@ -256,10 +255,7 @@ fn dedup_by_name(schemes: Vec<CefCustomScheme>) -> Vec<CefCustomScheme> {
         if seen.insert(scheme.name.clone()) {
             out.push(scheme);
         } else {
-            eprintln!(
-                "bevy_cef: duplicate custom scheme name ignored: {}",
-                scheme.name
-            );
+            cef_warn!("duplicate custom scheme name ignored: {}", scheme.name);
         }
     }
     out
@@ -275,7 +271,7 @@ fn decls_json_for(schemes: &[CefCustomScheme]) -> Option<String> {
     match serde_json::to_string(&decls) {
         Ok(json) => Some(json),
         Err(e) => {
-            eprintln!("bevy_cef: failed to serialize custom-scheme declarations: {e}");
+            cef_error!("failed to serialize custom-scheme declarations: {e}");
             None
         }
     }
@@ -316,8 +312,8 @@ pub(crate) fn register_custom_scheme_factories(context: &mut RequestContext) {
             Some(&mut make_factory(scheme.handler.clone())),
         );
         if ok == 0 {
-            eprintln!(
-                "bevy_cef: register_scheme_handler_factory failed for scheme '{}'",
+            cef_error!(
+                "register_scheme_handler_factory failed for scheme '{}'",
                 scheme.name
             );
         }
@@ -485,7 +481,7 @@ wrap_resource_handler! {
                     1
                 }
                 Some(Err(e)) => {
-                    eprintln!("bevy_cef: custom scheme skip failed: {e}");
+                    cef_error!("custom scheme skip failed: {e}");
                     *bytes_skipped = -2;
                     0
                 }
@@ -537,7 +533,7 @@ wrap_resource_handler! {
                     1
                 }
                 Some(Err(e)) => {
-                    eprintln!("bevy_cef: custom scheme read failed: {e}");
+                    cef_error!("custom scheme read failed: {e}");
                     // `bytes_read < 0` signals failure (ERR_FAILED); `bytes_read = 0`
                     // with return 0 would mean clean EOF and silently truncate.
                     *bytes_read = -2;
@@ -753,8 +749,7 @@ mod tests {
     #[test]
     fn skip_discards_bytes_and_leaves_remainder_readable() {
         let data = b"SKIP_MEremaining";
-        let (mut reader, _len) =
-            body_to_reader(CefSchemeBody::Bytes(data.to_vec()));
+        let (mut reader, _len) = body_to_reader(CefSchemeBody::Bytes(data.to_vec()));
         let skip_n = 7u64;
         let mut remaining = skip_n;
         let mut buf = [0u8; 4096];
@@ -781,8 +776,7 @@ mod tests {
 
     #[test]
     fn skip_zero_is_noop() {
-        let (mut reader, _len) =
-            body_to_reader(CefSchemeBody::Bytes(b"hello".to_vec()));
+        let (mut reader, _len) = body_to_reader(CefSchemeBody::Bytes(b"hello".to_vec()));
         let skip_n = 0u64;
         let mut remaining = skip_n;
         let mut buf = [0u8; 4096];

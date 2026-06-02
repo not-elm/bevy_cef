@@ -2,6 +2,7 @@ pub mod v8_accessor;
 mod v8_handler_wrapper;
 pub mod v8_interceptor;
 
+use crate::macros::cef_error;
 use crate::util::v8_accessor::V8DefaultAccessorBuilder;
 use crate::util::v8_interceptor::V8DefaultInterceptorBuilder;
 use cef::rc::ConvertParam;
@@ -141,9 +142,11 @@ pub fn read_switch_json<T: serde::de::DeserializeOwned>(switch: &str) -> Option<
     match serde_json::from_str::<T>(&json) {
         Ok(v) => Some(v),
         Err(e) => {
-            eprintln!(
-                "bevy_cef: failed to parse JSON for switch '--{}': {} (raw: {})",
-                switch, e, json
+            cef_error!(
+                "failed to parse JSON for switch '--{}': {} (raw: {})",
+                switch,
+                e,
+                json
             );
             None
         }
