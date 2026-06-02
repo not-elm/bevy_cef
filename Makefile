@@ -16,7 +16,7 @@ setup-macos:
 	brew install cmake ninja
 	cargo install export-cef-dir
 	export-cef-dir --force "$(HOME)/.local/share-dir@145.6.1+145.0.28"
-	cargo install bevy_cef_debug_render_process
+	cargo install --path crates/bevy_cef_debug_render_process
 	cp "$(HOME)/.cargo/bin/bevy_cef_debug_render_process" "$(HOME)/.local/share/Chromium Embedded Framework.framework/Libraries/bevy_cef_debug_render_process"
 
 setup-windows:
