@@ -2,14 +2,50 @@
 //! a custom response header, and renders it in a world-space webview. Mirrors
 //! `examples/inline_html.rs` plus a custom-scheme registration.
 
+use bevy::prelude::*;
+use bevy_cef::prelude::*;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use bevy::prelude::*;
-use bevy_cef::prelude::*;
+fn main() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let root = dir.path().to_path_buf();
+    fs::write(
+        root.join("index.html"),
+        r#"<!DOCTYPE html><html><body style="background:#222;color:#0f0;font-family:sans-serif">
+        <h1>Served via demo:// custom scheme</h1>
+        <p>Streamed from a temp file with Cache-Control: no-store.</p>
+        </body></html>"#,
+    )
+    .expect("write index.html");
+    std::mem::forget(dir);
 
-/// Serves `demo://app/<path>` from a directory seeded at startup.
+    App::new()
+        .add_plugins((
+            DefaultPlugins,
+            CefPlugin {
+                custom_schemes: vec![CefCustomScheme {
+                    name: "demo".to_string(),
+                    options: CefSchemeOptions::STANDARD
+                        | CefSchemeOptions::SECURE
+                        | CefSchemeOptions::CORS_ENABLED
+                        | CefSchemeOptions::FETCH_ENABLED
+                        | CefSchemeOptions::DISPLAY_ISOLATED,
+                    domain: None,
+                    handler: Arc::new(DemoHandler { root }),
+                }],
+                ..default()
+            },
+        ))
+        .add_systems(
+            Startup,
+            (spawn_camera, spawn_directional_light, spawn_webview),
+        )
+        .run();
+}
+
+/// serves `demo://app/<path>` from a directory seeded at startup.
 /// Note: minimal demo — a real handler should canonicalize the resolved
 /// path and verify it stays within `root`.
 struct DemoHandler {
@@ -42,46 +78,6 @@ impl CefSchemeHandler for DemoHandler {
             },
         }
     }
-}
-
-fn main() {
-    #[cfg(not(target_os = "macos"))]
-    bevy_cef::prelude::early_exit_if_subprocess();
-
-    // Seed a temp dir with an index.html the demo scheme will serve.
-    let dir = tempfile::tempdir().expect("temp dir");
-    let root = dir.path().to_path_buf();
-    fs::write(
-        root.join("index.html"),
-        r#"<!DOCTYPE html><html><body style="background:#222;color:#0f0;font-family:sans-serif">
-        <h1>Served via demo:// custom scheme</h1>
-        <p>Streamed from a temp file with Cache-Control: no-store.</p>
-        </body></html>"#,
-    )
-    .expect("write index.html");
-    // NOTE: The TempDir guard must outlive the process; leak it intentionally
-    // so the temp directory persists for the full run (CEF serves it lazily).
-    std::mem::forget(dir);
-
-    App::new()
-        .add_plugins((
-            DefaultPlugins,
-            CefPlugin {
-                custom_schemes: vec![CefCustomScheme {
-                    name: "demo".to_string(),
-                    options: CefSchemeOptions::STANDARD
-                        | CefSchemeOptions::SECURE
-                        | CefSchemeOptions::CORS_ENABLED
-                        | CefSchemeOptions::FETCH_ENABLED
-                        | CefSchemeOptions::DISPLAY_ISOLATED,
-                    domain: None,
-                    handler: Arc::new(DemoHandler { root }),
-                }],
-                ..default()
-            },
-        ))
-        .add_systems(Startup, (spawn_camera, spawn_directional_light, spawn_webview))
-        .run();
 }
 
 fn spawn_camera(mut commands: Commands) {
