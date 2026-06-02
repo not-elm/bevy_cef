@@ -7,6 +7,7 @@ use crate::webview::ui::input::WebviewUiInputPlugin;
 use crate::webview::ui::material::WEBVIEW_UI_SHADER_HANDLE;
 use bevy::asset::load_internal_asset;
 use bevy::prelude::*;
+use bevy::ui::UiSystems;
 use bevy_cef_core::prelude::RenderTextureMessage;
 
 mod input;
@@ -26,8 +27,8 @@ impl Plugin for UiWebviewPlugin {
             Shader::from_wgsl
         );
 
-        if !app.is_plugin_added::<bevy::ui::picking_backend::UiPickingPlugin>() {
-            app.add_plugins(bevy::ui::picking_backend::UiPickingPlugin);
+        if !app.is_plugin_added::<UiPickingPlugin>() {
+            app.add_plugins(UiPickingPlugin);
         }
 
         app.add_plugins((
@@ -38,7 +39,7 @@ impl Plugin for UiWebviewPlugin {
             PostUpdate,
             (
                 render_ui_surface.run_if(on_message::<RenderTextureMessage>),
-                update_webview_ui_size.after(bevy::ui::UiSystems::Layout),
+                update_webview_ui_size.after(UiSystems::Layout),
             ),
         );
     }

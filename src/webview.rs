@@ -136,9 +136,11 @@ impl Plugin for WebviewPlugin {
         // macOS/Linux: direct NonSend<Browsers>
         #[cfg(not(target_os = "windows"))]
         {
+            use crate::webview::ui::UiWebviewPlugin;
+
             app.init_non_send_resource::<Browsers>()
                 .init_resource::<BeginFrameInterval>()
-                .add_plugins((MeshWebviewPlugin, crate::webview::ui::UiWebviewPlugin))
+                .add_plugins((MeshWebviewPlugin, UiWebviewPlugin))
                 .add_systems(Main, send_external_begin_frame)
                 .add_systems(
                     Update,
