@@ -161,7 +161,7 @@ impl Plugin for WebviewPlugin {
         // Register conditional drain system that posts CefPostTask(TID_UI).
         #[cfg(target_os = "windows")]
         {
-            app.add_plugins((MeshWebviewPlugin, crate::webview::ui::UiWebviewPlugin));
+            app.add_plugins((MeshWebviewPlugin, UiWebviewPlugin));
 
             // Initialise the thread-local BrowsersCefSide on the CEF UI thread
             // with the texture sender so that created browsers can deliver
