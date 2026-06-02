@@ -1,25 +1,24 @@
-//! Registers a `demo://` custom scheme that streams a file from a temp dir with
-//! a custom response header, and renders it in a world-space webview. Mirrors
-//! `examples/inline_html.rs` plus a custom-scheme registration.
+//! Registers a `demo://` custom scheme that serves a file from an in-memory
+//! virtual file system (VFS) with a custom response header, and renders it in a
+//! world-space webview. Mirrors `examples/inline_html.rs` plus a custom-scheme
+//! registration.
 
 use bevy::prelude::*;
 use bevy_cef::prelude::*;
-use std::fs;
-use std::path::PathBuf;
+use std::collections::HashMap;
 use std::sync::Arc;
 
-fn main() {
-    let dir = tempfile::tempdir().expect("temp dir");
-    let root = dir.path().to_path_buf();
-    fs::write(
-        root.join("index.html"),
-        r#"<!DOCTYPE html><html><body style="background:#222;color:#0f0;font-family:sans-serif">
+const INDEX_HTML: &str = r#"<!DOCTYPE html>
+<html>
+    <body style="background:#222;color:#0f0;font-family:sans-serif">
         <h1>Served via demo:// custom scheme</h1>
-        <p>Streamed from a temp file with Cache-Control: no-store.</p>
-        </body></html>"#,
-    )
-    .expect("write index.html");
-    std::mem::forget(dir);
+        <p>Served from an in-memory VFS with Cache-Control: no-store.</p>
+    </body>
+</html>"#;
+
+fn main() {
+    let mut vfs = Vfs::new();
+    vfs.insert("index.html", "text/html", INDEX_HTML);
 
     App::new()
         .add_plugins((
@@ -33,7 +32,7 @@ fn main() {
                         | CefSchemeOptions::FETCH_ENABLED
                         | CefSchemeOptions::DISPLAY_ISOLATED,
                     domain: None,
-                    handler: Arc::new(DemoHandler { root }),
+                    handler: Arc::new(DemoHandler { vfs }),
                 }],
                 ..default()
             },
@@ -45,11 +44,30 @@ fn main() {
         .run();
 }
 
-/// serves `demo://app/<path>` from a directory seeded at startup.
-/// Note: minimal demo — a real handler should canonicalize the resolved
-/// path and verify it stays within `root`.
+/// Tiny in-memory virtual file system: maps request paths to `(MIME, bytes)`.
+#[derive(Default)]
+struct Vfs(HashMap<String, (String, Vec<u8>)>);
+
+impl Vfs {
+    fn new() -> Self {
+        Self::default()
+    }
+
+    fn insert(&mut self, path: &str, mime: &str, bytes: impl Into<Vec<u8>>) {
+        self.0
+            .insert(path.to_string(), (mime.to_string(), bytes.into()));
+    }
+
+    fn get(&self, path: &str) -> Option<&(String, Vec<u8>)> {
+        self.0.get(path)
+    }
+}
+
+/// Serves `demo://app/<path>` from an in-memory [`Vfs`] seeded at startup.
+/// Lookups are exact `HashMap` keys (no disk path join), so there is no
+/// path-traversal concern.
 struct DemoHandler {
-    root: PathBuf,
+    vfs: Vfs,
 }
 
 impl CefSchemeHandler for DemoHandler {
@@ -59,23 +77,14 @@ impl CefSchemeHandler for DemoHandler {
             .strip_prefix("demo://app/")
             .filter(|s| !s.is_empty())
             .unwrap_or("index.html");
-        let path = self.root.join(rel);
-        let Ok(file) = fs::File::open(&path) else {
+        let Some((mime, bytes)) = self.vfs.get(rel) else {
             return CefSchemeResponse::not_found();
         };
-        let len = file.metadata().ok().map(|m| m.len());
-        let mime = mime_guess::from_path(&path)
-            .first_or_octet_stream()
-            .essence_str()
-            .to_string();
         CefSchemeResponse {
             status: 200,
-            mime_type: mime,
+            mime_type: mime.clone(),
             headers: vec![("Cache-Control".to_string(), "no-store".to_string())],
-            body: CefSchemeBody::Reader {
-                reader: Box::new(file),
-                len,
-            },
+            body: CefSchemeBody::Bytes(bytes.clone()),
         }
     }
 }

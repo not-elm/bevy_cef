@@ -58,8 +58,6 @@ bevy = { workspace = true, default-features = true, features = [
     "file_watcher",
 ] }
 bevy_cef = { path = ".", features = ["debug"] }
-mime_guess = "2"
-tempfile = "3"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = { version = "0.2" }
