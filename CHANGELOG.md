@@ -7,6 +7,7 @@
 ### Features
 
 - Support custom scheme handlers.
+- Support Linux.
 
 ## v0.8.1
 
