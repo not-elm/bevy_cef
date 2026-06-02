@@ -5,6 +5,8 @@
 use crate::prelude::{WebviewSize, WebviewSource, WebviewSurface};
 use crate::webview::alpha::is_pixel_transparent;
 use crate::webview::ui::material::WebviewUiMaterial;
+use bevy::ecs::lifecycle::HookContext;
+use bevy::ecs::world::DeferredWorld;
 use bevy::input::mouse::MouseScrollUnit;
 use bevy::picking::events::Scroll;
 use bevy::prelude::*;
@@ -14,58 +16,35 @@ use bevy_cef_core::prelude::Browsers;
 #[cfg(target_os = "windows")]
 use bevy_cef_core::prelude::BrowsersProxy;
 
-/// Attaches the UI input observers (and a `RelativeCursorPosition`) to each UI
-/// webview node so the user only needs to spawn
-/// `MaterialNode<WebviewUiMaterial> + WebviewSource`.
-///
-/// Fires in whichever frame the second of the two defining components arrives,
-/// so a node that gains `WebviewSource` and `MaterialNode<WebviewUiMaterial>` on
-/// different frames is still wired exactly once.
-#[cfg(not(target_os = "windows"))]
-pub(super) fn setup_ui_observers(
-    mut commands: Commands,
-    webviews: Query<
-        Entity,
-        (
-            Or<(Added<WebviewSource>, Added<MaterialNode<WebviewUiMaterial>>)>,
-            With<WebviewSource>,
-            With<MaterialNode<WebviewUiMaterial>>,
-        ),
-    >,
-) {
-    for entity in webviews.iter() {
-        commands
-            .entity(entity)
-            .insert(RelativeCursorPosition::default())
-            .observe(on_ui_pointer_move)
-            .observe(on_ui_pointer_pressed)
-            .observe(on_ui_pointer_released)
-            .observe(on_ui_pointer_scroll);
+pub struct WebviewUiInputPlugin;
+
+impl Plugin for WebviewUiInputPlugin {
+    fn build(&self, app: &mut App) {
+        app.world_mut()
+            .register_component_hooks::<MaterialNode<WebviewUiMaterial>>()
+            .on_add(setup_ui_observers);
     }
 }
 
-/// Windows variant of `setup_ui_observers` attaching the proxy-based observers.
-#[cfg(target_os = "windows")]
-pub(super) fn setup_ui_observers_win(
-    mut commands: Commands,
-    webviews: Query<
-        Entity,
-        (
-            Or<(Added<WebviewSource>, Added<MaterialNode<WebviewUiMaterial>>)>,
-            With<WebviewSource>,
-            With<MaterialNode<WebviewUiMaterial>>,
-        ),
-    >,
-) {
-    for entity in webviews.iter() {
-        commands
-            .entity(entity)
-            .insert(RelativeCursorPosition::default())
-            .observe(on_ui_pointer_move_win)
-            .observe(on_ui_pointer_pressed_win)
-            .observe(on_ui_pointer_released_win)
-            .observe(on_ui_pointer_scroll_win);
+/// `on_add` hook for `MaterialNode<WebviewUiMaterial>`: attaches a
+/// `RelativeCursorPosition` and the four pointer observers to a UI webview node,
+/// so the user only needs to spawn `MaterialNode<WebviewUiMaterial> + WebviewSource`.
+///
+/// Skips nodes that lack `WebviewSource` (a bare material node is not a webview).
+/// `on_add` fires once per insertion, so each node is wired exactly once. The
+/// platform split lives in the observer functions, not here.
+fn setup_ui_observers(mut world: DeferredWorld, ctx: HookContext) {
+    if world.get::<WebviewSource>(ctx.entity).is_none() {
+        return;
     }
+    world
+        .commands()
+        .entity(ctx.entity)
+        .insert(RelativeCursorPosition::default())
+        .observe(on_ui_pointer_move)
+        .observe(on_ui_pointer_pressed)
+        .observe(on_ui_pointer_released)
+        .observe(on_ui_pointer_scroll);
 }
 
 /// Converts a center-origin `RelativeCursorPosition.normalized` (`(0,0)` center,
@@ -194,7 +173,7 @@ fn on_ui_pointer_scroll(
 }
 
 #[cfg(target_os = "windows")]
-fn on_ui_pointer_move_win(
+fn on_ui_pointer_move(
     trigger: On<Pointer<Move>>,
     input: Res<ButtonInput<MouseButton>>,
     proxy: Res<BrowsersProxy>,
@@ -217,7 +196,7 @@ fn on_ui_pointer_move_win(
 }
 
 #[cfg(target_os = "windows")]
-fn on_ui_pointer_pressed_win(
+fn on_ui_pointer_pressed(
     trigger: On<Pointer<Press>>,
     proxy: Res<BrowsersProxy>,
     nodes: Query<UiNode, With<MaterialNode<WebviewUiMaterial>>>,
@@ -238,7 +217,7 @@ fn on_ui_pointer_pressed_win(
 }
 
 #[cfg(target_os = "windows")]
-fn on_ui_pointer_released_win(
+fn on_ui_pointer_released(
     trigger: On<Pointer<Release>>,
     proxy: Res<BrowsersProxy>,
     nodes: Query<UiNode, With<MaterialNode<WebviewUiMaterial>>>,
@@ -259,7 +238,7 @@ fn on_ui_pointer_released_win(
 }
 
 #[cfg(target_os = "windows")]
-fn on_ui_pointer_scroll_win(
+fn on_ui_pointer_scroll(
     trigger: On<Pointer<Scroll>>,
     proxy: Res<BrowsersProxy>,
     nodes: Query<UiNode, With<MaterialNode<WebviewUiMaterial>>>,

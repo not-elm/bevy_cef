@@ -3,6 +3,7 @@
 use crate::prelude::{
     WebviewDpr, WebviewSize, WebviewSource, WebviewSurface, update_webview_image,
 };
+use crate::webview::ui::input::WebviewUiInputPlugin;
 use crate::webview::ui::material::WEBVIEW_UI_SHADER_HANDLE;
 use bevy::asset::load_internal_asset;
 use bevy::prelude::*;
@@ -29,20 +30,17 @@ impl Plugin for UiWebviewPlugin {
             app.add_plugins(bevy::ui::picking_backend::UiPickingPlugin);
         }
 
-        app.add_plugins(UiMaterialPlugin::<WebviewUiMaterial>::default())
-            .add_systems(
-                PostUpdate,
-                (
-                    render_ui_surface.run_if(on_message::<RenderTextureMessage>),
-                    update_webview_ui_size.after(bevy::ui::UiSystems::Layout),
-                ),
-            );
-
-        #[cfg(not(target_os = "windows"))]
-        app.add_systems(Update, input::setup_ui_observers);
-
-        #[cfg(target_os = "windows")]
-        app.add_systems(Update, input::setup_ui_observers_win);
+        app.add_plugins((
+            UiMaterialPlugin::<WebviewUiMaterial>::default(),
+            WebviewUiInputPlugin,
+        ))
+        .add_systems(
+            PostUpdate,
+            (
+                render_ui_surface.run_if(on_message::<RenderTextureMessage>),
+                update_webview_ui_size.after(bevy::ui::UiSystems::Layout),
+            ),
+        );
     }
 }
 
