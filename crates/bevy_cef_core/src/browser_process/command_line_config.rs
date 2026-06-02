@@ -10,7 +10,7 @@
 /// # Example
 ///
 /// ```no_run
-/// use bevy_cef::prelude::*;
+/// use bevy_cef_core::prelude::*;
 ///
 /// // Add switches while preserving defaults (recommended)
 /// let config = CommandLineConfig::default()

@@ -22,18 +22,21 @@ use crate::prelude::{IpcPlugin, NavigationPlugin, WebviewPlugin};
 use crate::resize::plugin::ResizePlugin;
 use crate::zoom::ZoomPlugin;
 use bevy::prelude::*;
-use bevy_cef_core::prelude::{CefExtensions, CommandLineConfig};
+use bevy_cef_core::prelude::{CefCustomScheme, CefExtensions, CommandLineConfig};
 use bevy_remote::RemotePlugin;
 
 pub mod prelude {
     pub use crate::resize::components::{AspectLockMode, WebviewResizable};
     pub use crate::{CefPlugin, RunOnMainThread, common::*, navigation::*, webview::prelude::*};
-    pub use bevy_cef_core::prelude::{CefExtensions, CommandLineConfig};
+    pub use bevy_cef_core::prelude::{
+        CefCustomScheme, CefExtensions, CefSchemeBody, CefSchemeHandler, CefSchemeOptions,
+        CefSchemeRequest, CefSchemeResponse, CommandLineConfig,
+    };
 }
 
 pub struct RunOnMainThread;
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct CefPlugin {
     pub command_line_config: CommandLineConfig,
     pub extensions: CefExtensions,
@@ -41,10 +44,17 @@ pub struct CefPlugin {
     /// If empty, defaults to the executable's directory.
     /// Should be set to a user-writable path (e.g. `~/.myapp/cef_data`).
     pub root_cache_path: Option<String>,
+    /// Custom URL schemes to register in addition to the built-in
+    /// `cef://localhost/`. Each carries a handler that services requests.
+    pub custom_schemes: Vec<CefCustomScheme>,
 }
 
 impl Plugin for CefPlugin {
     fn build(&self, app: &mut App) {
+        // NOTE: Must run before MessageLoopPlugin::build, which calls cef_initialize.
+        // CEF's OnRegisterCustomSchemes fires during initialize; schemes registered
+        // afterward are silently ignored.
+        bevy_cef_core::prelude::init_registered_schemes(self.custom_schemes.clone());
         app.add_plugins((
             LocalHostPlugin,
             MessageLoopPlugin {

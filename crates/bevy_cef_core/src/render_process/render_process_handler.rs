@@ -1,17 +1,17 @@
+use crate::macros::cef_error;
 use crate::prelude::{EXTENSIONS_SWITCH, IntoString};
 use crate::render_process::cef_api_handler::CefApiHandler;
-use crate::util::json_to_v8;
 use crate::util::v8_accessor::V8DefaultAccessorBuilder;
 use crate::util::v8_interceptor::V8DefaultInterceptorBuilder;
+use crate::util::{json_to_v8, read_switch_json};
 use bevy::platform::collections::HashMap;
 use bevy_remote::BrpResult;
 use cef::rc::{Rc, RcImpl};
 use cef::{
-    Browser, CefString, DictionaryValue, Frame, ImplBrowser, ImplCommandLine, ImplDictionaryValue,
-    ImplFrame, ImplListValue, ImplProcessMessage, ImplRenderProcessHandler, ImplV8Context,
-    ImplV8Exception, ImplV8Value, ProcessId, ProcessMessage, V8Context, V8Handler, V8Value,
-    WrapRenderProcessHandler, command_line_get_global, register_extension, sys,
-    v8_value_create_object,
+    Browser, CefString, DictionaryValue, Frame, ImplBrowser, ImplDictionaryValue, ImplFrame,
+    ImplListValue, ImplProcessMessage, ImplRenderProcessHandler, ImplV8Context, ImplV8Exception,
+    ImplV8Value, ProcessId, ProcessMessage, V8Context, V8Handler, V8Value,
+    WrapRenderProcessHandler, register_extension, sys, v8_value_create_object,
 };
 use std::collections::HashMap as StdHashMap;
 use std::os::raw::c_int;
@@ -181,14 +181,14 @@ fn inject_initialize_scripts(browser: &mut Browser, context: &mut V8Context, fra
         );
         if result == 0 {
             if let Some(ex) = exception {
-                eprintln!(
-                    "bevy_cef: eval failed - message: {}, line: {}, column: {}",
+                cef_error!(
+                    "eval failed - message: {}, line: {}, column: {}",
                     ex.message().into_string(),
                     ex.line_number(),
                     ex.start_column(),
                 );
             } else {
-                eprintln!("bevy_cef: eval failed with no exception details");
+                cef_error!("eval failed with no exception details");
             }
         }
         context.exit();
@@ -281,24 +281,9 @@ fn handle_listen_message(
 }
 
 fn register_extensions_from_command_line() {
-    let Some(cmd_line) = command_line_get_global() else {
+    let Some(extensions) = read_switch_json::<StdHashMap<String, String>>(EXTENSIONS_SWITCH) else {
         return;
     };
-    if cmd_line.has_switch(Some(&EXTENSIONS_SWITCH.into())) == 0 {
-        return;
-    }
-    let json = cmd_line
-        .switch_value(Some(&EXTENSIONS_SWITCH.into()))
-        .into_string();
-    if json.is_empty() {
-        return;
-    }
-
-    let Ok(extensions) = serde_json::from_str::<StdHashMap<String, String>>(&json) else {
-        eprintln!("bevy_cef: failed to parse extensions JSON: {}", json);
-        return;
-    };
-
     for (name, code) in extensions {
         let full_name = format!("v8/{}", name);
         register_extension(

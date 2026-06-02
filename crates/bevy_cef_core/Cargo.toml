@@ -23,7 +23,15 @@ raw-window-handle = { workspace = true }
 
 [features]
 default = ["browser"]
-debug = []
+# Development marker. Also enables `log` so the debug render-process binary
+# (`bevy_cef_debug_render_process`, which builds this crate with
+# `features = ["debug"]`) emits the same diagnostics the browser process does.
+debug = ["log"]
+# Routes the crate's internal diagnostics through `bevy::log`: gates the
+# `cef_error!`/`cef_warn!` wrapper macros and pulls in `bevy/bevy_log` so the
+# macros resolve even in a render-process build (which otherwise omits the
+# renderer features). Off by default — the macros then compile to no-ops.
+log = ["bevy/bevy_log"]
 # Enables the browser-process side of the integration: webview lifecycle,
 # materials, input handling, asset scheme, etc. Pulls in the Bevy renderer
 # features needed by that code. Disable this for the render-process subprocess

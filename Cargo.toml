@@ -70,4 +70,5 @@ unexpected_cfgs = { level = "warn", check-cfg = [
 [features]
 default = []
 serialize = ["bevy/serialize"]
-debug = ["bevy_cef_core/debug"]
+debug = ["bevy_cef_core/debug", "log"]
+log = ["bevy_cef_core/log"]

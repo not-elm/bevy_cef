@@ -502,6 +502,7 @@ impl Browsers {
                 Some(&HOST_CEF.into()),
                 Some(&mut LocalSchemaHandlerBuilder::build(requester)),
             );
+            crate::custom_scheme::register_custom_scheme_factories(context);
         }
         context
     }

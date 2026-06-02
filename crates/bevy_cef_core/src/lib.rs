@@ -3,6 +3,8 @@ mod browser_process;
 #[cfg(target_os = "macos")]
 mod debug;
 
+pub mod custom_scheme;
+mod macros;
 mod render_process;
 mod util;
 
@@ -19,6 +21,10 @@ pub mod prelude {
     pub use crate::browser_process::drag_handler::DraggableRegionSenderInner;
     #[cfg(feature = "browser")]
     pub use crate::browser_process::*;
+    pub use crate::custom_scheme::{
+        CefCustomScheme, CefSchemeBody, CefSchemeHandler, CefSchemeOptions, CefSchemeRequest,
+        CefSchemeResponse, init_registered_schemes,
+    };
     #[cfg(target_os = "macos")]
     pub use crate::debug::*;
     pub use crate::render_process::app::*;

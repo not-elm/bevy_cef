@@ -4,6 +4,10 @@
 
 - macOS (debug builds): fixed the crash-report dialog that appeared when force-terminating an example with Ctrl+C. `-[NSApplication terminate:]` is now swizzled to set an internal flag instead of posting `NSApplicationWillTerminateNotification`; a Bevy system in `Main` reads the flag and emits `AppExit::from_code(130)`, routing through the existing `cef_shutdown` path. This avoids the re-entrancy panic in winit's `applicationWillTerminate:` observer that previously produced SIGABRT. Gated behind `feature = "debug"`; release builds remain vulnerable to the same crash on Cmd-Q / Ctrl+C.
 
+### Features
+
+- Support custom scheme handlers.
+
 ## v0.8.1
 
 ### Features

@@ -1,3 +1,4 @@
+use crate::macros::cef_error;
 use cef::{load_library, unload_library};
 use std::env::home_dir;
 
@@ -45,7 +46,7 @@ impl DebugLibraryLoader {
 impl Drop for DebugLibraryLoader {
     fn drop(&mut self) {
         if unload_library() != 1 {
-            eprintln!("cannot unload framework {}", self.path.display());
+            cef_error!("cannot unload framework {}", self.path.display());
         }
     }
 }
