@@ -21,13 +21,15 @@ fn spawn_camera(mut commands: Commands) {
 }
 
 fn spawn_ui(mut commands: Commands, mut materials: ResMut<Assets<WebviewUiMaterial>>) {
-    const PAGE: &str = r#"<!DOCTYPE html><html><body
-        style="margin:0;background:#222;color:#0f0;font-family:sans-serif;height:1500px">
-        <h2>Type here, then scroll</h2>
-        <input style="font-size:20px;width:80%" placeholder="focus me and type" />
-        <p>Scroll down — this page is tall.</p>
-        <div style="margin-top:1200px">Bottom of page.</div>
-        </body></html>"#;
+    const PAGE: &str = r#"<!DOCTYPE html>
+    <html>
+        <body style="margin:0;background:#222;color:#0f0;font-family:sans-serif;height:1500px">
+            <h2>Type here, then scroll</h2>
+            <input style="font-size:20px;width:80%" placeholder="focus me and type" />
+            <p>Scroll down — this page is tall.</p>
+            <div style="margin-top:1200px">Bottom of page.</div>
+        </body>
+    </html>"#;
 
     commands
         .spawn(Node {
