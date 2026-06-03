@@ -4,7 +4,7 @@
 //! - [KeyboardCodes](https://chromium.googlesource.com/external/Webkit/+/safari-4-branch/WebCore/platform/KeyboardCodes.h)
 
 use bevy::input::ButtonState;
-use bevy::input::keyboard::KeyboardInput;
+use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::prelude::{ButtonInput, KeyCode};
 use cef_dll_sys::{cef_event_flags_t, cef_key_event_t, cef_key_event_type_t};
 
@@ -66,8 +66,24 @@ pub fn create_cef_key_events(
     };
 
     if key_event.state == ButtonState::Released {
+        // NOTE: like the key-down, a macOS KEYUP whose character AND
+        // unmodified_character are both 0 is reclassified as NSFlagsChanged, so
+        // the release is never seen — the key stays "stuck down" and Blink drops
+        // the next same-key press as a duplicate, breaking consecutive presses
+        // (e.g. `gg`). winit leaves `text` None on release, so the character is
+        // derived from `logical_key` here.
+        let up_character = if cfg!(target_os = "macos") {
+            match &key_event.logical_key {
+                Key::Character(s) => s.chars().next().unwrap_or('\0') as u16,
+                _ => 0,
+            }
+        } else {
+            0
+        };
         return vec![cef::KeyEvent::from(cef_key_event_t {
             type_: cef_key_event_type_t::KEYEVENT_KEYUP,
+            character: up_character,
+            unmodified_character: up_character,
             ..base
         })];
     }
