@@ -264,11 +264,74 @@ impl ImplRenderHandler for RenderHandlerBuilder {
     fn on_accelerated_paint(
         &self,
         _browser: Option<&mut Browser>,
-        _type_: PaintElementType,
+        type_: PaintElementType,
         _dirty_rects: Option<&[cef::Rect]>,
-        _info: Option<&AcceleratedPaintInfo>,
+        info: Option<&AcceleratedPaintInfo>,
     ) {
-        // Implemented in a later task (macOS GPU OSR).
+        // MVP: handle the main view only; popups are out of scope for now.
+        #[cfg(target_os = "macos")]
+        {
+            if !matches!(type_.as_ref(), cef_paint_element_type_t::PET_VIEW) {
+                return;
+            }
+            let Some(info) = info else { return };
+            if info.shared_texture_io_surface.is_null() {
+                return;
+            }
+            let width = info.extra.coded_size.width as u32;
+            let height = info.extra.coded_size.height as u32;
+            if width == 0 || height == 0 {
+                return;
+            }
+
+            // 1) Import the IOSurface into a transient wgpu texture (used ONLY in this callback).
+            // Use Bgra8UnormSrgb to match the owned surface format so the blit is a same-format copy.
+            let imported = unsafe {
+                crate::browser_process::accelerated_paint::import_iosurface_to_wgpu(
+                    self.render_device.wgpu_device(),
+                    info.shared_texture_io_surface,
+                    width,
+                    height,
+                    wgpu::TextureFormat::Bgra8UnormSrgb,
+                )
+            };
+            let Some(imported) = imported else {
+                bevy::log::error!(
+                    "macOS GPU OSR: IOSurface import failed ({width}x{height})"
+                );
+                return;
+            };
+
+            // 2) Ensure the owned destination surface exists at the right size, then blit + submit.
+            {
+                let mut slot = self.gpu_surface.borrow_mut();
+                let surface = slot.get_or_insert_with(|| {
+                    crate::browser_process::accelerated_paint::WebviewGpuSurface::new(
+                        &self.render_device,
+                        width,
+                        height,
+                    )
+                });
+                surface.ensure_size(&self.render_device, width, height);
+
+                let mut encoder =
+                    self.render_device
+                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                            label: Some("webview-osr-blit"),
+                        });
+                surface.blit_from(&mut encoder, &imported);
+                self.render_queue.submit(std::iter::once(encoder.finish()));
+            }
+
+            // 3) Signal the main-world drain system that a fresh frame is ready.
+            self.gpu_dirty.set(true);
+
+            // `imported` drops here — the IOSurface-derived texture never escapes the callback.
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = (type_, info);
+        }
     }
 
     #[inline]
