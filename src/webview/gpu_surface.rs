@@ -47,9 +47,9 @@ use bevy::render::{
     erased_render_asset::prepare_erased_assets,
     render_asset::{RenderAssets, prepare_assets},
     render_graph::{Node, NodeRunError, RenderGraph, RenderGraphContext, RenderLabel},
-    render_resource::{Extent3d, Sampler, SamplerDescriptor, Texture, TextureFormat},
+    render_resource::{Extent3d, Texture, TextureFormat},
     renderer::{RenderContext, RenderDevice},
-    texture::GpuImage,
+    texture::{DefaultImageSampler, GpuImage},
 };
 use bevy::ui_render::PreparedUiMaterial;
 use bevy_cef_core::prelude::{Browsers, RetainedIoSurface, WebviewGpuSurface};
@@ -361,7 +361,7 @@ fn inject_webview_gpu_images(
     render_device: Res<RenderDevice>,
     mut surfaces: ResMut<WebviewGpuSurfaces>,
     mut gpu_images: ResMut<RenderAssets<GpuImage>>,
-    mut sampler: Local<Option<Sampler>>,
+    default_sampler: Res<DefaultImageSampler>,
 ) {
     if extracted.0.is_empty() {
         return;
@@ -382,9 +382,11 @@ fn inject_webview_gpu_images(
         }
     }
 
-    let sampler = sampler
-        .get_or_insert_with(|| render_device.create_sampler(&SamplerDescriptor::default()))
-        .clone();
+    // Use Bevy's configured default image sampler (linear filtering via
+    // `ImagePlugin::default()`), matching how normal `Image`s are sampled.
+    // Creating our own `SamplerDescriptor::default()` would use NEAREST filtering,
+    // which makes the minified webview texture look rough/aliased.
+    let sampler = (**default_sampler).clone();
 
     for (id, surface) in surfaces.0.iter() {
         let gpu_image = GpuImage {
