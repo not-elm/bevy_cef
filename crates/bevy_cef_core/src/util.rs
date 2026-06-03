@@ -44,6 +44,7 @@ pub fn debug_chromium_embedded_framework_dir_path() -> PathBuf {
         .unwrap()
         .join(".local")
         .join("share")
+        .join("cef")
         .join("Chromium Embedded Framework.framework")
 }
 

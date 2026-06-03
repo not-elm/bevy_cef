@@ -55,7 +55,7 @@ struct Args {
 fn default_cef_framework_path() -> PathBuf {
     home_dir()
         .unwrap_or_default()
-        .join(".local/share/Chromium Embedded Framework.framework")
+        .join(".local/share/cef/Chromium Embedded Framework.framework")
 }
 
 #[allow(deprecated)]

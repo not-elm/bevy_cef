@@ -1,3 +1,9 @@
+## v0.10.0
+
+### Breaking Changes
+
+- macOS (debug builds): the local CEF framework now lives under `$HOME/.local/share/cef/` instead of directly in `$HOME/.local/share/`, matching the Windows/Linux layout. The previously documented setup command `export-cef-dir --force $HOME/.local/share` was destructive: `export-cef-dir --force` renames the target directory to `old_<name>` and then `remove_dir_all`s it, so pointing it at the shared XDG data directory wiped unrelated data (e.g. `~/.local/share/nvim`). The runtime framework loader (`DebugLibraryLoader`), the `debug_chromium_embedded_framework_dir_path` / `debug_render_process_path` helpers, `bevy_cef_bundle_app`'s default framework path, the `Makefile`, and the docs all now use `$HOME/.local/share/cef/Chromium Embedded Framework.framework`. **Migration:** re-run the macOS setup (`make setup-macos`, or `export-cef-dir --force $HOME/.local/share/cef` followed by copying the debug render process into `.../cef/Chromium Embedded Framework.framework/Libraries/`), or move your existing framework into the new `cef/` subdirectory.
+
 ## v0.9.1
 
 ### Bug Fixes

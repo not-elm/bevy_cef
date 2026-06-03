@@ -17,7 +17,7 @@ bevy_cef tracks Bevy's release cycle. Each bevy_cef version targets a specific B
 
 ### `debug`
 
-Enables the debug render process for **macOS development**. When active, bevy_cef links against the local CEF framework at `$HOME/.local/share/Chromium Embedded Framework.framework` and uses the `bevy_cef_debug_render_process` binary. This allows faster iteration without building a full release bundle.
+Enables the debug render process for **macOS development**. When active, bevy_cef links against the local CEF framework at `$HOME/.local/share/cef/Chromium Embedded Framework.framework` and uses the `bevy_cef_debug_render_process` binary. This allows faster iteration without building a full release bundle.
 
 This feature is macOS-only and should not be enabled for release builds or on Windows.
 
@@ -37,7 +37,7 @@ cargo build --features serialize
 
 | Platform | Status | Notes |
 |----------|--------|-------|
-| macOS    | Fully supported | CEF framework at `$HOME/.local/share/Chromium Embedded Framework.framework`. Uses `objc` crate for native window integration. |
+| macOS    | Fully supported | CEF framework at `$HOME/.local/share/cef/Chromium Embedded Framework.framework`. Uses `objc` crate for native window integration. |
 | Windows  | Fully supported | CEF at `$USERPROFILE/.local/share/cef`. Build script auto-copies DLLs, PAK files, and locales to target directory. Dedicated render process binary recommended to avoid subprocess window flash. |
 | Linux    | Planned | Not yet supported. |
 

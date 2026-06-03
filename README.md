@@ -36,14 +36,13 @@ Once enabled, you can run the app without needing the bundle.
 #### Installation debug tools
 
 When using `debug`, you need to prepare a separate CEF framework and debug render process.
-Please follow the steps below to set it up.
+Install them in one step:
 
 ```shell
-> cargo install export-cef-dir@145.6.1+145.0.28
-> export-cef-dir --force $HOME/.local/share
-> cargo install bevy_cef_debug_render_process
-> cp $HOME/.cargo/bin/bevy_cef_debug_render_process "$HOME/.local/share/Chromium Embedded Framework.framework/Libraries/bevy_cef_debug_render_process"
+> make setup-macos
 ```
+
+`make setup-macos` installs the build tools (`cmake`, `ninja`) via Homebrew, runs `export-cef-dir` to populate `$HOME/.local/share/cef`, then builds `bevy_cef_debug_render_process` and copies it into the framework's `Libraries` directory (`$HOME/.local/share/cef/Chromium Embedded Framework.framework/Libraries`).
 
 #### Bundling for Release
 

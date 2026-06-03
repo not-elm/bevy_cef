@@ -1,7 +1,7 @@
 .PHONY: fix-lint install-debug-render-process setup-windows setup-linux
 
 BIN := bevy_cef_debug_render_process
-CEF_LIB := $(HOME)/.local/share/Chromium Embedded Framework.framework/Libraries
+CEF_LIB := $(HOME)/.local/share/cef/Chromium Embedded Framework.framework/Libraries
 CARGO_BIN := $(HOME)/.cargo/bin
 
 fix-lint:
@@ -14,10 +14,10 @@ install-debug-render-process:
 
 setup-macos:
 	brew install cmake ninja
-	cargo install export-cef-dir
-	export-cef-dir --force "$(HOME)/.local/share-dir@145.6.1+145.0.28"
+	cargo install export-cef-dir@145.6.1+145.0.28 --force
+	export-cef-dir --force "$(HOME)/.local/share/cef"
 	cargo install --path crates/bevy_cef_debug_render_process
-	cp "$(HOME)/.cargo/bin/bevy_cef_debug_render_process" "$(HOME)/.local/share/Chromium Embedded Framework.framework/Libraries/bevy_cef_debug_render_process"
+	cp "$(CARGO_BIN)/$(BIN)" "$(CEF_LIB)/$(BIN)"
 
 setup-windows:
 	cargo install export-cef-dir@145.6.1+145.0.28 --force
