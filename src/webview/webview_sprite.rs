@@ -1,4 +1,5 @@
 use crate::common::{WebviewSize, WebviewSource};
+#[cfg(not(target_os = "macos"))]
 use crate::prelude::update_webview_image;
 use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
 use bevy::prelude::*;
@@ -6,6 +7,7 @@ use bevy::prelude::*;
 use bevy_cef_core::prelude::Browsers;
 #[cfg(target_os = "windows")]
 use bevy_cef_core::prelude::BrowsersProxy;
+#[cfg(not(target_os = "macos"))]
 use bevy_cef_core::prelude::RenderTextureMessage;
 use std::fmt::Debug;
 
@@ -17,6 +19,9 @@ impl Plugin for WebviewSpritePlugin {
             app.add_plugins(SpritePickingPlugin);
         }
 
+        // CPU `OnPaint` consumer: Linux/Windows only. macOS GPU sprite path is
+        // deferred; the CPU path was already non-functional on macOS.
+        #[cfg(not(target_os = "macos"))]
         app.add_systems(
             PostUpdate,
             render.run_if(on_message::<RenderTextureMessage>),
@@ -42,6 +47,7 @@ impl Plugin for WebviewSpritePlugin {
     }
 }
 
+#[cfg(not(target_os = "macos"))]
 fn render(
     mut er: MessageReader<RenderTextureMessage>,
     mut images: ResMut<Assets<bevy::prelude::Image>>,

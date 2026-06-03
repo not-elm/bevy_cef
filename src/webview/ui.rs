@@ -1,13 +1,14 @@
 //! `bevy_ui` webview display path: renders a webview into a `MaterialNode<WebviewUiMaterial>`.
 
-use crate::prelude::{
-    WebviewDpr, WebviewSize, WebviewSource, WebviewSurface, update_webview_image,
-};
+use crate::prelude::{WebviewDpr, WebviewSize, WebviewSource};
+#[cfg(not(target_os = "macos"))]
+use crate::prelude::{WebviewSurface, update_webview_image};
 use crate::webview::ui::input::WebviewUiInputPlugin;
 use crate::webview::ui::material::WEBVIEW_UI_SHADER_HANDLE;
 use bevy::asset::load_internal_asset;
 use bevy::prelude::*;
 use bevy::ui::UiSystems;
+#[cfg(not(target_os = "macos"))]
 use bevy_cef_core::prelude::RenderTextureMessage;
 
 mod input;
@@ -37,10 +38,16 @@ impl Plugin for UiWebviewPlugin {
         ))
         .add_systems(
             PostUpdate,
-            (
-                render_ui_surface.run_if(on_message::<RenderTextureMessage>),
-                update_webview_ui_size.after(UiSystems::Layout),
-            ),
+            update_webview_ui_size.after(UiSystems::Layout),
+        );
+
+        // CPU `OnPaint` consumer: Linux/Windows only. On macOS the GPU path
+        // (`gpu_surface::allocate_ui_webview_surfaces` + injection) handles UI
+        // webview surfaces; `RenderTextureMessage` is never emitted.
+        #[cfg(not(target_os = "macos"))]
+        app.add_systems(
+            PostUpdate,
+            render_ui_surface.run_if(on_message::<RenderTextureMessage>),
         );
     }
 }
@@ -63,6 +70,7 @@ pub(crate) fn webview_size_from_computed(
 /// Copies each incoming CEF frame into the corresponding entity's
 /// `WebviewUiMaterial` surface, allocating the `Image` on first frame. Mirrors
 /// the mesh path's `render` system. Runs in `PostUpdate`.
+#[cfg(not(target_os = "macos"))]
 fn render_ui_surface(
     mut commands: Commands,
     mut er: MessageReader<RenderTextureMessage>,

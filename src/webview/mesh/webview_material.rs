@@ -1,6 +1,11 @@
 use bevy::asset::*;
 use bevy::prelude::*;
-use bevy::render::render_resource::{AsBindGroup, Extent3d, TextureDimension, TextureFormat};
+use bevy::render::render_resource::AsBindGroup;
+#[cfg(not(target_os = "macos"))]
+use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
+// `RenderTextureMessage` / `Browsers` from the core prelude are only used by the
+// CPU `OnPaint` path (Linux/Windows). macOS uses the GPU IOSurface path.
+#[cfg(not(target_os = "macos"))]
 use bevy_cef_core::prelude::*;
 
 const WEBVIEW_UTIL_SHADER_HANDLE: Handle<Shader> =
@@ -10,10 +15,14 @@ pub(super) struct WebviewMaterialPlugin;
 
 impl Plugin for WebviewMaterialPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(MaterialPlugin::<WebviewMaterial>::default())
-            .add_message::<RenderTextureMessage>();
+        app.add_plugins(MaterialPlugin::<WebviewMaterial>::default());
 
-        #[cfg(not(target_os = "windows"))]
+        // macOS uses the GPU IOSurface accelerated-paint path and never emits
+        // `RenderTextureMessage`; the CPU `OnPaint` chain is Linux/Windows-only.
+        #[cfg(not(target_os = "macos"))]
+        app.add_message::<RenderTextureMessage>();
+
+        #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
         app.add_systems(Update, send_render_textures);
 
         #[cfg(target_os = "windows")]
@@ -40,7 +49,7 @@ pub struct WebviewMaterial {
 
 impl Material for WebviewMaterial {}
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
 fn send_render_textures(mut ew: MessageWriter<RenderTextureMessage>, browsers: NonSend<Browsers>) {
     for texture in browsers.try_receive_textures() {
         ew.write(texture);
@@ -57,6 +66,9 @@ fn send_render_textures_win(
     }
 }
 
+/// Copies a CPU `OnPaint` frame into an `Image`. Used only by the CPU-path
+/// consumers (Linux/Windows); macOS injects pixels directly via the GPU path.
+#[cfg(not(target_os = "macos"))]
 pub(crate) fn update_webview_image(texture: &RenderTextureMessage, image: &mut Image) {
     let expected_len = (texture.width * texture.height * 4) as usize;
     if let Some(data) = image.data.as_mut()

@@ -2,6 +2,7 @@ use bevy::prelude::*;
 use cef::rc::{Rc, RcImpl};
 use cef::*;
 use cef_dll_sys::cef_paint_element_type_t;
+#[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
 use std::cell::Cell;
 use std::os::raw::c_int;
 
@@ -11,6 +12,10 @@ use std::os::raw::c_int;
 /// and consumer (`send_render_textures`) run on the same thread (CEF UI thread =
 /// Bevy main thread under `external_message_pump` mode). This eliminates all
 /// synchronization overhead and naturally provides "latest frame wins" semantics.
+///
+/// Linux-only: the CPU `OnPaint` path. macOS uses the GPU IOSurface accelerated-paint
+/// path (no slots); Windows uses `TextureSender`.
+#[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
 pub type SharedTexture = std::rc::Rc<Cell<Option<RenderTextureMessage>>>;
 
 #[cfg(target_os = "windows")]
@@ -60,9 +65,9 @@ pub type SharedDpr = std::sync::Arc<std::sync::Mutex<f32>>;
 pub struct RenderHandlerBuilder {
     object: *mut RcImpl<sys::cef_render_handler_t, Self>,
     webview: Entity,
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
     view_slot: SharedTexture,
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
     popup_slot: SharedTexture,
     #[cfg(target_os = "windows")]
     texture_sender: TextureSender,
@@ -89,8 +94,6 @@ impl RenderHandlerBuilder {
     #[cfg(target_os = "macos")]
     pub fn build(
         webview: Entity,
-        view_slot: SharedTexture,
-        popup_slot: SharedTexture,
         size: SharedViewSize,
         dpr: SharedDpr,
         latest_iosurface: crate::browser_process::accelerated_paint::SharedRetainedIoSurface,
@@ -99,8 +102,6 @@ impl RenderHandlerBuilder {
         RenderHandler::new(Self {
             object: std::ptr::null_mut(),
             webview,
-            view_slot,
-            popup_slot,
             size,
             dpr,
             latest_iosurface,
@@ -168,9 +169,9 @@ impl Clone for RenderHandlerBuilder {
         Self {
             object,
             webview: self.webview,
-            #[cfg(not(target_os = "windows"))]
+            #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
             view_slot: self.view_slot.clone(),
-            #[cfg(not(target_os = "windows"))]
+            #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
             popup_slot: self.popup_slot.clone(),
             #[cfg(target_os = "windows")]
             texture_sender: self.texture_sender.clone(),
@@ -220,6 +221,10 @@ impl ImplRenderHandler for RenderHandlerBuilder {
         1
     }
 
+    // macOS uses the GPU accelerated-paint path (on_accelerated_paint);
+    // `on_paint` is never called when `shared_texture_enabled` is true, so we
+    // don't override it at all on macOS (the trait provides a default no-op).
+    #[cfg(not(target_os = "macos"))]
     #[allow(clippy::not_unsafe_ptr_arg_deref)]
     fn on_paint(
         &self,
@@ -230,41 +235,32 @@ impl ImplRenderHandler for RenderHandlerBuilder {
         width: c_int,
         height: c_int,
     ) {
-        // macOS uses the GPU accelerated-paint path (on_accelerated_paint);
-        // on_paint is never called when shared_texture_enabled is true.
-        #[cfg(not(target_os = "macos"))]
+        let ty = match type_.as_ref() {
+            cef_paint_element_type_t::PET_POPUP => RenderPaintElementType::Popup,
+            _ => RenderPaintElementType::View,
+        };
+        let texture = RenderTextureMessage {
+            webview: self.webview,
+            ty,
+            width: width as u32,
+            height: height as u32,
+            buffer: unsafe {
+                std::slice::from_raw_parts(buffer, (width * height * 4) as usize).to_vec()
+            },
+        };
+
+        #[cfg(not(target_os = "windows"))]
         {
-            let ty = match type_.as_ref() {
-                cef_paint_element_type_t::PET_POPUP => RenderPaintElementType::Popup,
-                _ => RenderPaintElementType::View,
+            let slot = match ty {
+                RenderPaintElementType::Popup => &self.popup_slot,
+                RenderPaintElementType::View => &self.view_slot,
             };
-            let texture = RenderTextureMessage {
-                webview: self.webview,
-                ty,
-                width: width as u32,
-                height: height as u32,
-                buffer: unsafe {
-                    std::slice::from_raw_parts(buffer, (width * height * 4) as usize).to_vec()
-                },
-            };
-
-            #[cfg(not(target_os = "windows"))]
-            {
-                let slot = match ty {
-                    RenderPaintElementType::Popup => &self.popup_slot,
-                    RenderPaintElementType::View => &self.view_slot,
-                };
-                slot.set(Some(texture));
-            }
-
-            #[cfg(target_os = "windows")]
-            {
-                let _ = self.texture_sender.send_blocking(texture);
-            }
+            slot.set(Some(texture));
         }
-        #[cfg(target_os = "macos")]
+
+        #[cfg(target_os = "windows")]
         {
-            let _ = (type_, buffer, width, height);
+            let _ = self.texture_sender.send_blocking(texture);
         }
     }
 

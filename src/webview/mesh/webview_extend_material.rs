@@ -1,8 +1,13 @@
-use crate::prelude::{WebviewMaterial, WebviewSurface, update_webview_image};
+use crate::prelude::WebviewMaterial;
+#[cfg(not(target_os = "macos"))]
+use crate::prelude::{WebviewSurface, update_webview_image};
 use bevy::app::Plugin;
 use bevy::pbr::{ExtendedMaterial, MaterialExtension};
 use bevy::prelude::*;
 use bevy::render::render_resource::AsBindGroup;
+// `RenderTextureMessage` from the core prelude is only used by the CPU `OnPaint`
+// consumer (Linux/Windows). macOS injects the texture via the GPU path.
+#[cfg(not(target_os = "macos"))]
 use bevy_cef_core::prelude::*;
 use std::hash::Hash;
 use std::marker::PhantomData;
@@ -29,11 +34,15 @@ where
     E: MaterialExtension + AsBindGroup<Data: PartialEq + Eq + Hash + Clone + Copy> + Default,
 {
     fn build(&self, app: &mut App) {
-        app.add_plugins(MaterialPlugin::<WebviewExtendedMaterial<E>>::default())
-            .add_systems(PostUpdate, render::<E>);
+        app.add_plugins(MaterialPlugin::<WebviewExtendedMaterial<E>>::default());
+
+        // CPU `OnPaint` consumer: Linux/Windows only. macOS uses the GPU path.
+        #[cfg(not(target_os = "macos"))]
+        app.add_systems(PostUpdate, render::<E>);
     }
 }
 
+#[cfg(not(target_os = "macos"))]
 fn render<E: MaterialExtension>(
     mut commands: Commands,
     mut er: MessageReader<RenderTextureMessage>,

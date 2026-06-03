@@ -1,8 +1,13 @@
-use crate::prelude::{WebviewMaterial, WebviewSurface, update_webview_image};
+use crate::prelude::WebviewMaterial;
+#[cfg(not(target_os = "macos"))]
+use crate::prelude::{WebviewSurface, update_webview_image};
 use bevy::asset::*;
 use bevy::pbr::{ExtendedMaterial, MaterialExtension};
 use bevy::prelude::*;
 use bevy::shader::ShaderRef;
+// `RenderTextureMessage` from the core prelude is only used by the CPU `OnPaint`
+// consumer (Linux/Windows). macOS injects the texture via the GPU path.
+#[cfg(not(target_os = "macos"))]
 use bevy_cef_core::prelude::*;
 
 const FRAGMENT_SHADER_HANDLE: Handle<Shader> = uuid_handle!("b231681f-9c17-4df6-89c9-9dc353e85a08");
@@ -11,8 +16,13 @@ pub(super) struct WebviewExtendStandardMaterialPlugin;
 
 impl Plugin for WebviewExtendStandardMaterialPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(MaterialPlugin::<WebviewExtendStandardMaterial>::default())
-            .add_systems(PostUpdate, render_standard_materials);
+        app.add_plugins(MaterialPlugin::<WebviewExtendStandardMaterial>::default());
+
+        // CPU `OnPaint` consumer: Linux/Windows only. macOS injects the live
+        // webview texture into `RenderAssets<GpuImage>` via the GPU path.
+        #[cfg(not(target_os = "macos"))]
+        app.add_systems(PostUpdate, render_standard_materials);
+
         load_internal_asset!(
             app,
             FRAGMENT_SHADER_HANDLE,
@@ -30,6 +40,7 @@ impl MaterialExtension for WebviewMaterial {
 
 pub type WebviewExtendStandardMaterial = ExtendedMaterial<StandardMaterial, WebviewMaterial>;
 
+#[cfg(not(target_os = "macos"))]
 fn render_standard_materials(
     mut commands: Commands,
     mut er: MessageReader<RenderTextureMessage>,
