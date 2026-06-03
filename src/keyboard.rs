@@ -11,6 +11,11 @@ use serde::{Deserialize, Serialize};
 
 /// The plugin to handle keyboard inputs.
 ///
+/// Keyboard and IME input is delivered to the webview that currently holds
+/// focus ([`FocusedWebview`]), which is set when a webview is clicked. A webview
+/// therefore receives keyboard input only after it has been clicked at least
+/// once; while no webview is focused, input is dropped.
+///
 /// To use IME, you need to set [`Window::ime_enabled`](bevy::prelude::Window) to `true`.
 pub(super) struct KeyboardPlugin;
 
@@ -118,22 +123,18 @@ fn send_key_event(
             is_ime_composing.0 = false;
             continue;
         }
-        let key_events = create_cef_key_events(modifiers, &input, event);
-        for key_event in key_events {
-            match target {
-                // An explicit focus wins: deliver only to that webview.
-                Some(webview) => browsers.send_key(&webview, key_event.clone()),
-                // No resolved focus (before the first click, or after the focused
-                // webview despawned): fall back to the CEF-focus-gated path so a
-                // browser CEF auto-focused at startup still receives keys. `send_key`
-                // only reaches browsers with a focused frame, so this scopes itself
-                // rather than truly broadcasting (see `src/focus.rs`).
-                None => {
-                    for webview in webviews.iter() {
-                        browsers.send_key(&webview, key_event.clone());
-                    }
-                }
-            }
+        // Deliver only to the explicitly-focused webview. When nothing is
+        // focused — before the first click, or focus is on a non-webview surface
+        // (e.g. a terminal pane in an embedder) — no webview receives keys.
+        // Broadcasting to all webviews here leaked keystrokes to a
+        // previously-focused webview: `send_key` is gated on CEF's
+        // `focused_frame()`, which survives `set_focus(false)`, so the blurred
+        // webview kept receiving input.
+        let Some(webview) = target else {
+            continue;
+        };
+        for key_event in create_cef_key_events(modifiers, &input, event) {
+            browsers.send_key(&webview, key_event);
         }
     }
 }
@@ -144,8 +145,31 @@ fn ime_event(
     mut is_ime_commiting: ResMut<IsImeCommiting>,
     mut is_ime_composing: ResMut<IsImeComposing>,
     browsers: NonSend<Browsers>,
+    focused: Res<FocusedWebview>,
+    webviews: Query<Entity, With<WebviewSource>>,
 ) {
+    let has_target = focused.0.filter(|e| webviews.get(*e).is_ok()).is_some();
+    if !has_target {
+        // No webview is focused (focus is on a non-webview surface, e.g. a
+        // terminal pane in an embedder). Cancel any composition still live on
+        // the previously-focused webview — CEF keeps its focused frame after
+        // `set_focus(false)`, so the cancel reaches it — and clear the shared
+        // IME flags so a later keystroke on a re-focused webview is not wrongly
+        // suppressed by stale composition state.
+        if is_ime_composing.0 {
+            browsers.ime_cancel_composition();
+        }
+        is_ime_composing.0 = false;
+        is_ime_commiting.0 = false;
+    }
     for event in er.read() {
+        // Drive CEF IME only when a webview is focused. With focus on a
+        // non-webview surface (e.g. a terminal pane in an embedder), routing IME
+        // here would leak composition to a previously-focused webview whose CEF
+        // `focused_frame()` survives `set_focus(false)` — the same leak as keys.
+        if !has_target {
+            continue;
+        }
         match event {
             Ime::Preedit { value, cursor, .. } => {
                 if value.is_empty() {
@@ -192,22 +216,14 @@ fn send_key_event_win(
             is_ime_composing.0 = false;
             continue;
         }
-        let key_events = create_cef_key_events(modifiers, &input, event);
-        for key_event in key_events {
-            match target {
-                // An explicit focus wins: deliver only to that webview.
-                Some(webview) => proxy.send_key(&webview, key_event.clone()),
-                // No resolved focus (before the first click, or after the focused
-                // webview despawned): fall back to the CEF-focus-gated path so a
-                // browser CEF auto-focused at startup still receives keys. `send_key`
-                // only reaches browsers with a focused frame, so this scopes itself
-                // rather than truly broadcasting (see `src/focus.rs`).
-                None => {
-                    for webview in webviews.iter() {
-                        proxy.send_key(&webview, key_event.clone());
-                    }
-                }
-            }
+        // Deliver only to the explicitly-focused webview. See the non-Windows
+        // variant for why broadcasting on `None` leaks keys to a blurred webview,
+        // and why a webview receives keys only after it is first clicked.
+        let Some(webview) = target else {
+            continue;
+        };
+        for key_event in create_cef_key_events(modifiers, &input, event) {
+            proxy.send_key(&webview, key_event);
         }
     }
 }
@@ -218,8 +234,24 @@ fn ime_event_win(
     mut is_ime_commiting: ResMut<IsImeCommiting>,
     mut is_ime_composing: ResMut<IsImeComposing>,
     proxy: Res<BrowsersProxy>,
+    focused: Res<FocusedWebview>,
+    webviews: Query<Entity, With<WebviewSource>>,
 ) {
+    let has_target = focused.0.filter(|e| webviews.get(*e).is_ok()).is_some();
+    if !has_target {
+        // See `ime_event`: finalize any composition on the now-blurred webview
+        // and clear the shared IME flags when no webview is focused.
+        if is_ime_composing.0 {
+            proxy.ime_cancel_composition();
+        }
+        is_ime_composing.0 = false;
+        is_ime_commiting.0 = false;
+    }
     for event in er.read() {
+        // See `ime_event`: drive CEF IME only when a webview is focused.
+        if !has_target {
+            continue;
+        }
         match event {
             Ime::Preedit { value, cursor, .. } => {
                 if value.is_empty() {
