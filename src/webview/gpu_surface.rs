@@ -36,6 +36,7 @@
 //! node blits into the same texture each frame, and the injected `GpuImage`
 //! reuses the same `texture_view`, so the material bind group stays valid.
 
+use crate::common::WebviewAlpha;
 use crate::prelude::{WebviewExtendStandardMaterial, WebviewMaterial, WebviewSurface};
 use crate::webview::ui::WebviewUiMaterial;
 use bevy::asset::{AssetId, RenderAssetUsages};
@@ -73,6 +74,11 @@ impl Plugin for WebviewGpuInjectPlugin {
                 allocate_webview_surfaces,
                 allocate_ui_webview_surfaces,
                 collect_webview_iosurfaces,
+                // Collect CPU alpha buffers from `Browsers` into `WebviewAlpha`
+                // components so the hit-test code can read real alpha values
+                // without touching the GPU texture (which is a black placeholder
+                // on the macOS GPU path).
+                collect_webview_alpha_buffers,
                 // Touch every webview material each frame so Bevy re-extracts and
                 // rebuilds its bind group. The cached bind group captures the
                 // texture view at build time, so without this it stays bound to
@@ -472,3 +478,26 @@ fn mark_webview_ui_materials_changed(
 // access above is refactored; keeps the module self-documenting.
 #[allow(dead_code)]
 fn _assert_material_type(_m: &WebviewMaterial) {}
+
+/// Main-world system: copy the latest CPU alpha buffer for each webview from
+/// `Browsers` into a `WebviewAlpha` component on the corresponding entity.
+///
+/// This runs every frame (MVP — future optimization D2: limit to interactive/
+/// transparent webviews). The component is used by `is_pixel_transparent_buf`
+/// in `pointer.rs` and `ui/input.rs` instead of reading `Image.data`, because
+/// on the macOS GPU path `Image.data` is a black placeholder.
+fn collect_webview_alpha_buffers(
+    mut commands: Commands,
+    browsers: NonSend<Browsers>,
+    webviews: Query<Entity, With<WebviewSurface>>,
+) {
+    for (entity, alpha_buf) in browsers.latest_webview_alpha() {
+        // Only update entities that actually exist as webview surfaces.
+        if webviews.get(entity).is_ok() {
+            commands.entity(entity).insert(WebviewAlpha {
+                data: alpha_buf.data,
+                size: bevy::math::UVec2::new(alpha_buf.width, alpha_buf.height),
+            });
+        }
+    }
+}

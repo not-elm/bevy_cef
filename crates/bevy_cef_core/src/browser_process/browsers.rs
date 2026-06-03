@@ -59,6 +59,11 @@ pub struct WebviewBrowser {
     /// into the render world, where `WebviewBlitNode` imports + blits it.
     #[cfg(target_os = "macos")]
     pub latest_iosurface: crate::browser_process::accelerated_paint::SharedRetainedIoSurface,
+    /// [macOS GPU OSR] CPU alpha buffer populated by `on_accelerated_paint`
+    /// (1 byte/pixel, alpha channel only). Read by the main-world hit-test system
+    /// to determine transparent click-through without reading the GPU texture.
+    #[cfg(target_os = "macos")]
+    pub latest_alpha: crate::browser_process::accelerated_paint::SharedAlphaBuffer,
 }
 
 #[derive(Default)]
@@ -93,6 +98,9 @@ impl Browsers {
         #[cfg(target_os = "macos")]
         let latest_iosurface: crate::browser_process::accelerated_paint::SharedRetainedIoSurface =
             Rc::new(std::cell::RefCell::new(None));
+        #[cfg(target_os = "macos")]
+        let latest_alpha: crate::browser_process::accelerated_paint::SharedAlphaBuffer =
+            Rc::new(std::cell::RefCell::new(None));
         let browser = browser_host_create_browser_sync(
             Some(&WindowInfo {
                 windowless_rendering_enabled: true as _,
@@ -125,6 +133,8 @@ impl Browsers {
                 address_changed_sender,
                 #[cfg(target_os = "macos")]
                 latest_iosurface.clone(),
+                #[cfg(target_os = "macos")]
+                latest_alpha.clone(),
             )),
             Some(&uri.into()),
             Some(&BrowserSettings {
@@ -145,6 +155,8 @@ impl Browsers {
             popup_slot,
             #[cfg(target_os = "macos")]
             latest_iosurface,
+            #[cfg(target_os = "macos")]
+            latest_alpha,
         };
 
         self.browsers.insert(webview, webview_browser);
@@ -184,6 +196,28 @@ impl Browsers {
                     .borrow_mut()
                     .take()
                     .map(|retained| (*entity, retained))
+            })
+            .collect()
+    }
+
+    /// [macOS GPU OSR] Returns a clone of the current CPU alpha buffer for every
+    /// webview that has received at least one accelerated-paint frame.
+    ///
+    /// Unlike `take_latest_webview_iosurfaces`, this **does not drain** the slot —
+    /// the alpha buffer remains stored so it is available every frame even if CEF
+    /// has not delivered a new frame yet (static pages). Callers receive a cheap
+    /// clone (`Vec<u8>` copy) that they can store in a `WebviewAlpha` component.
+    #[cfg(target_os = "macos")]
+    pub fn latest_webview_alpha(
+        &self,
+    ) -> Vec<(Entity, crate::browser_process::accelerated_paint::AlphaBuffer)> {
+        self.browsers
+            .iter()
+            .filter_map(|(entity, b)| {
+                b.latest_alpha
+                    .borrow()
+                    .as_ref()
+                    .map(|buf| (*entity, buf.clone()))
             })
             .collect()
     }
@@ -582,6 +616,8 @@ impl Browsers {
         address_changed_sender: AddressChangedSenderInner,
         #[cfg(target_os = "macos")]
         latest_iosurface: crate::browser_process::accelerated_paint::SharedRetainedIoSurface,
+        #[cfg(target_os = "macos")]
+        latest_alpha: crate::browser_process::accelerated_paint::SharedAlphaBuffer,
     ) -> Client {
         #[cfg(target_os = "macos")]
         let render_handler = RenderHandlerBuilder::build(
@@ -591,6 +627,7 @@ impl Browsers {
             size.clone(),
             dpr,
             latest_iosurface,
+            latest_alpha,
         );
         #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
         let render_handler = RenderHandlerBuilder::build(

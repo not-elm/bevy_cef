@@ -21,6 +21,31 @@ use bevy::render::renderer::RenderDevice;
 /// main-world collect system drains this for the render world.
 pub type SharedRetainedIoSurface = std::rc::Rc<std::cell::RefCell<Option<RetainedIoSurface>>>;
 
+/// CPU-side alpha-channel buffer for a single webview frame.
+///
+/// One byte per pixel (the alpha channel extracted from the BGRA IOSurface).
+/// Used by the main-world hit-test code to determine whether a pointer event
+/// lands on a fully transparent pixel (click-through).
+///
+/// The buffer is populated every frame in `on_accelerated_paint` by locking
+/// the IOSurface read-only and copying byte `[y*bytesPerRow + x*4 + 3]` for
+/// each pixel. Limiting to interactive/transparent webviews is a future
+/// optimization (D2).
+#[derive(Clone)]
+pub struct AlphaBuffer {
+    /// Alpha values, row-major, 1 byte per pixel.
+    pub data: Vec<u8>,
+    pub width: u32,
+    pub height: u32,
+}
+
+/// Per-webview shared slot for the latest CPU alpha buffer.
+///
+/// Same threading model as `SharedRetainedIoSurface`: both the callback and the
+/// Bevy main-world collect system run on the same thread, so `Rc<RefCell<_>>`
+/// is sufficient (no locking needed).
+pub type SharedAlphaBuffer = std::rc::Rc<std::cell::RefCell<Option<AlphaBuffer>>>;
+
 /// A CEF IOSurface that this code has retained to keep its **object** alive
 /// beyond the `on_accelerated_paint` callback.
 ///
@@ -79,6 +104,53 @@ impl RetainedIoSurface {
     pub fn ptr(&self) -> *mut c_void {
         let r: &objc2_io_surface::IOSurfaceRef = &self.surface;
         (r as *const objc2_io_surface::IOSurfaceRef) as *mut c_void
+    }
+
+    /// Extracts the alpha channel from this IOSurface into a flat `Vec<u8>`.
+    ///
+    /// Locks the surface read-only (`kIOSurfaceLockReadOnly`), copies byte
+    /// `[y*bytesPerRow + x*4 + 3]` (the A component in BGRA layout) for every
+    /// pixel into a `width * height`-element vector, then unlocks.
+    ///
+    /// Returns `Some(AlphaBuffer)` on success, or `None` if the lock fails.
+    ///
+    /// This runs on the CEF UI thread (= Bevy main thread under
+    /// `external_message_pump`) each frame for every webview (MVP; limiting to
+    /// interactive/transparent webviews is a future optimization — D2).
+    pub fn extract_alpha(&self) -> Option<AlphaBuffer> {
+        use objc2_io_surface::IOSurfaceLockOptions;
+
+        let surface_ref: &objc2_io_surface::IOSurfaceRef = &self.surface;
+        // Safety: surface_ref is valid while `self` is alive (+1 CF ref).
+        // `seed` is advisory; pass null.
+        let lock_result = unsafe {
+            surface_ref.lock(IOSurfaceLockOptions::ReadOnly, std::ptr::null_mut())
+        };
+        if lock_result != 0 {
+            return None;
+        }
+
+        let base_ptr = surface_ref.base_address().as_ptr() as *const u8;
+        let stride = surface_ref.bytes_per_row();
+        let w = self.width as usize;
+        let h = self.height as usize;
+        let mut alpha = Vec::with_capacity(w * h);
+
+        // BGRA layout: [B, G, R, A] per pixel; alpha is at offset +3.
+        for y in 0..h {
+            for x in 0..w {
+                let offset = y * stride + x * 4 + 3;
+                // Safety: offset is within the IOSurface's mapped region.
+                alpha.push(unsafe { *base_ptr.add(offset) });
+            }
+        }
+
+        // Safety: same conditions as lock above.
+        unsafe {
+            surface_ref.unlock(IOSurfaceLockOptions::ReadOnly, std::ptr::null_mut());
+        }
+
+        Some(AlphaBuffer { data: alpha, width: self.width, height: self.height })
     }
 }
 

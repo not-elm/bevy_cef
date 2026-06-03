@@ -26,6 +26,36 @@ pub(crate) fn is_pixel_transparent(image: &Image, webview_size: Vec2, pos_dip: V
     data.len() > offset && data[offset] == 0
 }
 
+/// Returns `true` when the surface pixel under `pos_dip` is fully transparent
+/// (alpha == 0) according to a pre-extracted CPU alpha buffer.
+///
+/// `alpha` is a flat row-major buffer with 1 byte per pixel (alpha channel only),
+/// of logical size `buf_size`. `webview_size` is the DIP (logical) size of the
+/// webview viewport.
+///
+/// Used on macOS GPU path where `Image.data` is a black placeholder; the real
+/// alpha values are extracted from the IOSurface into `WebviewAlpha` each frame.
+///
+/// Returns `false` (opaque) when the buffer is empty, the webview has zero area,
+/// or the computed pixel is out of range — so a not-yet-populated surface
+/// forwards events instead of swallowing them.
+pub(crate) fn is_pixel_transparent_buf(
+    alpha: &[u8],
+    buf_size: UVec2,
+    webview_size: Vec2,
+    pos_dip: Vec2,
+) -> bool {
+    if buf_size.x == 0 || buf_size.y == 0 || webview_size.x <= 0.0 || webview_size.y <= 0.0 {
+        return false;
+    }
+    if alpha.is_empty() {
+        return false;
+    }
+    let px = dip_to_pixel(pos_dip, buf_size, webview_size);
+    let offset = (px.y * buf_size.x + px.x) as usize;
+    alpha.get(offset) == Some(&0)
+}
+
 /// Converts a DIP (logical-pixel) coordinate to a physical pixel index inside an
 /// image of size `img_size`, given a logical viewport of `dip_size`.
 ///
@@ -114,6 +144,60 @@ mod tests {
         let size = Vec2::new(2.0, 1.0);
         assert!(!is_pixel_transparent(&image, size, Vec2::new(0.0, 0.0)));
         assert!(is_pixel_transparent(&image, size, Vec2::new(1.0, 0.0)));
+    }
+
+    // ── is_pixel_transparent_buf ──────────────────────────────────────────────
+
+    #[test]
+    fn buf_left_opaque_right_transparent() {
+        // 2×1 buffer: pixel 0 = opaque (255), pixel 1 = transparent (0).
+        let alpha = [255u8, 0u8];
+        let buf_size = UVec2::new(2, 1);
+        let view_size = Vec2::new(2.0, 1.0);
+        assert!(!is_pixel_transparent_buf(&alpha, buf_size, view_size, Vec2::new(0.0, 0.0)));
+        assert!(is_pixel_transparent_buf(&alpha, buf_size, view_size, Vec2::new(1.0, 0.0)));
+    }
+
+    #[test]
+    fn buf_zero_area_returns_opaque() {
+        let alpha = [0u8; 4];
+        // Zero webview size → opaque
+        assert!(!is_pixel_transparent_buf(
+            &alpha,
+            UVec2::new(2, 2),
+            Vec2::ZERO,
+            Vec2::new(0.0, 0.0)
+        ));
+        // Zero buffer size → opaque
+        assert!(!is_pixel_transparent_buf(
+            &alpha,
+            UVec2::ZERO,
+            Vec2::new(2.0, 2.0),
+            Vec2::new(0.0, 0.0)
+        ));
+    }
+
+    #[test]
+    fn buf_empty_slice_returns_opaque() {
+        assert!(!is_pixel_transparent_buf(
+            &[],
+            UVec2::new(2, 1),
+            Vec2::new(2.0, 1.0),
+            Vec2::new(0.0, 0.0)
+        ));
+    }
+
+    #[test]
+    fn buf_scales_by_dpr_2() {
+        // 4×2 buffer (DPR 2×) mapped to a 2×1 DIP viewport.
+        // Pixels: row 0 = [255, 255, 0, 0], row 1 = [255, 255, 0, 0]
+        // DIP (0,0) → physical (0,0) = 255 → opaque
+        // DIP (1,0) → physical (2,0) = 0   → transparent
+        let alpha = [255u8, 255, 0, 0, 255, 255, 0, 0];
+        let buf_size = UVec2::new(4, 2);
+        let view_size = Vec2::new(2.0, 1.0);
+        assert!(!is_pixel_transparent_buf(&alpha, buf_size, view_size, Vec2::new(0.0, 0.0)));
+        assert!(is_pixel_transparent_buf(&alpha, buf_size, view_size, Vec2::new(1.0, 0.0)));
     }
 
     #[test]

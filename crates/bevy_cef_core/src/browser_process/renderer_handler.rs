@@ -76,6 +76,13 @@ pub struct RenderHandlerBuilder {
     /// is needed in the callback path.
     #[cfg(target_os = "macos")]
     latest_iosurface: crate::browser_process::accelerated_paint::SharedRetainedIoSurface,
+    /// CPU-side alpha buffer extracted from the IOSurface each frame.
+    ///
+    /// Populated in `on_accelerated_paint` by locking the surface read-only and
+    /// copying the alpha byte for every pixel. The main-world hit-test code reads
+    /// this to decide whether pointer events should pass through transparent pixels.
+    #[cfg(target_os = "macos")]
+    latest_alpha: crate::browser_process::accelerated_paint::SharedAlphaBuffer,
 }
 
 impl RenderHandlerBuilder {
@@ -87,6 +94,7 @@ impl RenderHandlerBuilder {
         size: SharedViewSize,
         dpr: SharedDpr,
         latest_iosurface: crate::browser_process::accelerated_paint::SharedRetainedIoSurface,
+        latest_alpha: crate::browser_process::accelerated_paint::SharedAlphaBuffer,
     ) -> RenderHandler {
         RenderHandler::new(Self {
             object: std::ptr::null_mut(),
@@ -96,6 +104,7 @@ impl RenderHandlerBuilder {
             size,
             dpr,
             latest_iosurface,
+            latest_alpha,
         })
     }
 
@@ -169,6 +178,8 @@ impl Clone for RenderHandlerBuilder {
             dpr: self.dpr.clone(),
             #[cfg(target_os = "macos")]
             latest_iosurface: self.latest_iosurface.clone(),
+            #[cfg(target_os = "macos")]
+            latest_alpha: self.latest_alpha.clone(),
         }
     }
 }
@@ -291,6 +302,14 @@ impl ImplRenderHandler for RenderHandlerBuilder {
                     height,
                 )
             };
+
+            // Extract the alpha channel from the IOSurface into a CPU buffer so
+            // the main-world hit-test code can read it for transparent click-through
+            // without touching the GPU texture. `extract_alpha` locks the surface
+            // read-only, copies byte [y*stride + x*4 + 3] for every pixel, then
+            // unlocks. MVP: every frame, every webview. Future optimization (D2):
+            // limit to interactive/transparent webviews.
+            *self.latest_alpha.borrow_mut() = retained.extract_alpha();
             *self.latest_iosurface.borrow_mut() = Some(retained);
         }
         #[cfg(not(target_os = "macos"))]
