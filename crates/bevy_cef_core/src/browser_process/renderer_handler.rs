@@ -218,6 +218,16 @@ impl ImplRenderHandler for RenderHandlerBuilder {
         }
     }
 
+    fn on_accelerated_paint(
+        &self,
+        _browser: Option<&mut Browser>,
+        _type_: PaintElementType,
+        _dirty_rects: Option<&[cef::Rect]>,
+        _info: Option<&AcceleratedPaintInfo>,
+    ) {
+        // Implemented in a later task (macOS GPU OSR).
+    }
+
     #[inline]
     fn get_raw(&self) -> *mut sys::_cef_render_handler_t {
         self.object.cast()

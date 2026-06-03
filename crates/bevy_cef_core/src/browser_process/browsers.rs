@@ -89,6 +89,10 @@ impl Browsers {
             Some(&WindowInfo {
                 windowless_rendering_enabled: true as _,
                 external_begin_frame_enabled: true as _,
+                // [poc-osr] macOS accelerated paint (IOSurface) smoke test:
+                // ask CEF to deliver GPU shared textures via on_accelerated_paint.
+                #[cfg(target_os = "macos")]
+                shared_texture_enabled: true as _,
                 #[cfg(target_os = "macos")]
                 parent_view: match _window_handle {
                     Some(RawWindowHandle::AppKit(handle)) => handle.ns_view.as_ptr(),

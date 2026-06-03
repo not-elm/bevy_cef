@@ -5,7 +5,16 @@ use bevy_cef::prelude::*;
 
 fn main() {
     App::new()
-        .add_plugins((DefaultPlugins, CefPlugin::default()))
+        .add_plugins((
+            DefaultPlugins,
+            // [poc-osr] Set a dedicated root_cache_path so cef_initialize does
+            // not fall into the default-profile process-singleton path (which
+            // makes initialize() return 0 / "Opening in existing browser session").
+            CefPlugin {
+                root_cache_path: Some("/tmp/bevy_cef_poc_cache".into()),
+                ..default()
+            },
+        ))
         .add_systems(
             Startup,
             (spawn_camera, spawn_directional_light, spawn_webview),
