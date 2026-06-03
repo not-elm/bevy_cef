@@ -68,32 +68,24 @@ pub struct RenderHandlerBuilder {
     texture_sender: TextureSender,
     size: SharedViewSize,
     dpr: SharedDpr,
-    // Approach 2: the GPU import+blit moved out of the callback into a Bevy
-    // render-graph node, so `render_device`/`render_queue` are no longer used
-    // here. Kept (dead) to minimize churn in the browser wiring; remove when the
-    // surrounding plumbing is cleaned up.
-    #[cfg(target_os = "macos")]
-    #[allow(dead_code)]
-    render_device: bevy::render::renderer::RenderDevice,
-    #[cfg(target_os = "macos")]
-    #[allow(dead_code)]
-    render_queue: bevy::render::renderer::RenderQueue,
     /// Latest retained IOSurface for this webview's main view (Approach 2).
+    ///
+    /// `on_accelerated_paint` does no GPU work here — it only retains the latest
+    /// IOSurface into this slot. The render-graph node (`WebviewBlitNode`) imports
+    /// and blits it using the render-world device, so no `RenderDevice`/`RenderQueue`
+    /// is needed in the callback path.
     #[cfg(target_os = "macos")]
     latest_iosurface: crate::browser_process::accelerated_paint::SharedRetainedIoSurface,
 }
 
 impl RenderHandlerBuilder {
     #[cfg(target_os = "macos")]
-    #[allow(clippy::too_many_arguments)]
     pub fn build(
         webview: Entity,
         view_slot: SharedTexture,
         popup_slot: SharedTexture,
         size: SharedViewSize,
         dpr: SharedDpr,
-        render_device: bevy::render::renderer::RenderDevice,
-        render_queue: bevy::render::renderer::RenderQueue,
         latest_iosurface: crate::browser_process::accelerated_paint::SharedRetainedIoSurface,
     ) -> RenderHandler {
         RenderHandler::new(Self {
@@ -103,8 +95,6 @@ impl RenderHandlerBuilder {
             popup_slot,
             size,
             dpr,
-            render_device,
-            render_queue,
             latest_iosurface,
         })
     }
@@ -177,10 +167,6 @@ impl Clone for RenderHandlerBuilder {
             texture_sender: self.texture_sender.clone(),
             size: self.size.clone(),
             dpr: self.dpr.clone(),
-            #[cfg(target_os = "macos")]
-            render_device: self.render_device.clone(),
-            #[cfg(target_os = "macos")]
-            render_queue: self.render_queue.clone(),
             #[cfg(target_os = "macos")]
             latest_iosurface: self.latest_iosurface.clone(),
         }

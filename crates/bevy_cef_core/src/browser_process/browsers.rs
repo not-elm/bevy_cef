@@ -69,7 +69,6 @@ pub struct Browsers {
 impl Browsers {
     #[cfg(not(target_os = "windows"))]
     #[allow(clippy::too_many_arguments)]
-    #[allow(unused_variables)]
     pub fn create_browser(
         &mut self,
         webview: Entity,
@@ -85,8 +84,6 @@ impl Browsers {
         address_changed_sender: AddressChangedSenderInner,
         initialize_scripts: &[String],
         _window_handle: Option<RawWindowHandle>,
-        render_device: bevy::render::renderer::RenderDevice,
-        render_queue: bevy::render::renderer::RenderQueue,
     ) {
         let mut context = Self::request_context(requester);
         let size: SharedViewSize = Rc::new(Cell::new(webview_size));
@@ -126,8 +123,6 @@ impl Browsers {
                 drag_regions_sender,
                 load_handler_sender,
                 address_changed_sender,
-                render_device,
-                render_queue,
                 #[cfg(target_os = "macos")]
                 latest_iosurface.clone(),
             )),
@@ -572,7 +567,6 @@ impl Browsers {
 
     #[cfg(not(target_os = "windows"))]
     #[allow(clippy::too_many_arguments)]
-    #[allow(unused_variables)]
     fn client_handler(
         &self,
         webview: Entity,
@@ -586,8 +580,6 @@ impl Browsers {
         drag_regions_sender: DraggableRegionSenderInner,
         load_handler_sender: LoadHandlerSenderInner,
         address_changed_sender: AddressChangedSenderInner,
-        render_device: bevy::render::renderer::RenderDevice,
-        render_queue: bevy::render::renderer::RenderQueue,
         #[cfg(target_os = "macos")]
         latest_iosurface: crate::browser_process::accelerated_paint::SharedRetainedIoSurface,
     ) -> Client {
@@ -598,8 +590,6 @@ impl Browsers {
             popup_slot,
             size.clone(),
             dpr,
-            render_device,
-            render_queue,
             latest_iosurface,
         );
         #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]

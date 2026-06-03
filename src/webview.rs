@@ -268,8 +268,6 @@ fn create_webview(
     drag_regions_sender: Res<crate::drag::DraggableRegionSender>,
     load_handler_sender: Res<crate::navigation::LoadHandlerSender>,
     address_changed_sender: Res<crate::navigation::AddressChangedSender>,
-    render_device: Res<bevy::render::renderer::RenderDevice>,
-    render_queue: Res<bevy::render::renderer::RenderQueue>,
     webviews: Query<
         (
             Entity,
@@ -307,8 +305,6 @@ fn create_webview(
                 address_changed_sender.0.clone(),
                 &initialize_scripts.0,
                 host_window,
-                render_device.clone(),
-                render_queue.clone(),
             );
         }
     });

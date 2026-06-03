@@ -36,6 +36,23 @@ pub type SharedRetainedIoSurface = std::rc::Rc<std::cell::RefCell<Option<Retaine
 /// `surface` owns a +1 CF reference to the IOSurface, so the object stays alive
 /// for as long as this wrapper exists — across the main→render world handoff
 /// (even one frame behind under pipelined rendering).
+///
+/// ## Retain/release lifetime model (verified leak/tearing-free under continuous repaint, C1)
+/// - `on_accelerated_paint` `CFRetain`s the freshly delivered IOSurface and stores
+///   it in the per-webview latest-frame slot, **dropping (CFRelease-ing) the
+///   previously stored retain** — latest-frame-wins, 1-deep. So the in-flight
+///   surface is always the freshest CEF produced, and at most one stale surface is
+///   held at a time (no unbounded accumulation).
+/// - The main-world collect system *moves* the retain out of the slot into the
+///   render world (the wrapper is `Send`), where the render-graph node imports +
+///   blits it. The retain is finally released on the **next** frame's extract
+///   (when the render-world `ExtractedWebviewIoSurfaces` is cleared) — which is
+///   strictly after the current frame's blit was submitted and after the imported
+///   transient texture (which aliases the surface) was dropped. So the surface
+///   always outlives every GPU resource that references it.
+/// - Net: balanced CFRetain/CFRelease per frame, bounded to ~1 in-flight surface;
+///   measured RSS stays flat under a 60fps hue-cycling page (no IOSurface leak),
+///   and the owned texture updates every frame with no tearing.
 pub struct RetainedIoSurface {
     surface: objc2_core_foundation::CFRetained<objc2_io_surface::IOSurfaceRef>,
     pub width: u32,
