@@ -44,7 +44,6 @@ pub fn keyboard_modifiers(input: &ButtonInput<KeyCode>) -> u32 {
 /// in-page `keydown` handlers and keyboard shortcuts never fired off Windows.
 pub fn create_cef_key_events(
     modifiers: u32,
-    _input: &ButtonInput<KeyCode>,
     key_event: &KeyboardInput,
 ) -> Vec<cef::KeyEvent> {
     let native_key_code = to_native_key_code(&key_event.key_code) as _;

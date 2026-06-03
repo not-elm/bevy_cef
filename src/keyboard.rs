@@ -133,7 +133,7 @@ fn send_key_event(
         let Some(webview) = target else {
             continue;
         };
-        for key_event in create_cef_key_events(modifiers, &input, event) {
+        for key_event in create_cef_key_events(modifiers, event) {
             browsers.send_key(&webview, key_event);
         }
     }
@@ -222,7 +222,7 @@ fn send_key_event_win(
         let Some(webview) = target else {
             continue;
         };
-        for key_event in create_cef_key_events(modifiers, &input, event) {
+        for key_event in create_cef_key_events(modifiers, event) {
             proxy.send_key(&webview, key_event);
         }
     }
