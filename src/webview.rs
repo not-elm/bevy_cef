@@ -24,6 +24,9 @@ use crate::common::CommandChannelReceiver;
 use crate::common::TextureSenderRes;
 
 pub(crate) mod alpha;
+// [poc-osr] SPIKE: macOS GPU OSR magenta injection prototype.
+#[cfg(target_os = "macos")]
+pub(crate) mod gpu_surface;
 mod mesh;
 mod ui;
 pub(crate) mod webview_sprite;
@@ -153,6 +156,12 @@ impl Plugin for WebviewPlugin {
                 )
                 .add_observer(apply_request_show_devtool)
                 .add_observer(apply_request_close_devtool);
+
+            // [poc-osr] SPIKE: inject a dummy magenta GpuImage so we can verify
+            // the externally-created-texture -> RenderAssets<GpuImage> ->
+            // material-binding path works on macOS before wiring up IOSurface.
+            #[cfg(target_os = "macos")]
+            app.add_plugins(crate::webview::gpu_surface::WebviewGpuInjectSpikePlugin);
         }
 
         // Windows: BrowsersProxy already inserted by MessageLoopPlugin.
