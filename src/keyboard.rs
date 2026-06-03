@@ -142,13 +142,26 @@ fn ime_event(
     focused: Res<FocusedWebview>,
     webviews: Query<Entity, With<WebviewSource>>,
 ) {
-    let target = focused.0.filter(|e| webviews.get(*e).is_ok());
+    let has_target = focused.0.filter(|e| webviews.get(*e).is_ok()).is_some();
+    if !has_target {
+        // No webview is focused (focus is on a non-webview surface, e.g. a
+        // terminal pane in an embedder). Cancel any composition still live on
+        // the previously-focused webview — CEF keeps its focused frame after
+        // `set_focus(false)`, so the cancel reaches it — and clear the shared
+        // IME flags so a later keystroke on a re-focused webview is not wrongly
+        // suppressed by stale composition state.
+        if is_ime_composing.0 {
+            browsers.ime_cancel_composition();
+        }
+        is_ime_composing.0 = false;
+        is_ime_commiting.0 = false;
+    }
     for event in er.read() {
         // Drive CEF IME only when a webview is focused. With focus on a
         // non-webview surface (e.g. a terminal pane in an embedder), routing IME
         // here would leak composition to a previously-focused webview whose CEF
         // `focused_frame()` survives `set_focus(false)` — the same leak as keys.
-        if target.is_none() {
+        if !has_target {
             continue;
         }
         match event {
@@ -217,10 +230,19 @@ fn ime_event_win(
     focused: Res<FocusedWebview>,
     webviews: Query<Entity, With<WebviewSource>>,
 ) {
-    let target = focused.0.filter(|e| webviews.get(*e).is_ok());
+    let has_target = focused.0.filter(|e| webviews.get(*e).is_ok()).is_some();
+    if !has_target {
+        // See `ime_event`: finalize any composition on the now-blurred webview
+        // and clear the shared IME flags when no webview is focused.
+        if is_ime_composing.0 {
+            proxy.ime_cancel_composition();
+        }
+        is_ime_composing.0 = false;
+        is_ime_commiting.0 = false;
+    }
     for event in er.read() {
         // See `ime_event`: drive CEF IME only when a webview is focused.
-        if target.is_none() {
+        if !has_target {
             continue;
         }
         match event {
