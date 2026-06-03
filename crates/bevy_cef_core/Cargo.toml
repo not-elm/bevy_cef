@@ -49,3 +49,4 @@ browser = [
 metal = "0.32"
 objc = "0.2"
 objc2-io-surface = "0.3"
+wgpu = { version = "27", default-features = false }
