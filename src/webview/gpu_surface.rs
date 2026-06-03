@@ -37,6 +37,7 @@
 //! reuses the same `texture_view`, so the material bind group stays valid.
 
 use crate::prelude::{WebviewExtendStandardMaterial, WebviewMaterial, WebviewSurface};
+use crate::webview::ui::WebviewUiMaterial;
 use bevy::asset::{AssetId, RenderAssetUsages};
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
@@ -49,6 +50,7 @@ use bevy::render::{
     renderer::{RenderContext, RenderDevice},
     texture::GpuImage,
 };
+use bevy::ui_render::PreparedUiMaterial;
 use bevy_cef_core::prelude::{Browsers, RetainedIoSurface, WebviewGpuSurface};
 
 const SURFACE_WIDTH: u32 = 800;
@@ -69,6 +71,7 @@ impl Plugin for WebviewGpuInjectPlugin {
             Update,
             (
                 allocate_webview_surfaces,
+                allocate_ui_webview_surfaces,
                 collect_webview_iosurfaces,
                 // Touch every webview material each frame so Bevy re-extracts and
                 // rebuilds its bind group. The cached bind group captures the
@@ -78,6 +81,7 @@ impl Plugin for WebviewGpuInjectPlugin {
                 // `prepare_assets::<GpuImage>` re-upload the black placeholder and
                 // clobber our injected GpuImage).
                 mark_webview_materials_changed,
+                mark_webview_ui_materials_changed,
             )
                 .chain(),
         );
@@ -113,7 +117,10 @@ impl Plugin for WebviewGpuInjectPlugin {
                 inject_webview_gpu_images
                     .in_set(RenderSystems::PrepareAssets)
                     .after(prepare_assets::<GpuImage>)
-                    .before(prepare_erased_assets::<MeshMaterial3d<WebviewExtendStandardMaterial>>),
+                    .before(prepare_erased_assets::<MeshMaterial3d<WebviewExtendStandardMaterial>>)
+                    // UI: bind group for PreparedUiMaterial is built during
+                    // prepare_assets, so our injection must precede it.
+                    .before(prepare_assets::<PreparedUiMaterial<WebviewUiMaterial>>),
             );
 
         // Add the blit node to the TOP-LEVEL render graph, ordered before the
@@ -402,6 +409,61 @@ fn mark_webview_materials_changed(
 ) {
     for handle in webviews.iter() {
         // `get_mut` flags the asset as modified → re-extract → bind group rebuild.
+        let _ = materials.get_mut(handle.id());
+    }
+}
+
+/// Main-world system: give every UI webview a placeholder `Handle<Image>`,
+/// wire it into `WebviewUiMaterial.surface`, and insert `WebviewSurface`. The
+/// macOS accelerated-paint path never fires `RenderTextureMessage`, so the
+/// CPU-path `render_ui_surface` system never runs on macOS; we do its job here.
+fn allocate_ui_webview_surfaces(
+    mut commands: Commands,
+    mut images: ResMut<Assets<Image>>,
+    mut materials: ResMut<Assets<WebviewUiMaterial>>,
+    webviews: Query<
+        (Entity, &MaterialNode<WebviewUiMaterial>),
+        Without<WebviewSurface>,
+    >,
+) {
+    for (entity, material_handle) in webviews.iter() {
+        let Some(material) = materials.get_mut(material_handle.id()) else {
+            continue;
+        };
+        if material.surface.is_some() {
+            continue;
+        }
+
+        // Allocate a black BGRA placeholder image. The real pixels are injected
+        // directly into RenderAssets<GpuImage> in the render world.
+        let image = Image::new_fill(
+            Extent3d {
+                width: SURFACE_WIDTH,
+                height: SURFACE_HEIGHT,
+                depth_or_array_layers: 1,
+            },
+            bevy::render::render_resource::TextureDimension::D2,
+            &[0, 0, 0, 255],
+            TextureFormat::Bgra8UnormSrgb,
+            RenderAssetUsages::all(),
+        );
+        let handle = images.add(image);
+
+        material.surface = Some(handle.clone());
+        commands
+            .entity(entity)
+            .insert(WebviewSurface(handle.clone()));
+    }
+}
+
+/// Main-world system: touch every UI webview material each frame so Bevy
+/// rebuilds the `PreparedUiMaterial` bind group (capturing the injected
+/// owned-texture view rather than the black placeholder).
+fn mark_webview_ui_materials_changed(
+    webviews: Query<&MaterialNode<WebviewUiMaterial>>,
+    mut materials: ResMut<Assets<WebviewUiMaterial>>,
+) {
+    for handle in webviews.iter() {
         let _ = materials.get_mut(handle.id());
     }
 }
