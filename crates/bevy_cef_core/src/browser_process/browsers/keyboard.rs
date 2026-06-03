@@ -85,7 +85,11 @@ pub fn create_cef_key_events(
     // key-down MUST carry the character. Windows derives the down event from
     // windows_key_code and keeps its character at 0 (the following CHAR carries
     // it, mirroring the native WM_KEYDOWN → WM_CHAR sequence).
-    let key_down_character = if cfg!(target_os = "macos") { character } else { 0 };
+    let key_down_character = if cfg!(target_os = "macos") {
+        character
+    } else {
+        0
+    };
 
     let raw_key_down = cef_key_event_t {
         character: key_down_character,
