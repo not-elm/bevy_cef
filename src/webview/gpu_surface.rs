@@ -13,8 +13,13 @@
 //! `WebviewBlitNode`, and Bevy submits it in order.
 //!
 //! Frame flow (macOS):
-//! 1. Main world (`Update`): `allocate_webview_surfaces` gives every webview mesh
-//!    material a placeholder `Handle<Image>` + `WebviewSurface` tag.
+//! 1. Main world (`Update`): `allocate_webview_surfaces` (mesh),
+//!    `allocate_ui_webview_surfaces` (bevy_ui), and
+//!    `allocate_sprite_webview_surfaces` (2D `Sprite`) give every webview a
+//!    placeholder `Handle<Image>` + `WebviewSurface` tag. Mesh/UI store the
+//!    handle on their material; sprites set it as `Sprite.image`. The collect →
+//!    node → inject pipeline is keyed by `WebviewSurface`'s `AssetId<Image>`, so
+//!    it is material/sprite-agnostic.
 //! 2. Main world (`Update`, after allocation): `collect_webview_iosurfaces` pulls
 //!    the latest retained IOSurface ptr per webview out of `Browsers` (`NonSend`)
 //!    and pairs each with its surface `AssetId<Image>` into
@@ -36,7 +41,7 @@
 //! node blits into the same texture each frame, and the injected `GpuImage`
 //! reuses the same `texture_view`, so the material bind group stays valid.
 
-use crate::common::WebviewAlpha;
+use crate::common::{WebviewAlpha, WebviewSource};
 use crate::prelude::{WebviewExtendStandardMaterial, WebviewMaterial, WebviewSurface};
 use crate::webview::ui::WebviewUiMaterial;
 use bevy::asset::{AssetId, RenderAssetUsages};
@@ -73,6 +78,7 @@ impl Plugin for WebviewGpuInjectPlugin {
             (
                 allocate_webview_surfaces,
                 allocate_ui_webview_surfaces,
+                allocate_sprite_webview_surfaces,
                 collect_webview_iosurfaces,
                 // Collect CPU alpha buffers from `Browsers` into `WebviewAlpha`
                 // components so the hit-test code can read real alpha values
@@ -88,6 +94,13 @@ impl Plugin for WebviewGpuInjectPlugin {
                 // clobber our injected GpuImage).
                 mark_webview_materials_changed,
                 mark_webview_ui_materials_changed,
+                // Sprites have no material asset, so the mesh/UI "mark material
+                // changed" lever does not apply. The only public way to refresh a
+                // sprite's cached `ImageBindGroups` entry is to fire
+                // `AssetEvent::Modified` for its `Image` (via `Assets::get_mut`).
+                // `prepare_sprite_image_bind_groups` then removes the stale bind
+                // group and rebuilds it reading our injected `GpuImage`.
+                mark_sprite_webview_images_changed,
             )
                 .chain(),
         );
@@ -363,11 +376,8 @@ fn inject_webview_gpu_images(
     mut gpu_images: ResMut<RenderAssets<GpuImage>>,
     default_sampler: Res<DefaultImageSampler>,
 ) {
-    if extracted.0.is_empty() {
-        return;
-    }
-
-    // Ensure an owned destination texture exists at the right size for each id.
+    // Ensure an owned destination texture exists at the right size for each id
+    // that produced an IOSurface this frame.
     for entry in &extracted.0 {
         match surfaces.0.get_mut(&entry.id) {
             Some(surface) => {
@@ -380,6 +390,19 @@ fn inject_webview_gpu_images(
                 );
             }
         }
+    }
+
+    // Re-inject ALL known owned surfaces every frame, even when no new IOSurface
+    // arrived this frame. The owned texture is a stable buffer that retains the
+    // last blitted page, so re-binding it keeps the webview sampling the live
+    // page. This matters for sprites in particular: `mark_sprite_webview_images_changed`
+    // fires `AssetEvent::Modified` every frame, so `prepare_assets::<GpuImage>`
+    // re-uploads the black CPU placeholder every frame — if we skipped injection
+    // on a no-paint frame, the placeholder would win and the sprite would go
+    // black. (Mesh/UI never touch the Image, so they never re-upload the
+    // placeholder, but re-injecting for them is harmless and idempotent.)
+    if surfaces.0.is_empty() {
+        return;
     }
 
     // Use Bevy's configured default image sampler (linear filtering via
@@ -473,6 +496,69 @@ fn mark_webview_ui_materials_changed(
 ) {
     for handle in webviews.iter() {
         let _ = materials.get_mut(handle.id());
+    }
+}
+
+/// Main-world system: give every sprite webview a dedicated placeholder
+/// `Handle<Image>`, point `Sprite.image` at it, and insert `WebviewSurface`.
+///
+/// Sprites have no material asset, so (unlike mesh/UI) there is nothing to write
+/// a surface handle into — instead the sprite samples `Sprite.image` directly.
+/// We allocate a fresh 800×800 BGRA placeholder (rather than reuse the example's
+/// 1×1 `Image::default()`) so the injected owned texture and the placeholder
+/// agree on size, avoiding any 1×1-vs-800×800 ambiguity in the sprite quad's UVs.
+/// The real pixels are injected straight into `RenderAssets<GpuImage>` for this
+/// id in the render world; the placeholder's CPU data is never sampled.
+fn allocate_sprite_webview_surfaces(
+    mut commands: Commands,
+    mut images: ResMut<Assets<Image>>,
+    mut webviews: Query<(Entity, &mut Sprite), (With<WebviewSource>, Without<WebviewSurface>)>,
+) {
+    for (entity, mut sprite) in webviews.iter_mut() {
+        let image = Image::new_fill(
+            Extent3d {
+                width: SURFACE_WIDTH,
+                height: SURFACE_HEIGHT,
+                depth_or_array_layers: 1,
+            },
+            bevy::render::render_resource::TextureDimension::D2,
+            &[0, 0, 0, 255],
+            TextureFormat::Bgra8UnormSrgb,
+            RenderAssetUsages::all(),
+        );
+        let handle = images.add(image);
+
+        sprite.image = handle.clone();
+        commands
+            .entity(entity)
+            .insert(WebviewSurface(handle.clone()));
+    }
+}
+
+/// Main-world system: touch every sprite webview's `Image` each frame to fire
+/// `AssetEvent::Modified` for its id.
+///
+/// `bevy_sprite_render`'s `prepare_sprite_image_bind_groups` caches per-image
+/// bind groups in a private `ImageBindGroups` map and only evicts an entry when
+/// it sees an `AssetEvent::Modified { id }` for that image. Firing that event is
+/// the only public lever to force a rebuild, so the rebuilt bind group samples
+/// our freshly injected owned texture instead of the stale black placeholder.
+///
+/// The `Image` id used here is the sprite's image handle, which equals the
+/// `WebviewSurface` id (allocated together above) — the same id injected into
+/// `RenderAssets<GpuImage>` — so the eviction and our injection line up.
+fn mark_sprite_webview_images_changed(
+    // Restrict to sprite webviews: marking mesh/UI placeholder `Image`s modified
+    // would make `prepare_assets::<GpuImage>` re-upload the black placeholder each
+    // frame (a no-op thanks to our later injection, but pointless work the mesh/UI
+    // paths deliberately avoid by using the material-changed lever instead).
+    webviews: Query<&WebviewSurface, (With<WebviewSource>, With<Sprite>)>,
+    mut images: ResMut<Assets<Image>>,
+) {
+    for surface in webviews.iter() {
+        // `get_mut` flags the asset as modified → `AssetEvent::Modified` →
+        // sprite bind group eviction + rebuild reading our injected GpuImage.
+        let _ = images.get_mut(surface.0.id());
     }
 }
 
