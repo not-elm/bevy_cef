@@ -31,17 +31,10 @@ impl Plugin for NavigationPlugin {
             .register_type::<AddressChanged>()
             .add_systems(PreUpdate, (drain_load_events, drain_address_changed));
 
-        #[cfg(not(target_os = "windows"))]
         app.add_observer(apply_request_go_back)
             .add_observer(apply_request_go_forward)
             .add_observer(apply_request_navigate)
             .add_observer(apply_request_reload);
-
-        #[cfg(target_os = "windows")]
-        app.add_observer(apply_request_go_back_win)
-            .add_observer(apply_request_go_forward_win)
-            .add_observer(apply_request_navigate_win)
-            .add_observer(apply_request_reload_win);
     }
 }
 
@@ -218,21 +211,21 @@ fn apply_request_reload(trigger: On<RequestReload>, browsers: NonSend<Browsers>)
 }
 
 #[cfg(target_os = "windows")]
-fn apply_request_go_back_win(trigger: On<RequestGoBack>, proxy: Res<BrowsersProxy>) {
+fn apply_request_go_back(trigger: On<RequestGoBack>, proxy: Res<BrowsersProxy>) {
     proxy.go_back(&trigger.webview);
 }
 
 #[cfg(target_os = "windows")]
-fn apply_request_go_forward_win(trigger: On<RequestGoForward>, proxy: Res<BrowsersProxy>) {
+fn apply_request_go_forward(trigger: On<RequestGoForward>, proxy: Res<BrowsersProxy>) {
     proxy.go_forward(&trigger.webview);
 }
 
 #[cfg(target_os = "windows")]
-fn apply_request_navigate_win(trigger: On<RequestNavigate>, proxy: Res<BrowsersProxy>) {
+fn apply_request_navigate(trigger: On<RequestNavigate>, proxy: Res<BrowsersProxy>) {
     proxy.navigate(&trigger.webview, &trigger.url);
 }
 
 #[cfg(target_os = "windows")]
-fn apply_request_reload_win(trigger: On<RequestReload>, proxy: Res<BrowsersProxy>) {
+fn apply_request_reload(trigger: On<RequestReload>, proxy: Res<BrowsersProxy>) {
     proxy.reload_webview(&trigger.webview);
 }

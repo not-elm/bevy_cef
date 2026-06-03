@@ -1,4 +1,10 @@
-## Unreleased
+## v0.9.1
+
+### Bug Fixes
+
+- macOS: consecutive presses of the same key (e.g. Vimium-style `gg`) now register. The synthesized `KEYUP` was sent with `character` and `unmodified_character` both `0`, so the same `NSFlagsChanged` reclassification swallowed the key release; Blink kept the key logically held and dropped the next same-key `RAWKEYDOWN` as a duplicate, so only the first of any consecutive same-key press produced a `keydown`. The macOS `KEYUP` now carries the character — derived from `logical_key`, since winit leaves `text` empty on release — so releases register and repeated presses dispatch `keydown` again.
+
+## v0.9.0
 
 ### Bug Fixes
 
