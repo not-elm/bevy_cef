@@ -4,16 +4,74 @@
 mod iosurface;
 pub use iosurface::import_iosurface_to_wgpu;
 
+use std::os::raw::c_void;
+
 use bevy::render::render_resource::{
     Extent3d, Texture, TextureDimension, TextureFormat, TextureUsages, TextureView,
 };
 use bevy::render::render_resource::{TextureDescriptor, TextureViewDescriptor};
 use bevy::render::renderer::RenderDevice;
 
-/// Shared slot for a webview's owned GPU destination surface (main thread only).
-pub type SharedGpuSurface = std::rc::Rc<std::cell::RefCell<Option<WebviewGpuSurface>>>;
-/// Set true by `on_accelerated_paint` after a fresh blit; drained by the main-world system.
-pub type SharedGpuDirty = std::rc::Rc<std::cell::Cell<bool>>;
+/// Per-webview "latest IOSurface" slot (Approach 2).
+///
+/// `on_accelerated_paint` runs on the CEF UI thread (= Bevy main thread under
+/// `external_message_pump`), so a non-atomic `Rc<RefCell<_>>` is sufficient. The
+/// callback retains the freshly delivered IOSurface and stores it here, releasing
+/// the previously stored one (latest-frame-wins, 1-deep release-previous). The
+/// main-world collect system drains this for the render world.
+pub type SharedRetainedIoSurface = std::rc::Rc<std::cell::RefCell<Option<RetainedIoSurface>>>;
+
+/// A CEF IOSurface that this code has retained to keep its **object** alive
+/// beyond the `on_accelerated_paint` callback.
+///
+/// CEF guarantees the IOSurface pointer is valid only for the duration of the
+/// callback, and empirically the surface is torn down the instant the callback
+/// returns. `IOSurfaceIncrementUseCount` is only an advisory purgeability hint
+/// and does **not** keep the object alive (verified: `IOSurfaceGetUseCount`
+/// aborts on the retained pointer after the callback returns). To keep it alive
+/// until the render-graph node imports + blits it, we hold a real CoreFoundation
+/// reference via [`CFRetained`] (`CFRetain` on construction, `CFRelease` on drop).
+///
+/// # Safety / lifetime
+/// `surface` owns a +1 CF reference to the IOSurface, so the object stays alive
+/// for as long as this wrapper exists — across the main→render world handoff
+/// (even one frame behind under pipelined rendering).
+pub struct RetainedIoSurface {
+    surface: objc2_core_foundation::CFRetained<objc2_io_surface::IOSurfaceRef>,
+    pub width: u32,
+    pub height: u32,
+}
+
+impl RetainedIoSurface {
+    /// Takes a +1 CoreFoundation reference on the IOSurface at `ptr`, keeping the
+    /// object alive until this wrapper drops.
+    ///
+    /// # Safety
+    /// `ptr` must be a valid, non-null `IOSurfaceRef *` (as delivered by CEF's
+    /// `on_accelerated_paint`).
+    pub unsafe fn retain(ptr: *mut c_void, width: u32, height: u32) -> Self {
+        let nn = std::ptr::NonNull::new(ptr as *mut objc2_io_surface::IOSurfaceRef)
+            .expect("RetainedIoSurface::retain called with null pointer");
+        // Safety: `nn` points to a live IOSurface (valid during the callback);
+        // `CFRetained::retain` adds a CF reference and returns the owning handle.
+        let surface = unsafe { objc2_core_foundation::CFRetained::retain(nn) };
+        Self { surface, width, height }
+    }
+
+    /// Raw `IOSurfaceRef *` for the Metal import. Valid while `self` is alive.
+    pub fn ptr(&self) -> *mut c_void {
+        let r: &objc2_io_surface::IOSurfaceRef = &self.surface;
+        (r as *const objc2_io_surface::IOSurfaceRef) as *mut c_void
+    }
+}
+
+// Safety: `RetainedIoSurface` owns a +1 CF reference, so the underlying IOSurface
+// stays alive for as long as the wrapper exists — even across the main→render
+// world handoff. CF reference counting is thread-safe and the surface object is
+// process-wide (not thread-affine), so moving ownership to the render thread is
+// sound. We never alias the wrapper (it is moved, not shared).
+unsafe impl Send for RetainedIoSurface {}
+unsafe impl Sync for RetainedIoSurface {}
 
 /// Per-webview owned destination texture (MVP: single buffer).
 /// CEF の IOSurface を import したテクスチャからここへ blit する。
@@ -66,5 +124,43 @@ impl WebviewGpuSurface {
             self.texture.as_image_copy(),
             Extent3d { width: self.width, height: self.height, depth_or_array_layers: 1 },
         );
+    }
+
+    /// Imports the retained IOSurface `ptr` (size `width`×`height`) into a transient
+    /// wgpu texture and records a full-surface blit into this owned surface's
+    /// `encoder`. Returns the imported transient texture so the caller can keep it
+    /// alive until the encoder is submitted (wgpu keeps recorded resources alive,
+    /// but holding it explicitly until end-of-frame avoids any ambiguity).
+    ///
+    /// This is the single place where raw `wgpu`/`metal`/IOSurface naming lives, so
+    /// the Bevy render-graph node (in the root crate) can call it using only Bevy
+    /// types. Returns `None` if the import failed (logged by the caller).
+    ///
+    /// # Safety
+    /// `ptr` must be a valid `IOSurfaceRef *` that stays alive for the duration of
+    /// this call (guaranteed while the `RetainedIoSurface` wrapper is held).
+    pub unsafe fn import_and_blit(
+        &self,
+        device: &RenderDevice,
+        encoder: &mut wgpu::CommandEncoder,
+        ptr: *mut std::os::raw::c_void,
+        width: u32,
+        height: u32,
+    ) -> Option<Texture> {
+        // Use Bgra8UnormSrgb to match the owned surface format so the copy is a
+        // same-format blit.
+        let imported = unsafe {
+            import_iosurface_to_wgpu(
+                device.wgpu_device(),
+                ptr,
+                width,
+                height,
+                wgpu::TextureFormat::Bgra8UnormSrgb,
+            )
+        }?;
+        self.blit_from(encoder, &imported);
+        // Wrap in bevy's `Texture` so the caller (render-graph node in the root
+        // crate) can hold it alive without naming the raw `wgpu` crate.
+        Some(Texture::from(imported))
     }
 }

@@ -68,14 +68,19 @@ pub struct RenderHandlerBuilder {
     texture_sender: TextureSender,
     size: SharedViewSize,
     dpr: SharedDpr,
+    // Approach 2: the GPU import+blit moved out of the callback into a Bevy
+    // render-graph node, so `render_device`/`render_queue` are no longer used
+    // here. Kept (dead) to minimize churn in the browser wiring; remove when the
+    // surrounding plumbing is cleaned up.
     #[cfg(target_os = "macos")]
+    #[allow(dead_code)]
     render_device: bevy::render::renderer::RenderDevice,
     #[cfg(target_os = "macos")]
+    #[allow(dead_code)]
     render_queue: bevy::render::renderer::RenderQueue,
+    /// Latest retained IOSurface for this webview's main view (Approach 2).
     #[cfg(target_os = "macos")]
-    gpu_surface: crate::browser_process::accelerated_paint::SharedGpuSurface,
-    #[cfg(target_os = "macos")]
-    gpu_dirty: crate::browser_process::accelerated_paint::SharedGpuDirty,
+    latest_iosurface: crate::browser_process::accelerated_paint::SharedRetainedIoSurface,
 }
 
 impl RenderHandlerBuilder {
@@ -89,8 +94,7 @@ impl RenderHandlerBuilder {
         dpr: SharedDpr,
         render_device: bevy::render::renderer::RenderDevice,
         render_queue: bevy::render::renderer::RenderQueue,
-        gpu_surface: crate::browser_process::accelerated_paint::SharedGpuSurface,
-        gpu_dirty: crate::browser_process::accelerated_paint::SharedGpuDirty,
+        latest_iosurface: crate::browser_process::accelerated_paint::SharedRetainedIoSurface,
     ) -> RenderHandler {
         RenderHandler::new(Self {
             object: std::ptr::null_mut(),
@@ -101,8 +105,7 @@ impl RenderHandlerBuilder {
             dpr,
             render_device,
             render_queue,
-            gpu_surface,
-            gpu_dirty,
+            latest_iosurface,
         })
     }
 
@@ -179,9 +182,7 @@ impl Clone for RenderHandlerBuilder {
             #[cfg(target_os = "macos")]
             render_queue: self.render_queue.clone(),
             #[cfg(target_os = "macos")]
-            gpu_surface: self.gpu_surface.clone(),
-            #[cfg(target_os = "macos")]
-            gpu_dirty: self.gpu_dirty.clone(),
+            latest_iosurface: self.latest_iosurface.clone(),
         }
     }
 }
@@ -269,6 +270,14 @@ impl ImplRenderHandler for RenderHandlerBuilder {
         info: Option<&AcceleratedPaintInfo>,
     ) {
         // MVP: handle the main view only; popups are out of scope for now.
+        //
+        // Approach 2: do NO GPU work here. Bevy owns ordered command submission
+        // (its render graph submits once per frame and then presents); an
+        // out-of-band `queue.submit` from this callback (which runs in the Main
+        // schedule via `cef_do_message_loop_work`) corrupts rendering. So we only
+        // *retain* the freshly delivered IOSurface and publish it to the latest-
+        // frame slot. The actual import + blit happens in a Bevy render-graph node
+        // (`WebviewBlitNode`) that records into the frame's command encoder.
         #[cfg(target_os = "macos")]
         {
             if !matches!(type_.as_ref(), cef_paint_element_type_t::PET_VIEW) {
@@ -284,49 +293,19 @@ impl ImplRenderHandler for RenderHandlerBuilder {
                 return;
             }
 
-            // 1) Import the IOSurface into a transient wgpu texture (used ONLY in this callback).
-            // Use Bgra8UnormSrgb to match the owned surface format so the blit is a same-format copy.
-            let imported = unsafe {
-                crate::browser_process::accelerated_paint::import_iosurface_to_wgpu(
-                    self.render_device.wgpu_device(),
+            // Retain the IOSurface so it stays valid until the render-graph node
+            // imports + blits it later this frame. Storing the new retained
+            // surface replaces (and thus drops/releases) the previous one —
+            // latest-frame-wins, 1-deep release-previous. The previous frame's
+            // blit has already completed by the time CEF delivers a new frame.
+            let retained = unsafe {
+                crate::browser_process::accelerated_paint::RetainedIoSurface::retain(
                     info.shared_texture_io_surface,
                     width,
                     height,
-                    wgpu::TextureFormat::Bgra8UnormSrgb,
                 )
             };
-            let Some(imported) = imported else {
-                bevy::log::error!(
-                    "macOS GPU OSR: IOSurface import failed ({width}x{height})"
-                );
-                return;
-            };
-
-            // 2) Ensure the owned destination surface exists at the right size, then blit + submit.
-            {
-                let mut slot = self.gpu_surface.borrow_mut();
-                let surface = slot.get_or_insert_with(|| {
-                    crate::browser_process::accelerated_paint::WebviewGpuSurface::new(
-                        &self.render_device,
-                        width,
-                        height,
-                    )
-                });
-                surface.ensure_size(&self.render_device, width, height);
-
-                let mut encoder =
-                    self.render_device
-                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                            label: Some("webview-osr-blit"),
-                        });
-                surface.blit_from(&mut encoder, &imported);
-                self.render_queue.submit(std::iter::once(encoder.finish()));
-            }
-
-            // 3) Signal the main-world drain system that a fresh frame is ready.
-            self.gpu_dirty.set(true);
-
-            // `imported` drops here — the IOSurface-derived texture never escapes the callback.
+            *self.latest_iosurface.borrow_mut() = Some(retained);
         }
         #[cfg(not(target_os = "macos"))]
         {

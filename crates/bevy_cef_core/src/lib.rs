@@ -21,6 +21,10 @@ pub mod prelude {
     pub use crate::browser_process::drag_handler::DraggableRegionSenderInner;
     #[cfg(feature = "browser")]
     pub use crate::browser_process::*;
+    #[cfg(all(feature = "browser", target_os = "macos"))]
+    pub use crate::browser_process::accelerated_paint::{
+        RetainedIoSurface, WebviewGpuSurface, import_iosurface_to_wgpu,
+    };
     pub use crate::custom_scheme::{
         CefCustomScheme, CefSchemeBody, CefSchemeHandler, CefSchemeOptions, CefSchemeRequest,
         CefSchemeResponse, init_registered_schemes,

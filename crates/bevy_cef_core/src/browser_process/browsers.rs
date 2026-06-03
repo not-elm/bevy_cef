@@ -54,10 +54,11 @@ pub struct WebviewBrowser {
     pub view_slot: SharedTexture,
     #[cfg(not(target_os = "windows"))]
     pub popup_slot: SharedTexture,
+    /// [macOS GPU OSR] Latest IOSurface retained by `on_accelerated_paint`
+    /// (Approach 2). Drained by the main-world collect system for extraction
+    /// into the render world, where `WebviewBlitNode` imports + blits it.
     #[cfg(target_os = "macos")]
-    pub gpu_surface: crate::browser_process::accelerated_paint::SharedGpuSurface,
-    #[cfg(target_os = "macos")]
-    pub gpu_dirty: crate::browser_process::accelerated_paint::SharedGpuDirty,
+    pub latest_iosurface: crate::browser_process::accelerated_paint::SharedRetainedIoSurface,
 }
 
 #[derive(Default)]
@@ -93,11 +94,8 @@ impl Browsers {
         let view_slot: SharedTexture = Rc::new(Cell::new(None));
         let popup_slot: SharedTexture = Rc::new(Cell::new(None));
         #[cfg(target_os = "macos")]
-        let gpu_surface: crate::browser_process::accelerated_paint::SharedGpuSurface =
+        let latest_iosurface: crate::browser_process::accelerated_paint::SharedRetainedIoSurface =
             Rc::new(std::cell::RefCell::new(None));
-        #[cfg(target_os = "macos")]
-        let gpu_dirty: crate::browser_process::accelerated_paint::SharedGpuDirty =
-            Rc::new(Cell::new(false));
         let browser = browser_host_create_browser_sync(
             Some(&WindowInfo {
                 windowless_rendering_enabled: true as _,
@@ -131,9 +129,7 @@ impl Browsers {
                 render_device,
                 render_queue,
                 #[cfg(target_os = "macos")]
-                gpu_surface.clone(),
-                #[cfg(target_os = "macos")]
-                gpu_dirty.clone(),
+                latest_iosurface.clone(),
             )),
             Some(&uri.into()),
             Some(&BrowserSettings {
@@ -153,9 +149,7 @@ impl Browsers {
             view_slot,
             popup_slot,
             #[cfg(target_os = "macos")]
-            gpu_surface,
-            #[cfg(target_os = "macos")]
-            gpu_dirty,
+            latest_iosurface,
         };
 
         self.browsers.insert(webview, webview_browser);
@@ -167,33 +161,34 @@ impl Browsers {
         }
     }
 
-    /// [macOS GPU OSR] Returns the owned GPU surface texture for every webview
-    /// that currently has one allocated.
+    /// [macOS GPU OSR] Drains the latest retained IOSurface for every webview
+    /// that has received a new accelerated-paint frame since the last call
+    /// (Approach 2).
     ///
-    /// Returns `(entity, texture, view, width, height)` tuples. `Texture` and
-    /// `TextureView` are cheap refcounted clones of the live owned surface that
-    /// `on_accelerated_paint` blits each CEF frame into; the texture itself is
-    /// stable, so registering it once per frame in `RenderAssets<GpuImage>`
-    /// keeps the material sampling fresh contents.
+    /// Returns `(entity, RetainedIoSurface)` pairs, **transferring ownership** of
+    /// the retain (the +1 IOSurface use-count) to the caller. This is essential
+    /// under pipelined rendering: the render world consumes the surface one frame
+    /// behind the main world, so the retain must travel with the data — reading a
+    /// raw pointer that `on_accelerated_paint` may release on the next main-world
+    /// frame would dereference a freed IOSurface (segfault in Metal's
+    /// `newTextureWithDescriptor:iosurface:`).
     ///
-    /// Not gated on `gpu_dirty`: the `GpuImage` must stay registered every
-    /// frame so sampling continues even when no new frame arrived.
+    /// A webview with no new frame this call yields nothing; its owned GPU
+    /// texture already holds the last good contents, so sampling stays correct.
     #[cfg(target_os = "macos")]
-    pub fn webview_gpu_textures(
+    pub fn take_latest_webview_iosurfaces(
         &self,
     ) -> Vec<(
         Entity,
-        bevy::render::render_resource::Texture,
-        bevy::render::render_resource::TextureView,
-        u32,
-        u32,
+        crate::browser_process::accelerated_paint::RetainedIoSurface,
     )> {
         self.browsers
             .iter()
             .filter_map(|(entity, b)| {
-                let s = b.gpu_surface.borrow();
-                s.as_ref()
-                    .map(|surf| (*entity, surf.texture.clone(), surf.view.clone(), surf.width, surf.height))
+                b.latest_iosurface
+                    .borrow_mut()
+                    .take()
+                    .map(|retained| (*entity, retained))
             })
             .collect()
     }
@@ -594,9 +589,7 @@ impl Browsers {
         render_device: bevy::render::renderer::RenderDevice,
         render_queue: bevy::render::renderer::RenderQueue,
         #[cfg(target_os = "macos")]
-        gpu_surface: crate::browser_process::accelerated_paint::SharedGpuSurface,
-        #[cfg(target_os = "macos")]
-        gpu_dirty: crate::browser_process::accelerated_paint::SharedGpuDirty,
+        latest_iosurface: crate::browser_process::accelerated_paint::SharedRetainedIoSurface,
     ) -> Client {
         #[cfg(target_os = "macos")]
         let render_handler = RenderHandlerBuilder::build(
@@ -607,8 +600,7 @@ impl Browsers {
             dpr,
             render_device,
             render_queue,
-            gpu_surface,
-            gpu_dirty,
+            latest_iosurface,
         );
         #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
         let render_handler = RenderHandlerBuilder::build(

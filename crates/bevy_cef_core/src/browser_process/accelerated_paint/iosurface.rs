@@ -76,7 +76,10 @@ pub unsafe fn import_iosurface_to_wgpu(
         metal_desc.set_texture_type(MTLTextureType::D2);
         metal_desc.set_pixel_format(metal_pixel_format);
         metal_desc.set_usage(MTLTextureUsage::ShaderRead);
-        metal_desc.set_storage_mode(MTLStorageMode::Managed);
+        // Apple Silicon: an IOSurface-backed Metal texture must use Shared storage.
+        // With Managed, GPU writes from CEF's process may not propagate, giving
+        // black/stale content.
+        metal_desc.set_storage_mode(MTLStorageMode::Shared);
 
         // Acquire a scoped reference to the wgpu-hal Metal device.
         // `as_hal` returns `Option<impl Deref<Target = hal::metal::Device>>`.

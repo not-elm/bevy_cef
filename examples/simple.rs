@@ -9,6 +9,10 @@ use std::time::Duration;
 fn main() {
     App::new()
         .add_plugins((
+            // Approach 2: the IOSurface import + blit runs inside a Bevy
+            // render-graph node (recorded into the frame encoder, submitted in
+            // order by Bevy), so pipelined rendering is left enabled — the GPU
+            // work no longer happens out-of-band on the main thread.
             DefaultPlugins,
             // [poc-osr] Set a dedicated root_cache_path so cef_initialize does
             // not fall into the default-profile process-singleton path (which
@@ -28,7 +32,7 @@ fn main() {
 }
 
 // TEMP: verification screenshot (remove later)
-// Fires once ~6s after startup: captures the primary window framebuffer
+// Fires once ~12s after startup: captures the primary window framebuffer
 // (in-app GPU readback, no macOS Screen Recording permission needed) and
 // saves it to /tmp/poc-task3.png. ~3s later it sends AppExit so the app
 // terminates cleanly and the async PNG readback flushes.
@@ -39,7 +43,8 @@ fn verification_screenshot(
     mut exit_timer: Local<Option<Timer>>,
     mut app_exit: MessageWriter<AppExit>,
 ) {
-    let shot = shot_timer.get_or_insert_with(|| Timer::new(Duration::from_secs(6), TimerMode::Once));
+    let shot =
+        shot_timer.get_or_insert_with(|| Timer::new(Duration::from_secs(12), TimerMode::Once));
     if !shot.is_finished() {
         shot.tick(time.delta());
         if shot.just_finished() {
@@ -79,7 +84,10 @@ fn spawn_webview(
     mut materials: ResMut<Assets<WebviewExtendStandardMaterial>>,
 ) {
     commands.spawn((
-        WebviewSource::new("https://github.com/not-elm/bevy_cef"),
+        // TEMP: red test page (revert later)
+        WebviewSource::inline(
+            "<!DOCTYPE html><html><body style='margin:0;width:100%;height:100%;background:#ff0000;'></body></html>",
+        ),
         Mesh3d(meshes.add(Plane3d::new(Vec3::Z, Vec2::ONE))),
         MeshMaterial3d(materials.add(WebviewExtendStandardMaterial::default())),
     ));
