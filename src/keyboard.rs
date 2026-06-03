@@ -120,19 +120,14 @@ fn send_key_event(
         }
         let key_events = create_cef_key_events(modifiers, &input, event);
         for key_event in key_events {
-            match target {
-                // An explicit focus wins: deliver only to that webview.
-                Some(webview) => browsers.send_key(&webview, key_event.clone()),
-                // No resolved focus (before the first click, or after the focused
-                // webview despawned): fall back to the CEF-focus-gated path so a
-                // browser CEF auto-focused at startup still receives keys. `send_key`
-                // only reaches browsers with a focused frame, so this scopes itself
-                // rather than truly broadcasting (see `src/focus.rs`).
-                None => {
-                    for webview in webviews.iter() {
-                        browsers.send_key(&webview, key_event.clone());
-                    }
-                }
+            // Deliver only to the explicitly-focused webview. When nothing is
+            // focused — focus is on a non-webview surface (e.g. a terminal pane
+            // in an embedder) — no webview receives keys. Broadcasting to all
+            // webviews here leaked keystrokes to a previously-focused webview:
+            // `send_key` is gated on CEF's `focused_frame()`, which survives
+            // `set_focus(false)`, so the blurred webview kept receiving input.
+            if let Some(webview) = target {
+                browsers.send_key(&webview, key_event.clone());
             }
         }
     }
@@ -144,8 +139,18 @@ fn ime_event(
     mut is_ime_commiting: ResMut<IsImeCommiting>,
     mut is_ime_composing: ResMut<IsImeComposing>,
     browsers: NonSend<Browsers>,
+    focused: Res<FocusedWebview>,
+    webviews: Query<Entity, With<WebviewSource>>,
 ) {
+    let target = focused.0.filter(|e| webviews.get(*e).is_ok());
     for event in er.read() {
+        // Drive CEF IME only when a webview is focused. With focus on a
+        // non-webview surface (e.g. a terminal pane in an embedder), routing IME
+        // here would leak composition to a previously-focused webview whose CEF
+        // `focused_frame()` survives `set_focus(false)` — the same leak as keys.
+        if target.is_none() {
+            continue;
+        }
         match event {
             Ime::Preedit { value, cursor, .. } => {
                 if value.is_empty() {
@@ -194,19 +199,10 @@ fn send_key_event_win(
         }
         let key_events = create_cef_key_events(modifiers, &input, event);
         for key_event in key_events {
-            match target {
-                // An explicit focus wins: deliver only to that webview.
-                Some(webview) => proxy.send_key(&webview, key_event.clone()),
-                // No resolved focus (before the first click, or after the focused
-                // webview despawned): fall back to the CEF-focus-gated path so a
-                // browser CEF auto-focused at startup still receives keys. `send_key`
-                // only reaches browsers with a focused frame, so this scopes itself
-                // rather than truly broadcasting (see `src/focus.rs`).
-                None => {
-                    for webview in webviews.iter() {
-                        proxy.send_key(&webview, key_event.clone());
-                    }
-                }
+            // Deliver only to the explicitly-focused webview. See the non-Windows
+            // variant for why broadcasting on `None` leaks keys to a blurred webview.
+            if let Some(webview) = target {
+                proxy.send_key(&webview, key_event.clone());
             }
         }
     }
@@ -218,8 +214,15 @@ fn ime_event_win(
     mut is_ime_commiting: ResMut<IsImeCommiting>,
     mut is_ime_composing: ResMut<IsImeComposing>,
     proxy: Res<BrowsersProxy>,
+    focused: Res<FocusedWebview>,
+    webviews: Query<Entity, With<WebviewSource>>,
 ) {
+    let target = focused.0.filter(|e| webviews.get(*e).is_ok());
     for event in er.read() {
+        // See `ime_event`: drive CEF IME only when a webview is focused.
+        if target.is_none() {
+            continue;
+        }
         match event {
             Ime::Preedit { value, cursor, .. } => {
                 if value.is_empty() {
