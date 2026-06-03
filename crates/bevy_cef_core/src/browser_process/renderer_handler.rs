@@ -230,32 +230,41 @@ impl ImplRenderHandler for RenderHandlerBuilder {
         width: c_int,
         height: c_int,
     ) {
-        let ty = match type_.as_ref() {
-            cef_paint_element_type_t::PET_POPUP => RenderPaintElementType::Popup,
-            _ => RenderPaintElementType::View,
-        };
-        let texture = RenderTextureMessage {
-            webview: self.webview,
-            ty,
-            width: width as u32,
-            height: height as u32,
-            buffer: unsafe {
-                std::slice::from_raw_parts(buffer, (width * height * 4) as usize).to_vec()
-            },
-        };
-
-        #[cfg(not(target_os = "windows"))]
+        // macOS uses the GPU accelerated-paint path (on_accelerated_paint);
+        // on_paint is never called when shared_texture_enabled is true.
+        #[cfg(not(target_os = "macos"))]
         {
-            let slot = match ty {
-                RenderPaintElementType::Popup => &self.popup_slot,
-                RenderPaintElementType::View => &self.view_slot,
+            let ty = match type_.as_ref() {
+                cef_paint_element_type_t::PET_POPUP => RenderPaintElementType::Popup,
+                _ => RenderPaintElementType::View,
             };
-            slot.set(Some(texture));
-        }
+            let texture = RenderTextureMessage {
+                webview: self.webview,
+                ty,
+                width: width as u32,
+                height: height as u32,
+                buffer: unsafe {
+                    std::slice::from_raw_parts(buffer, (width * height * 4) as usize).to_vec()
+                },
+            };
 
-        #[cfg(target_os = "windows")]
+            #[cfg(not(target_os = "windows"))]
+            {
+                let slot = match ty {
+                    RenderPaintElementType::Popup => &self.popup_slot,
+                    RenderPaintElementType::View => &self.view_slot,
+                };
+                slot.set(Some(texture));
+            }
+
+            #[cfg(target_os = "windows")]
+            {
+                let _ = self.texture_sender.send_blocking(texture);
+            }
+        }
+        #[cfg(target_os = "macos")]
         {
-            let _ = self.texture_sender.send_blocking(texture);
+            let _ = (type_, buffer, width, height);
         }
     }
 

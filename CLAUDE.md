@@ -124,7 +124,7 @@ No automated tests. Testing done through examples:
 
 ## Platform Notes
 
-- **macOS**: Full support. Uses `objc` crate for window handling. CEF framework at `$HOME/.local/share/cef/Chromium Embedded Framework.framework`
+- **macOS**: Full support. Uses `objc` crate for window handling. CEF framework at `$HOME/.local/share/cef/Chromium Embedded Framework.framework`. Webviews (mesh + bevy_ui) render via the GPU `OnAcceleratedPaint` + IOSurface path — a render-graph node (`WebviewBlitNode`) imports the IOSurface as a Metal texture and blits it into the Bevy texture each frame (no CPU readback). `root_cache_path` must be set in `CefPlugin` to avoid `cef_initialize` failures from CEF's process-singleton lock. Sprite webviews are pending GPU support and still use the legacy CPU path.
 - **Windows**: Full support. CEF at `$USERPROFILE/.local/share/cef`, auto-copied by build.rs. Separate render process binary recommended
 - **Linux**: Supported. CEF at `$HOME/.local/share/cef`, auto-copied by `build.rs`. Run `make setup-linux` to install CEF + `bevy_cef_render_process`. `--no-zygote` is set in the default `CommandLineConfig` to avoid `chrome-sandbox` dependencies (combined with `no_sandbox: true`).
 

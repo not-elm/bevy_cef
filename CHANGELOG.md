@@ -1,3 +1,18 @@
+## Unreleased
+
+### Added
+
+- macOS: GPU offscreen rendering via CEF `OnAcceleratedPaint` + IOSurface. The webview is
+  imported as a Metal/IOSurface texture and blitted into a Bevy texture inside a custom
+  render-graph node (no CPU readback). Supported for 3D mesh (`WebviewExtendStandardMaterial`)
+  and `bevy_ui` (`WebviewUiMaterial`) webviews. The CPU `OnPaint` path is no longer used on macOS.
+
+### Notes
+
+- macOS: set `CefPlugin { root_cache_path: Some(...), .. }` (CEF's default-cache process-singleton
+  otherwise can make `cef_initialize` fail). Sprite (2D `Sprite`) webviews on macOS still use the
+  legacy path / are pending GPU support.
+
 ## v0.10.0
 
 ### Breaking Changes
