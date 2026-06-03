@@ -50,17 +50,25 @@ pub fn create_cef_key_events(
     let native_key_code = to_native_key_code(&key_event.key_code) as _;
     let vk_code = keycode_to_windows_vk(key_event.key_code);
 
+    // Shared skeleton for every emitted event. `type_` and the character fields
+    // are the only things that vary between KEYUP / RAWKEYDOWN / CHAR, so each
+    // event below is built by overriding just those on top of `base`.
+    let base = cef_key_event_t {
+        size: core::mem::size_of::<cef_key_event_t>(),
+        type_: cef_key_event_type_t::KEYEVENT_RAWKEYDOWN,
+        modifiers,
+        windows_key_code: vk_code,
+        native_key_code,
+        character: 0,
+        unmodified_character: 0,
+        is_system_key: false as _,
+        focus_on_editable_field: false as _,
+    };
+
     if key_event.state == ButtonState::Released {
         return vec![cef::KeyEvent::from(cef_key_event_t {
-            size: core::mem::size_of::<cef_key_event_t>(),
             type_: cef_key_event_type_t::KEYEVENT_KEYUP,
-            modifiers,
-            windows_key_code: vk_code,
-            native_key_code,
-            character: 0,
-            unmodified_character: 0,
-            is_system_key: false as _,
-            focus_on_editable_field: false as _,
+            ..base
         })];
     }
 
@@ -80,15 +88,9 @@ pub fn create_cef_key_events(
     let key_down_character = if cfg!(target_os = "macos") { character } else { 0 };
 
     let raw_key_down = cef_key_event_t {
-        size: core::mem::size_of::<cef_key_event_t>(),
-        type_: cef_key_event_type_t::KEYEVENT_RAWKEYDOWN,
-        modifiers,
-        windows_key_code: vk_code,
-        native_key_code,
         character: key_down_character,
         unmodified_character: key_down_character,
-        is_system_key: false as _,
-        focus_on_editable_field: false as _,
+        ..base
     };
 
     if is_not_character_key_code(&key_event.key_code) || character == 0 {
@@ -107,7 +109,7 @@ pub fn create_cef_key_events(
         },
         character,
         unmodified_character: character,
-        ..raw_key_down
+        ..base
     };
     vec![
         cef::KeyEvent::from(raw_key_down),
