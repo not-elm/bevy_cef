@@ -86,10 +86,10 @@ make setup-windows
 
 ### Debug Tools Setup (macOS)
 ```bash
-cargo install export-cef-dir --version 144.4.0
-export-cef-dir --force $HOME/.local/share
+cargo install export-cef-dir --version 145.6.1+145.0.28
+export-cef-dir --force $HOME/.local/share/cef
 cargo install bevy_cef_debug_render_process
-cp $HOME/.cargo/bin/bevy_cef_debug_render_process "$HOME/.local/share/Chromium Embedded Framework.framework/Libraries/bevy_cef_debug_render_process"
+cp $HOME/.cargo/bin/bevy_cef_debug_render_process "$HOME/.local/share/cef/Chromium Embedded Framework.framework/Libraries/bevy_cef_debug_render_process"
 ```
 
 ### Windows Setup
@@ -124,7 +124,7 @@ No automated tests. Testing done through examples:
 
 ## Platform Notes
 
-- **macOS**: Full support. Uses `objc` crate for window handling. CEF framework at `$HOME/.local/share/Chromium Embedded Framework.framework`
+- **macOS**: Full support. Uses `objc` crate for window handling. CEF framework at `$HOME/.local/share/cef/Chromium Embedded Framework.framework`
 - **Windows**: Full support. CEF at `$USERPROFILE/.local/share/cef`, auto-copied by build.rs. Separate render process binary recommended
 - **Linux**: Supported. CEF at `$HOME/.local/share/cef`, auto-copied by `build.rs`. Run `make setup-linux` to install CEF + `bevy_cef_render_process`. `--no-zygote` is set in the default `CommandLineConfig` to avoid `chrome-sandbox` dependencies (combined with `no_sandbox: true`).
 

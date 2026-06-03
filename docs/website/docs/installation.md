@@ -43,10 +43,10 @@ Download and install the CEF framework to the default location:
 
 ```bash
 cargo install export-cef-dir
-export-cef-dir --force $HOME/.local/share
+export-cef-dir --force $HOME/.local/share/cef
 ```
 
-This places the Chromium Embedded Framework at `$HOME/.local/share/Chromium Embedded Framework.framework`.
+This places the Chromium Embedded Framework at `$HOME/.local/share/cef/Chromium Embedded Framework.framework`.
 
 ### 2. Install the Debug Render Process
 
@@ -55,7 +55,7 @@ During development, install the debug render process binary and copy it into the
 ```bash
 cargo install bevy_cef_debug_render_process
 cp $HOME/.cargo/bin/bevy_cef_debug_render_process \
-   "$HOME/.local/share/Chromium Embedded Framework.framework/Libraries/bevy_cef_debug_render_process"
+   "$HOME/.local/share/cef/Chromium Embedded Framework.framework/Libraries/bevy_cef_debug_render_process"
 ```
 
 ### 3. Use the `debug` Feature
