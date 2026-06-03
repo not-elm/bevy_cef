@@ -11,6 +11,11 @@ use serde::{Deserialize, Serialize};
 
 /// The plugin to handle keyboard inputs.
 ///
+/// Keyboard and IME input is delivered to the webview that currently holds
+/// focus ([`FocusedWebview`]), which is set when a webview is clicked. A webview
+/// therefore receives keyboard input only after it has been clicked at least
+/// once; while no webview is focused, input is dropped.
+///
 /// To use IME, you need to set [`Window::ime_enabled`](bevy::prelude::Window) to `true`.
 pub(super) struct KeyboardPlugin;
 
@@ -118,17 +123,18 @@ fn send_key_event(
             is_ime_composing.0 = false;
             continue;
         }
-        let key_events = create_cef_key_events(modifiers, &input, event);
-        for key_event in key_events {
-            // Deliver only to the explicitly-focused webview. When nothing is
-            // focused — focus is on a non-webview surface (e.g. a terminal pane
-            // in an embedder) — no webview receives keys. Broadcasting to all
-            // webviews here leaked keystrokes to a previously-focused webview:
-            // `send_key` is gated on CEF's `focused_frame()`, which survives
-            // `set_focus(false)`, so the blurred webview kept receiving input.
-            if let Some(webview) = target {
-                browsers.send_key(&webview, key_event.clone());
-            }
+        // Deliver only to the explicitly-focused webview. When nothing is
+        // focused — before the first click, or focus is on a non-webview surface
+        // (e.g. a terminal pane in an embedder) — no webview receives keys.
+        // Broadcasting to all webviews here leaked keystrokes to a
+        // previously-focused webview: `send_key` is gated on CEF's
+        // `focused_frame()`, which survives `set_focus(false)`, so the blurred
+        // webview kept receiving input.
+        let Some(webview) = target else {
+            continue;
+        };
+        for key_event in create_cef_key_events(modifiers, &input, event) {
+            browsers.send_key(&webview, key_event);
         }
     }
 }
@@ -210,13 +216,14 @@ fn send_key_event_win(
             is_ime_composing.0 = false;
             continue;
         }
-        let key_events = create_cef_key_events(modifiers, &input, event);
-        for key_event in key_events {
-            // Deliver only to the explicitly-focused webview. See the non-Windows
-            // variant for why broadcasting on `None` leaks keys to a blurred webview.
-            if let Some(webview) = target {
-                proxy.send_key(&webview, key_event.clone());
-            }
+        // Deliver only to the explicitly-focused webview. See the non-Windows
+        // variant for why broadcasting on `None` leaks keys to a blurred webview,
+        // and why a webview receives keys only after it is first clicked.
+        let Some(webview) = target else {
+            continue;
+        };
+        for key_event in create_cef_key_events(modifiers, &input, event) {
+            proxy.send_key(&webview, key_event);
         }
     }
 }
