@@ -25,24 +25,31 @@
 //!    and pairs each with its surface `AssetId<Image>` into
 //!    `PendingWebviewIoSurfaces`.
 //! 3. `ExtractSchedule`: `extract_webview_iosurfaces` copies the pending list into
-//!    the render world (`ExtractedWebviewIoSurfaces`).
-//! 4. Render `PrepareResources`: `prepare_webview_gpu_surfaces` ensures an owned
-//!    destination `WebviewGpuSurface` exists (at the right size) for each id, and
-//!    clears the previous frame's imported transient textures.
-//! 5. Render graph (`WebviewBlitNode`, before `CameraDriverLabel`): import each
+//!    the render world (`ExtractedWebviewIoSurfaces`), and
+//!    `extract_live_webview_surface_ids` records the live webviews' surface ids
+//!    (so step 5 can prune entries for despawned webviews).
+//!
+//! The remaining steps run in render-schedule order — note `PrepareAssets` runs
+//! BEFORE the render graph, so inject (5) precedes the blit (6):
+//!
+//! 4. Render `PrepareResources`: `prepare_webview_gpu_surfaces` clears the previous
+//!    frame's imported transient textures (now safely submitted).
+//! 5. Render `PrepareAssets` (after `prepare_assets::<GpuImage>`, before the
+//!    material bind-group build): `inject_webview_gpu_images` prunes despawned
+//!    surfaces, get-or-creates the owned `WebviewGpuSurface` for each id (it must
+//!    exist before the material bind group is built), wraps each owned surface in a
+//!    `GpuImage`, and inserts it into `RenderAssets<GpuImage>` for the surface id.
+//! 6. Render graph (`WebviewBlitNode`, before `CameraDriverLabel`): import each
 //!    retained IOSurface into a transient wgpu texture and record a blit into the
-//!    frame's command encoder targeting the owned surface. The transient textures
-//!    are stashed so they outlive encoder submission.
-//! 6. Render `PrepareAssets` (before `PrepareBindGroups`): `inject_webview_gpu_images`
-//!    wraps each owned surface in a `GpuImage` and inserts it into
-//!    `RenderAssets<GpuImage>` for the webview's surface id.
+//!    frame's command encoder, filling the owned surface created in step 5. The
+//!    transient textures are stashed so they outlive encoder submission.
 //!
 //! The owned texture is a single stable buffer (MVP, no double-buffering): the
 //! node blits into the same texture each frame, and the injected `GpuImage`
 //! reuses the same `texture_view`, so the material bind group stays valid.
 
 use crate::common::{WebviewAlpha, WebviewSource};
-use crate::prelude::{WebviewExtendStandardMaterial, WebviewMaterial, WebviewSurface};
+use crate::prelude::{WebviewExtendStandardMaterial, WebviewSurface};
 use crate::webview::ui::WebviewUiMaterial;
 use bevy::asset::{AssetId, RenderAssetUsages};
 use bevy::platform::collections::HashMap;
@@ -113,8 +120,12 @@ impl Plugin for WebviewGpuInjectPlugin {
         render_app
             .init_resource::<ExtractedWebviewIoSurfaces>()
             .init_resource::<WebviewGpuSurfaces>()
+            .init_resource::<LiveWebviewSurfaceIds>()
             .init_resource::<ImportedWebviewTextures>()
-            .add_systems(ExtractSchedule, extract_webview_iosurfaces)
+            .add_systems(
+                ExtractSchedule,
+                (extract_webview_iosurfaces, extract_live_webview_surface_ids),
+            )
             // Clear last frame's imported transient textures before the node runs.
             .add_systems(
                 Render,
@@ -160,9 +171,9 @@ impl Plugin for WebviewGpuInjectPlugin {
 /// frame is submitted, then dropped (released).
 struct PendingIoSurface {
     id: AssetId<Image>,
+    // Width/height are read from `surface.width`/`surface.height` (both `pub` on
+    // `RetainedIoSurface`) at use sites, so we don't duplicate them here.
     surface: RetainedIoSurface,
-    width: u32,
-    height: u32,
 }
 
 /// Main-world store of the latest retained IOSurfaces drained this frame.
@@ -182,6 +193,14 @@ struct ExtractedWebviewIoSurfaces(Vec<PendingIoSurface>);
 /// the material's surface `AssetId<Image>`.
 #[derive(Resource, Default)]
 struct WebviewGpuSurfaces(HashMap<AssetId<Image>, WebviewGpuSurface>);
+
+/// Render-world set of the surface ids of all webviews that are currently live in
+/// the main world. Filled each frame from the authoritative `WebviewSurface`
+/// query (in `ExtractSchedule`) and used by `inject_webview_gpu_images` to prune
+/// `WebviewGpuSurfaces` entries whose webview has despawned — otherwise the owned
+/// GPU texture (~2.5 MB each) leaks and a dead `GpuImage` is re-injected forever.
+#[derive(Resource, Default)]
+struct LiveWebviewSurfaceIds(bevy::platform::collections::HashSet<AssetId<Image>>);
 
 /// Render-world holder keeping each transient imported IOSurface texture alive
 /// until the frame's command encoder is submitted (the imported MTLTexture
@@ -245,7 +264,7 @@ fn allocate_webview_surfaces(
 /// dropped (released) here.
 fn collect_webview_iosurfaces(
     browsers: NonSend<Browsers>,
-    surfaces: Query<(Entity, &WebviewSurface)>,
+    surfaces: Query<&WebviewSurface>,
     pending: ResMut<PendingWebviewIoSurfaces>,
 ) {
     let Ok(mut pending) = pending.0.lock() else {
@@ -255,17 +274,13 @@ fn collect_webview_iosurfaces(
     // the surface id was known); releasing them keeps use-counts balanced.
     pending.clear();
     for (entity, retained) in browsers.take_latest_webview_iosurfaces() {
-        let Some((_, surface)) = surfaces.iter().find(|(e, _)| *e == entity) else {
+        let Ok(surface) = surfaces.get(entity) else {
             // No surface id yet; dropping `retained` releases the IOSurface.
             continue;
         };
-        let width = retained.width;
-        let height = retained.height;
         pending.push(PendingIoSurface {
             id: surface.0.id(),
             surface: retained,
-            width,
-            height,
         });
     }
 }
@@ -283,6 +298,21 @@ fn extract_webview_iosurfaces(
     if let Ok(mut pending) = pending.0.lock() {
         extracted.0.append(&mut pending);
     }
+}
+
+/// Extract the surface ids of all live webviews from the main world so the render
+/// world can prune `WebviewGpuSurfaces` entries belonging to despawned webviews.
+///
+/// This is the authoritative live set: a live webview always has its
+/// `WebviewSurface` in this query, so its id is always present, and a webview that
+/// has despawned drops out — which is exactly the signal `inject_webview_gpu_images`
+/// uses to release the leaked owned texture.
+fn extract_live_webview_surface_ids(
+    mut live: ResMut<LiveWebviewSurfaceIds>,
+    surfaces: Extract<Query<&WebviewSurface>>,
+) {
+    live.0.clear();
+    live.0.extend(surfaces.iter().map(|s| s.0.id()));
 }
 
 /// Render-world system (`PrepareResources`): release the previous frame's
@@ -335,8 +365,8 @@ impl Node for WebviewBlitNode {
                     &render_device,
                     encoder,
                     entry.surface.ptr(),
-                    entry.width,
-                    entry.height,
+                    entry.surface.width,
+                    entry.surface.height,
                 )
             };
             match imported {
@@ -344,8 +374,8 @@ impl Node for WebviewBlitNode {
                 None => {
                     bevy::log::error!(
                         "[macos-gpu-osr] IOSurface import failed ({}x{})",
-                        entry.width,
-                        entry.height
+                        entry.surface.width,
+                        entry.surface.height
                     );
                 }
             }
@@ -375,18 +405,28 @@ fn inject_webview_gpu_images(
     mut surfaces: ResMut<WebviewGpuSurfaces>,
     mut gpu_images: ResMut<RenderAssets<GpuImage>>,
     default_sampler: Res<DefaultImageSampler>,
+    live: Res<LiveWebviewSurfaceIds>,
 ) {
+    // Prune owned surfaces whose webview has despawned. We only drop ids that are
+    // ABSENT from the authoritative live set, so a live webview (whose
+    // `WebviewSurface` is always in the extract query) is never pruned. Dropping
+    // the entry releases its ~2.5 MB owned GPU texture and stops re-injecting a
+    // dead `GpuImage` every frame. (Bevy's `prepare_assets` already removes the
+    // dead Image's `GpuImage` from `RenderAssets` on `AssetEvent::Removed`, so we
+    // do not need to touch `gpu_images` for pruned ids.)
+    surfaces.0.retain(|id, _| live.0.contains(id));
+
     // Ensure an owned destination texture exists at the right size for each id
     // that produced an IOSurface this frame.
     for entry in &extracted.0 {
         match surfaces.0.get_mut(&entry.id) {
             Some(surface) => {
-                surface.ensure_size(&render_device, entry.width, entry.height);
+                surface.ensure_size(&render_device, entry.surface.width, entry.surface.height);
             }
             None => {
                 surfaces.0.insert(
                     entry.id,
-                    WebviewGpuSurface::new(&render_device, entry.width, entry.height),
+                    WebviewGpuSurface::new(&render_device, entry.surface.width, entry.surface.height),
                 );
             }
         }
@@ -561,11 +601,6 @@ fn mark_sprite_webview_images_changed(
         let _ = images.get_mut(surface.0.id());
     }
 }
-
-// Reference WebviewMaterial so its type path stays linked even if the field
-// access above is refactored; keeps the module self-documenting.
-#[allow(dead_code)]
-fn _assert_material_type(_m: &WebviewMaterial) {}
 
 /// Main-world system: copy the latest CPU alpha buffer for each webview from
 /// `Browsers` into a `WebviewAlpha` component on the corresponding entity.

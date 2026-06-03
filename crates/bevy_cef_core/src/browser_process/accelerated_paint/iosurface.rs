@@ -59,14 +59,25 @@ pub unsafe fn import_iosurface_to_wgpu(
 
     let metal_pixel_format = {
         use metal::MTLPixelFormat;
+        // Each wgpu format maps to its exact Metal equivalent. The sRGB variants
+        // MUST get their own arms: `texture_from_raw` is told `texture_desc.format`
+        // (the sRGB format) below, so the Metal texture's actual pixel format must
+        // agree, or `texture_from_raw`'s safety invariant is violated. The blit is a
+        // byte copy, so this is visually identical to the previous mapping.
         match format {
-            TextureFormat::Bgra8Unorm | TextureFormat::Bgra8UnormSrgb => MTLPixelFormat::BGRA8Unorm,
-            TextureFormat::Rgba8Unorm | TextureFormat::Rgba8UnormSrgb => MTLPixelFormat::RGBA8Unorm,
+            TextureFormat::Bgra8Unorm => MTLPixelFormat::BGRA8Unorm,
+            TextureFormat::Bgra8UnormSrgb => MTLPixelFormat::BGRA8Unorm_sRGB,
+            TextureFormat::Rgba8Unorm => MTLPixelFormat::RGBA8Unorm,
+            TextureFormat::Rgba8UnormSrgb => MTLPixelFormat::RGBA8Unorm_sRGB,
             _ => return None,
         }
     };
 
     let hal_tex = objc::rc::autoreleasepool(|| unsafe {
+        // `ForeignType` (re-exported by the `metal` crate from `foreign_types`)
+        // provides `Texture::from_ptr`, used below to take ownership of the +1
+        // MTLTexture returned by the ObjC selector after a null check.
+        use metal::foreign_types::ForeignType;
         use metal::{MTLStorageMode, MTLTextureType, MTLTextureUsage};
 
         // Build the MTLTextureDescriptor for the IOSurface-backed texture.
@@ -93,12 +104,24 @@ pub unsafe fn import_iosurface_to_wgpu(
         // Receiver: &DeviceRef (via double-deref: MutexGuard<Device> → Device → DeviceRef).
         // `metal::DeviceRef` implements `objc::Message`; `metal::Device` does not.
         // `handle` is `*mut c_void` which implements `objc::Encode` ("^v").
-        let mtl_texture: metal::Texture = msg_send![
+        //
+        // Capture the raw object pointer first so we can null-check before building
+        // a `metal::Texture`. `newTextureWithDescriptor:…` returns nil on failure
+        // (e.g. OOM or an invalid surface); without this check the nil would be wrapped
+        // in a `Texture` and later dereferenced by the blit, crashing.
+        let raw: *mut objc::runtime::Object = msg_send![
             &**device_guard,
             newTextureWithDescriptor: metal_desc.as_ref()
             iosurface: handle
             plane: 0usize
         ];
+        if raw.is_null() {
+            return None;
+        }
+        // `newTexture…` returns a +1-owned MTLTexture; `from_ptr` takes that ownership
+        // without an extra retain (the `metal` crate re-exports the `foreign_types`
+        // `ForeignType` trait that provides `from_ptr`).
+        let mtl_texture = metal::Texture::from_ptr(raw.cast());
 
         Some(
             // Safety: mtl_texture was just created from this device; format, type,
