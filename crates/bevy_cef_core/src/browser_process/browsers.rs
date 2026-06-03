@@ -167,6 +167,37 @@ impl Browsers {
         }
     }
 
+    /// [macOS GPU OSR] Returns the owned GPU surface texture for every webview
+    /// that currently has one allocated.
+    ///
+    /// Returns `(entity, texture, view, width, height)` tuples. `Texture` and
+    /// `TextureView` are cheap refcounted clones of the live owned surface that
+    /// `on_accelerated_paint` blits each CEF frame into; the texture itself is
+    /// stable, so registering it once per frame in `RenderAssets<GpuImage>`
+    /// keeps the material sampling fresh contents.
+    ///
+    /// Not gated on `gpu_dirty`: the `GpuImage` must stay registered every
+    /// frame so sampling continues even when no new frame arrived.
+    #[cfg(target_os = "macos")]
+    pub fn webview_gpu_textures(
+        &self,
+    ) -> Vec<(
+        Entity,
+        bevy::render::render_resource::Texture,
+        bevy::render::render_resource::TextureView,
+        u32,
+        u32,
+    )> {
+        self.browsers
+            .iter()
+            .filter_map(|(entity, b)| {
+                let s = b.gpu_surface.borrow();
+                s.as_ref()
+                    .map(|surf| (*entity, surf.texture.clone(), surf.view.clone(), surf.width, surf.height))
+            })
+            .collect()
+    }
+
     pub fn send_mouse_move<'a>(
         &self,
         webview: &Entity,

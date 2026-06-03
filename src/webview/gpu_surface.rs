@@ -1,22 +1,27 @@
-//! [poc-osr] SPIKE: prove that an externally-created wgpu texture can be
-//! injected into Bevy's `RenderAssets<GpuImage>` and shown on a webview mesh
-//! material.
+//! [macOS GPU OSR] Inject the owned CEF webview GPU texture into Bevy's
+//! `RenderAssets<GpuImage>` so the webview mesh material samples the live page.
 //!
-//! This is isolated from the real IOSurface/FFI work: instead of a real CEF
-//! shared texture, it fills the injected texture with solid MAGENTA. If the
-//! webview mesh renders magenta, the injection wiring is proven and later
-//! tasks can swap the magenta fill for the real IOSurface-derived texture.
+//! On macOS the accelerated-paint path produces no CPU frames, so the standard
+//! material never gets a `Handle<Image>` to bind. We:
 //!
-//! Pipeline:
-//! 1. Main world (`Update`): allocate a `Handle<Image>` surface for each
-//!    webview mesh material that does not yet have one, point the material's
-//!    `extension.surface` at it, and tag the entity with `WebviewSurface`.
-//! 2. `ExtractSchedule`: copy the surface `AssetId<Image>`s into the render
-//!    world (`ExtractedWebviewSurfaces`).
-//! 3. `Render` (after `prepare_assets::<GpuImage>`): create + fill a magenta
-//!    wgpu texture and `insert` it into `RenderAssets<GpuImage>` for that id,
-//!    overwriting whatever `prepare_assets` produced from the (black) CPU
-//!    image.
+//! 1. Main world (`Update`): allocate a placeholder `Handle<Image>` surface for
+//!    each webview mesh material that lacks one, point the material's
+//!    `extension.surface` at it, and tag the entity with `WebviewSurface`
+//!    (`allocate_webview_surfaces`).
+//! 2. Main world (`Update`, after allocation): pull the owned GPU surface
+//!    textures out of `Browsers` (`NonSend`) and pair each with its webview's
+//!    surface `AssetId<Image>` into `PendingWebviewGpuTextures`
+//!    (`collect_webview_gpu_textures`).
+//! 3. `ExtractSchedule`: copy the pending payloads into the render world
+//!    (`extract_webview_gpu_textures`).
+//! 4. `Render` (after `prepare_assets::<GpuImage>`): build a `GpuImage` wrapping
+//!    the owned texture/view and `insert` it into `RenderAssets<GpuImage>` for
+//!    that id, overwriting whatever `prepare_assets` produced from the
+//!    placeholder CPU image (`inject_webview_gpu_images`).
+//!
+//! The owned texture is a single stable buffer that `on_accelerated_paint`
+//! blits each CEF frame into, so no per-frame texture re-creation is needed —
+//! re-registering the same texture keeps the bound contents fresh.
 
 use crate::prelude::{WebviewExtendStandardMaterial, WebviewMaterial, WebviewSurface};
 use bevy::asset::{AssetId, RenderAssetUsages};
@@ -25,50 +30,62 @@ use bevy::render::{
     Extract, Render, RenderApp,
     render_asset::{RenderAssets, prepare_assets},
     render_resource::{
-        Extent3d, Origin3d, SamplerDescriptor, TexelCopyBufferLayout, TexelCopyTextureInfo,
-        TextureAspect, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
-        TextureViewDescriptor,
+        Extent3d, Sampler, SamplerDescriptor, Texture, TextureDimension, TextureFormat,
+        TextureView,
     },
-    renderer::{RenderDevice, RenderQueue},
+    renderer::RenderDevice,
     texture::GpuImage,
 };
+use bevy_cef_core::prelude::Browsers;
 
 const SURFACE_WIDTH: u32 = 800;
 const SURFACE_HEIGHT: u32 = 800;
-/// BGRA8 magenta: B=255, G=0, R=255, A=255.
-const MAGENTA_BGRA: [u8; 4] = [255, 0, 255, 255];
 
-/// [poc-osr] SPIKE plugin: inject a dummy magenta `GpuImage` into the render
-/// world for each webview mesh, validating the OSR material-binding path.
-pub struct WebviewGpuInjectSpikePlugin;
+/// [macOS GPU OSR] plugin: inject the owned webview GPU texture into the render
+/// world so the webview mesh renders the real page.
+pub struct WebviewGpuInjectPlugin;
 
-impl Plugin for WebviewGpuInjectSpikePlugin {
+impl Plugin for WebviewGpuInjectPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, allocate_webview_surfaces);
+        app.init_resource::<PendingWebviewGpuTextures>().add_systems(
+            Update,
+            (allocate_webview_surfaces, collect_webview_gpu_textures).chain(),
+        );
 
         let Some(render_app) = app.get_sub_app_mut(RenderApp) else {
-            warn!("[poc-osr] RenderApp sub-app missing; magenta injection disabled");
+            warn!("[macos-gpu-osr] RenderApp sub-app missing; GPU texture injection disabled");
             return;
         };
 
         render_app
-            .init_resource::<ExtractedWebviewSurfaces>()
-            .add_systems(ExtractSchedule, extract_webview_surfaces)
+            .init_resource::<ExtractedWebviewGpuTextures>()
+            .add_systems(ExtractSchedule, extract_webview_gpu_textures)
             // Run after the built-in GpuImage prepare so our insert overwrites
-            // (rather than gets overwritten by) the CPU-image-derived GpuImage.
+            // (rather than gets overwritten by) the placeholder CPU image.
             .add_systems(
                 Render,
-                inject_magenta_gpu_images.after(prepare_assets::<GpuImage>),
+                inject_webview_gpu_images.after(prepare_assets::<GpuImage>),
             );
     }
 }
 
-/// Render-world store of the webview surface ids that should be overwritten
-/// with the injected (magenta) texture this frame.
-#[derive(Resource, Default)]
-struct ExtractedWebviewSurfaces {
-    ids: Vec<AssetId<Image>>,
+/// One webview's owned GPU surface, paired with the material's surface id.
+#[derive(Clone)]
+struct WebviewGpuTexture {
+    id: AssetId<Image>,
+    texture: Texture,
+    view: TextureView,
+    width: u32,
+    height: u32,
 }
+
+/// Main-world store of the owned GPU textures collected this frame.
+#[derive(Resource, Default)]
+struct PendingWebviewGpuTextures(Vec<WebviewGpuTexture>);
+
+/// Render-world copy of the owned GPU textures to inject this frame.
+#[derive(Resource, Default)]
+struct ExtractedWebviewGpuTextures(Vec<WebviewGpuTexture>);
 
 /// Main-world system: give every webview mesh material a surface `Handle<Image>`
 /// to bind, since the macOS accelerated-paint path produces no CPU frames and
@@ -111,106 +128,90 @@ fn allocate_webview_surfaces(
             .insert(WebviewSurface(handle.clone()));
 
         info!(
-            "[poc-osr] allocated magenta surface {:?} for webview {:?}",
+            "[macos-gpu-osr] allocated surface {:?} for webview {:?}",
             handle.id(),
             entity
         );
     }
 }
 
-/// Extract the surface `AssetId`s into the render world.
-fn extract_webview_surfaces(
-    mut extracted: ResMut<ExtractedWebviewSurfaces>,
-    surfaces: Extract<Query<&WebviewSurface>>,
+/// Main-world system: pull each webview's owned GPU surface texture out of
+/// `Browsers` and pair it with the material's surface `AssetId<Image>`.
+fn collect_webview_gpu_textures(
+    browsers: NonSend<Browsers>,
+    surfaces: Query<(Entity, &WebviewSurface)>,
+    mut pending: ResMut<PendingWebviewGpuTextures>,
 ) {
-    extracted.ids.clear();
-    extracted
-        .ids
-        .extend(surfaces.iter().map(|surface| surface.0.id()));
+    pending.0.clear();
+    for (entity, texture, view, width, height) in browsers.webview_gpu_textures() {
+        let Some((_, surface)) = surfaces.iter().find(|(e, _)| *e == entity) else {
+            continue;
+        };
+        pending.0.push(WebviewGpuTexture {
+            id: surface.0.id(),
+            texture,
+            view,
+            width,
+            height,
+        });
+    }
 }
 
-/// Render-world system: build a magenta texture and overwrite the
-/// `RenderAssets<GpuImage>` entry for each extracted webview surface.
-fn inject_magenta_gpu_images(
-    extracted: Res<ExtractedWebviewSurfaces>,
+/// Extract the pending owned GPU textures into the render world.
+fn extract_webview_gpu_textures(
+    mut extracted: ResMut<ExtractedWebviewGpuTextures>,
+    pending: Extract<Res<PendingWebviewGpuTextures>>,
+) {
+    extracted.0.clear();
+    extracted.0.extend(pending.0.iter().cloned());
+}
+
+/// Render-world system: wrap each owned webview GPU texture in a `GpuImage` and
+/// overwrite the `RenderAssets<GpuImage>` entry for the webview's surface id.
+fn inject_webview_gpu_images(
+    extracted: Res<ExtractedWebviewGpuTextures>,
     render_device: Res<RenderDevice>,
-    render_queue: Res<RenderQueue>,
     mut gpu_images: ResMut<RenderAssets<GpuImage>>,
+    mut sampler: Local<Option<Sampler>>,
     mut logged: Local<bool>,
 ) {
-    if extracted.ids.is_empty() {
+    if extracted.0.is_empty() {
         return;
     }
 
     if !*logged {
         info!(
-            "[poc-osr] render-world injection running for {} surface(s): {:?}",
-            extracted.ids.len(),
-            extracted.ids
+            "[macos-gpu-osr] render-world injection running for {} surface(s)",
+            extracted.0.len()
         );
         *logged = true;
     }
 
-    let size = Extent3d {
-        width: SURFACE_WIDTH,
-        height: SURFACE_HEIGHT,
-        depth_or_array_layers: 1,
-    };
+    let sampler = sampler
+        .get_or_insert_with(|| render_device.create_sampler(&SamplerDescriptor::default()))
+        .clone();
 
-    // Solid-magenta BGRA buffer (re-created each frame; fine for a spike).
-    let mut pixels = Vec::with_capacity((SURFACE_WIDTH * SURFACE_HEIGHT * 4) as usize);
-    for _ in 0..(SURFACE_WIDTH * SURFACE_HEIGHT) {
-        pixels.extend_from_slice(&MAGENTA_BGRA);
-    }
-    let bytes_per_row = SURFACE_WIDTH * 4;
-
-    for &id in &extracted.ids {
-        let texture = render_device.create_texture(&TextureDescriptor {
-            label: Some("poc_osr_magenta_surface"),
-            size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: TextureDimension::D2,
-            format: TextureFormat::Bgra8UnormSrgb,
-            usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-
-        render_queue.write_texture(
-            TexelCopyTextureInfo {
-                texture: &texture,
-                mip_level: 0,
-                origin: Origin3d::ZERO,
-                aspect: TextureAspect::All,
-            },
-            &pixels,
-            TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(bytes_per_row),
-                rows_per_image: Some(SURFACE_HEIGHT),
-            },
-            size,
-        );
-
-        let texture_view = texture.create_view(&TextureViewDescriptor::default());
-        let sampler = render_device.create_sampler(&SamplerDescriptor::default());
-
+    for entry in &extracted.0 {
         let gpu_image = GpuImage {
-            texture,
-            texture_view,
+            texture: entry.texture.clone(),
+            texture_view: entry.view.clone(),
             texture_format: TextureFormat::Bgra8UnormSrgb,
             texture_view_format: None,
-            sampler,
-            size,
+            sampler: sampler.clone(),
+            size: Extent3d {
+                width: entry.width,
+                height: entry.height,
+                depth_or_array_layers: 1,
+            },
             mip_level_count: 1,
             had_data: true,
         };
 
-        gpu_images.insert(id, gpu_image);
+        gpu_images.insert(entry.id, gpu_image);
     }
 }
 
 // Reference WebviewMaterial so its type path stays linked even if the field
-// access above is refactored; keeps the spike self-documenting.
+// access above is refactored; keeps the module self-documenting.
 #[allow(dead_code)]
 fn _assert_material_type(_m: &WebviewMaterial) {}
