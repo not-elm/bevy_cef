@@ -42,7 +42,8 @@ use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 use bevy::render::{
     Extract, Render, RenderApp, RenderSystems,
-    render_asset::RenderAssets,
+    erased_render_asset::prepare_erased_assets,
+    render_asset::{RenderAssets, prepare_assets},
     render_graph::{Node, NodeRunError, RenderGraph, RenderGraphContext, RenderLabel},
     render_resource::{Extent3d, Sampler, SamplerDescriptor, Texture, TextureFormat},
     renderer::{RenderContext, RenderDevice},
@@ -66,7 +67,19 @@ impl Plugin for WebviewGpuInjectPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PendingWebviewIoSurfaces>().add_systems(
             Update,
-            (allocate_webview_surfaces, collect_webview_iosurfaces).chain(),
+            (
+                allocate_webview_surfaces,
+                collect_webview_iosurfaces,
+                // Touch every webview material each frame so Bevy re-extracts and
+                // rebuilds its bind group. The cached bind group captures the
+                // texture view at build time, so without this it stays bound to
+                // the black placeholder GpuImage forever (design §9 risk). We must
+                // NOT touch the placeholder Image asset (that would make
+                // `prepare_assets::<GpuImage>` re-upload the black placeholder and
+                // clobber our injected GpuImage).
+                mark_webview_materials_changed,
+            )
+                .chain(),
         );
 
         let Some(render_app) = app.get_sub_app_mut(RenderApp) else {
@@ -79,18 +92,28 @@ impl Plugin for WebviewGpuInjectPlugin {
             .init_resource::<WebviewGpuSurfaces>()
             .init_resource::<ImportedWebviewTextures>()
             .add_systems(ExtractSchedule, extract_webview_iosurfaces)
-            // Create/resize owned destination textures (and clear last frame's
-            // imported transients) before the node runs, so the node only
-            // reads them via `&World`.
+            // Clear last frame's imported transient textures before the node runs.
             .add_systems(
                 Render,
                 prepare_webview_gpu_surfaces.in_set(RenderSystems::PrepareResources),
             )
-            // Inject the owned textures into RenderAssets<GpuImage> before bind
-            // groups are built (hardening: must run before PrepareBindGroups).
+            // Inject the owned GPU texture into RenderAssets<GpuImage> in
+            // `PrepareAssets`, ordered:
+            //   - AFTER `prepare_assets::<GpuImage>` so our insert overwrites the
+            //     black CPU placeholder GpuImage for the same AssetId;
+            //   - BEFORE the material's bind-group build
+            //     (`prepare_erased_assets::<MeshMaterial3d<…>>`, also in
+            //     PrepareAssets) so the rebuilt bind group captures OUR texture's
+            //     view instead of the placeholder's.
+            // `inject` also get-or-creates the owned `WebviewGpuSurface` (from the
+            // extracted IOSurface size) since the texture must exist here, before
+            // the material prepare runs. The blit node fills that same texture.
             .add_systems(
                 Render,
-                inject_webview_gpu_images.in_set(RenderSystems::PrepareAssets),
+                inject_webview_gpu_images
+                    .in_set(RenderSystems::PrepareAssets)
+                    .after(prepare_assets::<GpuImage>)
+                    .before(prepare_erased_assets::<MeshMaterial3d<WebviewExtendStandardMaterial>>),
             );
 
         // Add the blit node to the TOP-LEVEL render graph, ordered before the
@@ -187,12 +210,6 @@ fn allocate_webview_surfaces(
         commands
             .entity(entity)
             .insert(WebviewSurface(handle.clone()));
-
-        info!(
-            "[macos-gpu-osr] allocated surface {:?} for webview {:?}",
-            handle.id(),
-            entity
-        );
     }
 }
 
@@ -242,33 +259,14 @@ fn extract_webview_iosurfaces(
     }
 }
 
-/// Render-world system (`PrepareResources`): ensure an owned destination texture
-/// exists at the right size for every extracted webview surface id, and clear the
-/// previous frame's transient imported textures (now safely submitted).
-fn prepare_webview_gpu_surfaces(
-    extracted: Res<ExtractedWebviewIoSurfaces>,
-    render_device: Res<RenderDevice>,
-    mut surfaces: ResMut<WebviewGpuSurfaces>,
-    imported: Res<ImportedWebviewTextures>,
-) {
-    // The previous frame's blit has been submitted by now; release the transient
-    // imported textures.
+/// Render-world system (`PrepareResources`): release the previous frame's
+/// transient imported textures (now safely submitted). The owned destination
+/// textures are created/resized in `inject_webview_gpu_images` instead, because
+/// they must exist in `PrepareAssets` (before the material bind group is built),
+/// which runs before `PrepareResources`.
+fn prepare_webview_gpu_surfaces(imported: Res<ImportedWebviewTextures>) {
     if let Ok(mut held) = imported.0.lock() {
         held.clear();
-    }
-
-    for entry in &extracted.0 {
-        match surfaces.0.get_mut(&entry.id) {
-            Some(surface) => {
-                surface.ensure_size(&render_device, entry.width, entry.height);
-            }
-            None => {
-                surfaces.0.insert(
-                    entry.id,
-                    WebviewGpuSurface::new(&render_device, entry.width, entry.height),
-                );
-            }
-        }
     }
 }
 
@@ -337,26 +335,38 @@ impl Node for WebviewBlitNode {
     }
 }
 
-/// Render-world system (`PrepareAssets`): wrap each owned webview GPU texture in a
-/// `GpuImage` and overwrite the `RenderAssets<GpuImage>` entry for the webview's
-/// surface id, so the material samples the live blitted contents.
+/// Render-world system (`PrepareAssets`, after `prepare_assets::<GpuImage>` and
+/// before the material's `prepare_erased_assets`): get-or-create the owned GPU
+/// destination texture for each extracted webview surface id, wrap it in a
+/// `GpuImage`, and overwrite the `RenderAssets<GpuImage>` entry for that id.
+///
+/// The owned texture is created here (not in `PrepareResources`) because it must
+/// exist before the material bind group is built. The `WebviewBlitNode` (Render
+/// phase) fills this same texture's contents from the IOSurface each frame.
 fn inject_webview_gpu_images(
-    surfaces: Res<WebviewGpuSurfaces>,
+    extracted: Res<ExtractedWebviewIoSurfaces>,
     render_device: Res<RenderDevice>,
+    mut surfaces: ResMut<WebviewGpuSurfaces>,
     mut gpu_images: ResMut<RenderAssets<GpuImage>>,
     mut sampler: Local<Option<Sampler>>,
-    mut logged: Local<bool>,
 ) {
-    if surfaces.0.is_empty() {
+    if extracted.0.is_empty() {
         return;
     }
 
-    if !*logged {
-        info!(
-            "[macos-gpu-osr] render-world injection running for {} surface(s)",
-            surfaces.0.len()
-        );
-        *logged = true;
+    // Ensure an owned destination texture exists at the right size for each id.
+    for entry in &extracted.0 {
+        match surfaces.0.get_mut(&entry.id) {
+            Some(surface) => {
+                surface.ensure_size(&render_device, entry.width, entry.height);
+            }
+            None => {
+                surfaces.0.insert(
+                    entry.id,
+                    WebviewGpuSurface::new(&render_device, entry.width, entry.height),
+                );
+            }
+        }
     }
 
     let sampler = sampler
@@ -380,6 +390,19 @@ fn inject_webview_gpu_images(
         };
 
         gpu_images.insert(*id, gpu_image);
+    }
+}
+
+/// Main-world system: touch every webview material each frame so Bevy
+/// re-extracts and rebuilds its (otherwise cached) bind group, capturing the
+/// freshly injected owned-texture view rather than the black placeholder.
+fn mark_webview_materials_changed(
+    webviews: Query<&MeshMaterial3d<WebviewExtendStandardMaterial>>,
+    mut materials: ResMut<Assets<WebviewExtendStandardMaterial>>,
+) {
+    for handle in webviews.iter() {
+        // `get_mut` flags the asset as modified → re-extract → bind group rebuild.
+        let _ = materials.get_mut(handle.id());
     }
 }
 
