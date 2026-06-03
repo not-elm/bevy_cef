@@ -54,6 +54,10 @@ pub struct WebviewBrowser {
     pub view_slot: SharedTexture,
     #[cfg(not(target_os = "windows"))]
     pub popup_slot: SharedTexture,
+    #[cfg(target_os = "macos")]
+    pub gpu_surface: crate::browser_process::accelerated_paint::SharedGpuSurface,
+    #[cfg(target_os = "macos")]
+    pub gpu_dirty: crate::browser_process::accelerated_paint::SharedGpuDirty,
 }
 
 #[derive(Default)]
@@ -64,6 +68,7 @@ pub struct Browsers {
 impl Browsers {
     #[cfg(not(target_os = "windows"))]
     #[allow(clippy::too_many_arguments)]
+    #[allow(unused_variables)]
     pub fn create_browser(
         &mut self,
         webview: Entity,
@@ -79,12 +84,20 @@ impl Browsers {
         address_changed_sender: AddressChangedSenderInner,
         initialize_scripts: &[String],
         _window_handle: Option<RawWindowHandle>,
+        render_device: bevy::render::renderer::RenderDevice,
+        render_queue: bevy::render::renderer::RenderQueue,
     ) {
         let mut context = Self::request_context(requester);
         let size: SharedViewSize = Rc::new(Cell::new(webview_size));
         let dpr: SharedDpr = Rc::new(Cell::new(initial_dpr));
         let view_slot: SharedTexture = Rc::new(Cell::new(None));
         let popup_slot: SharedTexture = Rc::new(Cell::new(None));
+        #[cfg(target_os = "macos")]
+        let gpu_surface: crate::browser_process::accelerated_paint::SharedGpuSurface =
+            Rc::new(std::cell::RefCell::new(None));
+        #[cfg(target_os = "macos")]
+        let gpu_dirty: crate::browser_process::accelerated_paint::SharedGpuDirty =
+            Rc::new(Cell::new(false));
         let browser = browser_host_create_browser_sync(
             Some(&WindowInfo {
                 windowless_rendering_enabled: true as _,
@@ -115,6 +128,12 @@ impl Browsers {
                 drag_regions_sender,
                 load_handler_sender,
                 address_changed_sender,
+                render_device,
+                render_queue,
+                #[cfg(target_os = "macos")]
+                gpu_surface.clone(),
+                #[cfg(target_os = "macos")]
+                gpu_dirty.clone(),
             )),
             Some(&uri.into()),
             Some(&BrowserSettings {
@@ -133,6 +152,10 @@ impl Browsers {
             dpr,
             view_slot,
             popup_slot,
+            #[cfg(target_os = "macos")]
+            gpu_surface,
+            #[cfg(target_os = "macos")]
+            gpu_dirty,
         };
 
         self.browsers.insert(webview, webview_browser);
@@ -523,6 +546,7 @@ impl Browsers {
 
     #[cfg(not(target_os = "windows"))]
     #[allow(clippy::too_many_arguments)]
+    #[allow(unused_variables)]
     fn client_handler(
         &self,
         webview: Entity,
@@ -536,14 +560,34 @@ impl Browsers {
         drag_regions_sender: DraggableRegionSenderInner,
         load_handler_sender: LoadHandlerSenderInner,
         address_changed_sender: AddressChangedSenderInner,
+        render_device: bevy::render::renderer::RenderDevice,
+        render_queue: bevy::render::renderer::RenderQueue,
+        #[cfg(target_os = "macos")]
+        gpu_surface: crate::browser_process::accelerated_paint::SharedGpuSurface,
+        #[cfg(target_os = "macos")]
+        gpu_dirty: crate::browser_process::accelerated_paint::SharedGpuDirty,
     ) -> Client {
-        ClientHandlerBuilder::new(RenderHandlerBuilder::build(
+        #[cfg(target_os = "macos")]
+        let render_handler = RenderHandlerBuilder::build(
             webview,
             view_slot,
             popup_slot,
             size.clone(),
             dpr,
-        ))
+            render_device,
+            render_queue,
+            gpu_surface,
+            gpu_dirty,
+        );
+        #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+        let render_handler = RenderHandlerBuilder::build(
+            webview,
+            view_slot,
+            popup_slot,
+            size.clone(),
+            dpr,
+        );
+        ClientHandlerBuilder::new(render_handler)
         .with_display_handler(DisplayHandlerBuilder::build(
             webview,
             system_cursor_icon_sender,

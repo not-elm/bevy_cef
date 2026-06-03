@@ -10,6 +10,11 @@ use bevy::render::render_resource::{
 use bevy::render::render_resource::{TextureDescriptor, TextureViewDescriptor};
 use bevy::render::renderer::RenderDevice;
 
+/// Shared slot for a webview's owned GPU destination surface (main thread only).
+pub type SharedGpuSurface = std::rc::Rc<std::cell::RefCell<Option<WebviewGpuSurface>>>;
+/// Set true by `on_accelerated_paint` after a fresh blit; drained by the main-world system.
+pub type SharedGpuDirty = std::rc::Rc<std::cell::Cell<bool>>;
+
 /// Per-webview owned destination texture (MVP: single buffer).
 /// CEF の IOSurface を import したテクスチャからここへ blit する。
 /// Bevy のマテリアルはこの texture を `RenderAssets<GpuImage>` 経由でサンプルする。

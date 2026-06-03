@@ -68,10 +68,45 @@ pub struct RenderHandlerBuilder {
     texture_sender: TextureSender,
     size: SharedViewSize,
     dpr: SharedDpr,
+    #[cfg(target_os = "macos")]
+    render_device: bevy::render::renderer::RenderDevice,
+    #[cfg(target_os = "macos")]
+    render_queue: bevy::render::renderer::RenderQueue,
+    #[cfg(target_os = "macos")]
+    gpu_surface: crate::browser_process::accelerated_paint::SharedGpuSurface,
+    #[cfg(target_os = "macos")]
+    gpu_dirty: crate::browser_process::accelerated_paint::SharedGpuDirty,
 }
 
 impl RenderHandlerBuilder {
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "macos")]
+    #[allow(clippy::too_many_arguments)]
+    pub fn build(
+        webview: Entity,
+        view_slot: SharedTexture,
+        popup_slot: SharedTexture,
+        size: SharedViewSize,
+        dpr: SharedDpr,
+        render_device: bevy::render::renderer::RenderDevice,
+        render_queue: bevy::render::renderer::RenderQueue,
+        gpu_surface: crate::browser_process::accelerated_paint::SharedGpuSurface,
+        gpu_dirty: crate::browser_process::accelerated_paint::SharedGpuDirty,
+    ) -> RenderHandler {
+        RenderHandler::new(Self {
+            object: std::ptr::null_mut(),
+            webview,
+            view_slot,
+            popup_slot,
+            size,
+            dpr,
+            render_device,
+            render_queue,
+            gpu_surface,
+            gpu_dirty,
+        })
+    }
+
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
     pub fn build(
         webview: Entity,
         view_slot: SharedTexture,
@@ -139,6 +174,14 @@ impl Clone for RenderHandlerBuilder {
             texture_sender: self.texture_sender.clone(),
             size: self.size.clone(),
             dpr: self.dpr.clone(),
+            #[cfg(target_os = "macos")]
+            render_device: self.render_device.clone(),
+            #[cfg(target_os = "macos")]
+            render_queue: self.render_queue.clone(),
+            #[cfg(target_os = "macos")]
+            gpu_surface: self.gpu_surface.clone(),
+            #[cfg(target_os = "macos")]
+            gpu_dirty: self.gpu_dirty.clone(),
         }
     }
 }
