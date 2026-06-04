@@ -81,7 +81,6 @@ fn drain_title_changed(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bevy_cef_core::prelude::TitleChangedMessage;
 
     #[derive(Resource, Default)]
     struct FiredTitles(Vec<String>);
