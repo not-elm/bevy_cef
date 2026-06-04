@@ -46,21 +46,21 @@ struct TitleChangedReceiver(Receiver<TitleChangedMessage>);
 
 fn drain_title_changed(
     mut commands: Commands,
+    mut titles: Query<&mut WebviewTitle>,
     receiver: Res<TitleChangedReceiver>,
-    titles: Query<&WebviewTitle>,
 ) {
     while let Ok(msg) = receiver.0.try_recv() {
-        let current = titles.get(msg.webview).ok().map(|t| t.0.as_str());
-        if current == Some(msg.title.as_str()) {
+        let Ok(mut title) = titles.get_mut(msg.webview) else {
+            continue;
+        };
+        if msg.title == title.0 {
             continue;
         }
-        if let Ok(mut cmd) = commands.get_entity(msg.webview) {
-            cmd.insert(WebviewTitle(msg.title.clone()));
-            cmd.trigger(|webview| TitleChanged {
-                webview,
-                title: msg.title,
-            });
-        }
+        title.0 = msg.title.clone();
+        commands.trigger(TitleChanged {
+            webview: msg.webview,
+            title: msg.title,
+        });
     }
 }
 
@@ -91,7 +91,7 @@ mod tests {
     #[test]
     fn updates_component_and_fires_event() {
         let (mut world, mut schedule, tx) = setup();
-        let e = world.spawn_empty().id();
+        let e = world.spawn(WebviewTitle::default()).id();
         tx.send_blocking(TitleChangedMessage {
             webview: e,
             title: "Hello".into(),
@@ -108,7 +108,7 @@ mod tests {
     #[test]
     fn dedups_identical_titles_in_same_frame() {
         let (mut world, mut schedule, tx) = setup();
-        let e = world.spawn_empty().id();
+        let e = world.spawn(WebviewTitle::default()).id();
         for _ in 0..2 {
             tx.send_blocking(TitleChangedMessage {
                 webview: e,
@@ -123,7 +123,7 @@ mod tests {
     #[test]
     fn fires_for_distinct_titles() {
         let (mut world, mut schedule, tx) = setup();
-        let e = world.spawn_empty().id();
+        let e = world.spawn(WebviewTitle::default()).id();
         for t in ["A", "B"] {
             tx.send_blocking(TitleChangedMessage {
                 webview: e,
@@ -145,7 +145,7 @@ mod tests {
     #[test]
     fn dedups_identical_titles_across_frames() {
         let (mut world, mut schedule, tx) = setup();
-        let e = world.spawn_empty().id();
+        let e = world.spawn(WebviewTitle::default()).id();
         tx.send_blocking(TitleChangedMessage {
             webview: e,
             title: "A".into(),
