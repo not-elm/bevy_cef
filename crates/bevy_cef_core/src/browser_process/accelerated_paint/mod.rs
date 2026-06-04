@@ -78,6 +78,7 @@ pub type SharedAlphaBuffer = std::rc::Rc<std::cell::RefCell<Option<AlphaBuffer>>
 /// - Net: balanced CFRetain/CFRelease per frame, bounded to ~1 in-flight surface;
 ///   measured RSS stays flat under a 60fps hue-cycling page (no IOSurface leak),
 ///   and the owned texture updates every frame with no tearing.
+#[derive(Clone)]
 pub struct RetainedIoSurface {
     surface: objc2_core_foundation::CFRetained<objc2_io_surface::IOSurfaceRef>,
     pub width: u32,
@@ -108,6 +109,52 @@ impl RetainedIoSurface {
     pub fn ptr(&self) -> *mut c_void {
         let r: &objc2_io_surface::IOSurfaceRef = &self.surface;
         (r as *const objc2_io_surface::IOSurfaceRef) as *mut c_void
+    }
+
+    /// Reads the alpha byte (BGRA: offset +3) of the single physical pixel at
+    /// `(px, py)`, on demand.
+    ///
+    /// Bounds-checks BEFORE locking (returns `None` for out-of-range coords to
+    /// avoid a needless lock). Locks read-only, reads one byte, and unlocks via
+    /// an RAII guard so the unlock always runs (even on a panic). Returns `None`
+    /// if `(px, py)` is out of range or the lock fails.
+    ///
+    /// Runs on the Bevy main thread (= CEF UI thread under `external_message_pump`)
+    /// only when a pointer is over the webview — far cheaper than the previous
+    /// per-frame full-plane `extract_alpha`.
+    pub fn read_alpha_at(&self, px: u32, py: u32) -> Option<u8> {
+        use objc2_io_surface::IOSurfaceLockOptions;
+
+        if px >= self.width || py >= self.height {
+            return None;
+        }
+
+        let surface_ref: &objc2_io_surface::IOSurfaceRef = &self.surface;
+        // Safety: surface_ref is valid while `self` is alive (+1 CF ref).
+        let lock_result =
+            unsafe { surface_ref.lock(IOSurfaceLockOptions::ReadOnly, std::ptr::null_mut()) };
+        if lock_result != 0 {
+            return None;
+        }
+
+        // RAII: unlock on every exit path with the same ReadOnly flag.
+        struct UnlockGuard<'a>(&'a objc2_io_surface::IOSurfaceRef);
+        impl Drop for UnlockGuard<'_> {
+            fn drop(&mut self) {
+                // Safety: balanced with the ReadOnly lock above.
+                unsafe {
+                    self.0
+                        .unlock(IOSurfaceLockOptions::ReadOnly, std::ptr::null_mut());
+                }
+            }
+        }
+        let _guard = UnlockGuard(surface_ref);
+
+        let base_ptr = surface_ref.base_address().as_ptr() as *const u8;
+        let stride = surface_ref.bytes_per_row();
+        let offset = py as usize * stride + px as usize * 4 + 3;
+        // Safety: offset is within the mapped region (px < width, py < height).
+        Some(unsafe { *base_ptr.add(offset) })
     }
 
     /// Extracts the alpha channel from this IOSurface into a flat `Vec<u8>`.
@@ -165,7 +212,12 @@ impl RetainedIoSurface {
 // stays alive for as long as the wrapper exists — even across the main→render
 // world handoff. CF reference counting is thread-safe and the surface object is
 // process-wide (not thread-affine), so moving ownership to the render thread is
-// sound. We never alias the wrapper (it is moved, not shared).
+// sound. The surface MAY be aliased: the render path moves one retain into the
+// render world while the main world holds a second, independent `CFRetain` (via
+// `Clone`) in a `WebviewIoSurface` component for on-demand alpha hit-testing.
+// Both accesses are READ-ONLY — the render path imports it as a Metal texture
+// (GPU read) and hit-testing takes a read-only `IOSurfaceLock` (CPU read) — so
+// the alias is sound (no writer on our side; CEF's GPU process is the producer).
 unsafe impl Send for RetainedIoSurface {}
 unsafe impl Sync for RetainedIoSurface {}
 
