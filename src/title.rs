@@ -75,8 +75,8 @@ mod tests {
         fired.0.push(on.title.clone());
     }
 
-    /// World + Schedule を直接使う(App/プラグイン非依存)。Schedule::run は
-    /// 各システム後に Commands を flush し、その際 trigger 経由の observer が走る。
+    /// Use World + Schedule directly (no App/plugin dependency). `Schedule::run`
+    /// flushes Commands after each system, at which point trigger-based observers run.
     fn setup() -> (World, Schedule, async_channel::Sender<TitleChangedMessage>) {
         let (tx, rx) = async_channel::unbounded::<TitleChangedMessage>();
         let mut world = World::new();

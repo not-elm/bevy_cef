@@ -73,12 +73,12 @@ fn request_go_forward(mut commands: Commands, webviews: Query<Entity, With<Debug
     }
 }
 
-/// Push 型(observer): タイトルが変わるたびに 1 回呼ばれる。
+/// Push style (observer): called once each time the title changes.
 fn report_title_changed(on: On<TitleChanged>) {
     info!("TitleChanged event: {:?}", on.title);
 }
 
-/// Pull 型(component + 変更検知): `WebviewTitle` が更新されたフレームで反応。
+/// Pull style (component + change detection): reacts on the frame `WebviewTitle` is updated.
 fn report_title_component(titles: Query<&WebviewTitle, Changed<WebviewTitle>>) {
     for title in titles.iter() {
         info!("WebviewTitle component now: {:?}", title.0);
