@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Features
+
+- Add `WebviewTitle` component and `TitleChanged` Event trigger to propagate the webview title changes to the ECS.
+
 ## v0.10.0
 
 ### Breaking Changes
