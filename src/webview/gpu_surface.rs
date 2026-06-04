@@ -607,4 +607,3 @@ fn mark_sprite_webview_images_changed(
         let _ = images.get_mut(surface.0.id());
     }
 }
-

@@ -131,7 +131,6 @@ impl RetainedIoSurface {
         // Safety: offset is within the mapped region (px < width, py < height).
         Some(unsafe { *base_ptr.add(offset) })
     }
-
 }
 
 // Safety: `RetainedIoSurface` owns a +1 CF reference, so the underlying IOSurface
