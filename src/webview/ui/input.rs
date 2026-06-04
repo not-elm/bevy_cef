@@ -139,7 +139,7 @@ fn resolve_ui_pos(
     #[cfg(not(target_os = "macos"))]
     {
         let _ = entity;
-        return ui_pointer_pos(node, images);
+        ui_pointer_pos(node, images)
     }
 }
 

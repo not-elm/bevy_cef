@@ -39,6 +39,10 @@ pub(crate) fn is_pixel_transparent(image: &Image, webview_size: Vec2, pos_dip: V
 /// Returns `false` (opaque) when the buffer is empty, the webview has zero area,
 /// or the computed pixel is out of range — so a not-yet-populated surface
 /// forwards events instead of swallowing them.
+///
+/// Only the macOS GPU path consumes this; gated to `macos`/`test` so the
+/// non-macOS lib build doesn't flag it as dead code.
+#[cfg(any(target_os = "macos", test))]
 pub(crate) fn is_pixel_transparent_buf(
     alpha: &[u8],
     buf_size: UVec2,
