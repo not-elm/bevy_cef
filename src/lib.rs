@@ -32,7 +32,9 @@ use bevy_remote::RemotePlugin;
 pub mod prelude {
     pub use crate::focus::FocusedWebview;
     pub use crate::resize::components::{AspectLockMode, WebviewResizable};
-    pub use crate::{CefPlugin, RunOnMainThread, common::*, navigation::*, title::*, webview::prelude::*};
+    pub use crate::{
+        CefPlugin, RunOnMainThread, common::*, navigation::*, title::*, webview::prelude::*,
+    };
     pub use bevy_cef_core::prelude::{
         CefCustomScheme, CefExtensions, CefSchemeBody, CefSchemeHandler, CefSchemeOptions,
         CefSchemeRequest, CefSchemeResponse, CommandLineConfig,

@@ -139,10 +139,12 @@ impl ImplDisplayHandler for DisplayHandlerBuilder {
     }
 
     fn on_title_change(&self, _browser: Option<&mut Browser>, title: Option<&CefString>) {
-        let _ = self.title_changed_sender.send_blocking(TitleChangedMessage {
-            webview: self.webview,
-            title: title.map(|t| t.to_string()).unwrap_or_default(),
-        });
+        let _ = self
+            .title_changed_sender
+            .send_blocking(TitleChangedMessage {
+                webview: self.webview,
+                title: title.map(|t| t.to_string()).unwrap_or_default(),
+            });
     }
 
     fn on_cursor_change(
