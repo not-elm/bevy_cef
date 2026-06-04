@@ -19,6 +19,14 @@ pub struct AddressChangedMessage {
 }
 
 pub type AddressChangedSenderInner = Sender<AddressChangedMessage>;
+
+/// Message sent from the CEF display handler when the page title changes.
+pub struct TitleChangedMessage {
+    pub webview: Entity,
+    pub title: String,
+}
+
+pub type TitleChangedSenderInner = Sender<TitleChangedMessage>;
 pub type SystemCursorIconSenderInner = Sender<SystemCursorIcon>;
 
 /// ## Reference
