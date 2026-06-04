@@ -143,6 +143,7 @@ fn resolve_ui_pos(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 #[cfg(not(target_os = "windows"))]
 fn on_ui_pointer_move(
     trigger: On<Pointer<Move>>,

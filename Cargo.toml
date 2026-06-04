@@ -25,6 +25,16 @@ readme = "README.md"
 keywords = ["bevy", "cef", "web", "rendering"]
 categories = ["game-development", "web-programming", "graphics"]
 
+[workspace.lints.rust]
+# `objc`'s `sel_impl!` macro (expanded inside `msg_send!`) emits
+# `#[cfg(not(feature = "cargo-clippy"))]`, which the `unexpected_cfgs` lint flags
+# because no crate defines a `cargo-clippy` feature. Declaring it as a known
+# check-cfg value silences that false positive without disabling the lint.
+# Member crates opt in with `lints.workspace = true`.
+unexpected_cfgs = { level = "warn", check-cfg = [
+    'cfg(feature, values("cargo-clippy"))',
+] }
+
 [workspace.dependencies]
 # Bare minimum. Each member crate enables exactly the bevy features it uses.
 # The render-process binaries only need `bevy::platform` (always available).
@@ -62,10 +72,8 @@ bevy_cef = { path = ".", features = ["debug"] }
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = { version = "0.2" }
 
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = [
-    'cfg(feature, values("cargo-clippy"))',
-] }
+[lints]
+workspace = true
 
 [features]
 default = []
