@@ -8,7 +8,6 @@
 
 use async_channel::Receiver;
 use bevy::prelude::*;
-use bevy::{ecs::event::EntityTrigger, platform::collections::HashMap};
 use bevy_cef_core::prelude::{TitleChangedMessage, TitleChangedSenderInner};
 use serde::{Deserialize, Serialize};
 
