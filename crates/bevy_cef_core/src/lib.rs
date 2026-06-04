@@ -11,7 +11,7 @@ mod util;
 pub mod prelude {
     #[cfg(all(feature = "browser", target_os = "macos"))]
     pub use crate::browser_process::accelerated_paint::{
-        AlphaBuffer, RetainedIoSurface, WebviewGpuSurface, import_iosurface_to_wgpu,
+        RetainedIoSurface, WebviewGpuSurface, import_iosurface_to_wgpu,
     };
     #[cfg(all(feature = "browser", target_os = "windows"))]
     pub use crate::browser_process::cef_command::{BrowsersProxy, CefCommand};

@@ -155,21 +155,6 @@ where
 #[derive(Component, Debug, Clone)]
 pub(crate) struct WebviewSurface(pub(crate) Handle<Image>);
 
-/// [macOS GPU OSR] CPU-side alpha channel for transparent pixel hit-testing.
-///
-/// On macOS the real webview pixels live in a GPU IOSurface; the `Image` stored
-/// in `WebviewSurface` is a black placeholder. This component holds the alpha
-/// byte for every pixel, extracted from the IOSurface in `on_accelerated_paint`
-/// and copied into the main world each frame by `collect_webview_alpha_buffers`.
-///
-/// `is_pixel_transparent_buf` reads this instead of `Image.data` on macOS.
-#[cfg(target_os = "macos")]
-#[derive(Component, Debug, Clone)]
-pub(crate) struct WebviewAlpha {
-    pub(crate) data: Vec<u8>,
-    pub(crate) size: bevy::math::UVec2,
-}
-
 /// [macOS GPU OSR] Per-webview holder of the latest retained IOSurface, used for
 /// on-demand transparent-pixel hit-testing.
 ///
