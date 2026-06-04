@@ -64,17 +64,20 @@ fn drain_title_changed(
             continue;
         }
         applied.insert(msg.webview, msg.title.clone());
-        // webview が既に despawn されている場合に panic しないよう存在確認する。
-        if let Ok(mut entity) = commands.get_entity(msg.webview) {
-            entity.insert(WebviewTitle(msg.title.clone()));
+        // webview が despawn 済みなら component 更新もイベント発火もスキップする
+        // (存在確認で insert の panic を防ぎつつ、dead entity を指す TitleChanged も出さない)。
+        if commands.get_entity(msg.webview).is_ok() {
+            commands
+                .entity(msg.webview)
+                .insert(WebviewTitle(msg.title.clone()));
+            commands.trigger_with(
+                TitleChanged {
+                    webview: msg.webview,
+                    title: msg.title,
+                },
+                EntityTrigger,
+            );
         }
-        commands.trigger_with(
-            TitleChanged {
-                webview: msg.webview,
-                title: msg.title,
-            },
-            EntityTrigger,
-        );
     }
 }
 

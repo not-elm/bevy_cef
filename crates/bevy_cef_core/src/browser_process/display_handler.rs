@@ -27,6 +27,7 @@ pub struct TitleChangedMessage {
 }
 
 pub type TitleChangedSenderInner = Sender<TitleChangedMessage>;
+
 pub type SystemCursorIconSenderInner = Sender<SystemCursorIcon>;
 
 /// ## Reference
