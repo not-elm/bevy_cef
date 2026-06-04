@@ -27,7 +27,14 @@ impl Plugin for WebviewCoreComponentsPlugin {
 /// automatically navigates to the new source without being recreated.
 #[derive(Component, Debug, Clone, Reflect)]
 #[reflect(Component, Debug)]
-#[require(WebviewSize, ZoomLevel, AudioMuted, PreloadScripts, WebviewDpr, WebviewTitle)]
+#[require(
+    WebviewSize,
+    ZoomLevel,
+    AudioMuted,
+    PreloadScripts,
+    WebviewDpr,
+    WebviewTitle
+)]
 pub enum WebviewSource {
     /// A remote or local URL (e.g. `"https://..."` or `"cef://localhost/file.html"`).
     Url(String),
