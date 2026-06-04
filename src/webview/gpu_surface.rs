@@ -553,29 +553,33 @@ fn allocate_ui_webview_surfaces(
         let Some(material) = materials.get_mut(material_handle.id()) else {
             continue;
         };
-        if material.surface.is_some() {
-            continue;
-        }
-
-        // Allocate a black BGRA placeholder image. The real pixels are injected
-        // directly into RenderAssets<GpuImage> in the render world.
-        let image = Image::new_fill(
-            Extent3d {
-                width: SURFACE_WIDTH,
-                height: SURFACE_HEIGHT,
-                depth_or_array_layers: 1,
-            },
-            bevy::render::render_resource::TextureDimension::D2,
-            &[0, 0, 0, 255],
-            TextureFormat::Bgra8UnormSrgb,
-            RenderAssetUsages::all(),
-        );
-        let handle = images.add(image);
-
-        material.surface = Some(handle.clone());
-        commands
-            .entity(entity)
-            .insert(WebviewSurface(handle.clone()));
+        // Idempotent (matches the generic mesh path `allocate_webview_surfaces_for`):
+        // reuse a pre-populated surface handle, otherwise allocate a black BGRA
+        // placeholder. Either way always attach `WebviewSurface` so the entity is
+        // collected — skipping when `surface` is already `Some` would leave a
+        // pre-populated UI material uncollected and permanently black.
+        let handle = match material.surface.clone() {
+            Some(handle) => handle,
+            None => {
+                // The real pixels are injected directly into RenderAssets<GpuImage>
+                // in the render world.
+                let image = Image::new_fill(
+                    Extent3d {
+                        width: SURFACE_WIDTH,
+                        height: SURFACE_HEIGHT,
+                        depth_or_array_layers: 1,
+                    },
+                    bevy::render::render_resource::TextureDimension::D2,
+                    &[0, 0, 0, 255],
+                    TextureFormat::Bgra8UnormSrgb,
+                    RenderAssetUsages::all(),
+                );
+                let handle = images.add(image);
+                material.surface = Some(handle.clone());
+                handle
+            }
+        };
+        commands.entity(entity).insert(WebviewSurface(handle));
     }
 }
 
