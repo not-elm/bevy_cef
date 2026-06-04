@@ -7,13 +7,7 @@ fn main() {
     App::new()
         .add_plugins((
             DefaultPlugins,
-            // [poc-osr] Set a dedicated root_cache_path so cef_initialize does
-            // not fall into the default-profile process-singleton path (which
-            // makes initialize() return 0 / "Opening in existing browser session").
-            CefPlugin {
-                root_cache_path: Some("/tmp/bevy_cef_poc_cache".into()),
-                ..default()
-            },
+            CefPlugin::default(),
         ))
         .add_systems(
             Startup,

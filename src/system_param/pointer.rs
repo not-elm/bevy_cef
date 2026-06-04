@@ -112,7 +112,6 @@ impl<C: Component> WebviewPointer<'_, '_, C> {
             );
         }
 
-        // Non-macOS (or macOS before first GPU frame): fall back to Image.data.
         let Ok(surface) = self.surfaces.get(webview) else {
             return false;
         };

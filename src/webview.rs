@@ -157,9 +157,6 @@ impl Plugin for WebviewPlugin {
                 .add_observer(apply_request_show_devtool)
                 .add_observer(apply_request_close_devtool);
 
-            // [macos-gpu-osr] Inject the owned CEF webview GPU texture into
-            // RenderAssets<GpuImage> so the webview mesh material samples the
-            // live page rendered via the IOSurface accelerated-paint path.
             #[cfg(target_os = "macos")]
             app.add_plugins(crate::webview::gpu_surface::WebviewGpuInjectPlugin);
         }
