@@ -13,7 +13,8 @@
 //! `WebviewBlitNode`, and Bevy submits it in order.
 //!
 //! Frame flow (macOS):
-//! 1. Main world (`Update`): `allocate_webview_surfaces` (mesh),
+//! 1. Main world (`Update`): `allocate_webview_surfaces_for::<M>` (mesh, per
+//!    registered material type),
 //!    `allocate_ui_webview_surfaces` (bevy_ui), and
 //!    `allocate_sprite_webview_surfaces` (2D `Sprite`) give every webview a
 //!    placeholder `Handle<Image>` + `WebviewSurface` tag. Mesh/UI store the
@@ -69,6 +70,30 @@ use bevy_cef_core::prelude::{Browsers, RetainedIoSurface, WebviewGpuSurface};
 const SURFACE_WIDTH: u32 = 800;
 const SURFACE_HEIGHT: u32 = 800;
 
+/// Abstracts where a mesh webview material stores its surface `Handle<Image>`.
+///
+/// - `WebviewExtendStandardMaterial = ExtendedMaterial<StandardMaterial, WebviewMaterial>`
+///   keeps it in `extension.surface`.
+/// - `WebviewExtendedMaterial<E>     = ExtendedMaterial<WebviewMaterial, E>`
+///   keeps it in `base.surface`.
+///
+/// `allocate_webview_surfaces_for` / `mark_webview_materials_changed_for` are
+/// generic over any mesh material implementing this trait, so the standard and
+/// custom materials share one GPU-injection code path.
+pub(crate) trait WebviewSurfaceSlot: bevy::pbr::Material {
+    fn webview_surface_slot(&mut self) -> &mut Option<Handle<Image>>;
+}
+
+/// Update-schedule phases for the macOS webview surface pipeline. Exposed so the
+/// custom-material plugin can register its generic allocate/mark systems in the
+/// right phase relative to `collect_webview_iosurfaces`.
+#[derive(SystemSet, Clone, Debug, Hash, PartialEq, Eq)]
+pub(crate) enum WebviewSurfaceSet {
+    Allocate,
+    Collect,
+    MarkChanged,
+}
+
 /// Render-graph label for the webview IOSurface import + blit node.
 #[derive(Debug, Hash, PartialEq, Eq, Clone, RenderLabel)]
 struct WebviewBlitLabel;
@@ -80,32 +105,46 @@ pub struct WebviewGpuInjectPlugin;
 
 impl Plugin for WebviewGpuInjectPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<PendingWebviewIoSurfaces>().add_systems(
-            Update,
-            (
-                allocate_webview_surfaces,
-                allocate_ui_webview_surfaces,
-                allocate_sprite_webview_surfaces,
-                collect_webview_iosurfaces,
-                // Touch every webview material each frame so Bevy re-extracts and
-                // rebuilds its bind group. The cached bind group captures the
-                // texture view at build time, so without this it stays bound to
-                // the black placeholder GpuImage forever (design §9 risk). We must
-                // NOT touch the placeholder Image asset (that would make
-                // `prepare_assets::<GpuImage>` re-upload the black placeholder and
-                // clobber our injected GpuImage).
-                mark_webview_materials_changed,
-                mark_webview_ui_materials_changed,
-                // Sprites have no material asset, so the mesh/UI "mark material
-                // changed" lever does not apply. The only public way to refresh a
-                // sprite's cached `ImageBindGroups` entry is to fire
-                // `AssetEvent::Modified` for its `Image` (via `Assets::get_mut`).
-                // `prepare_sprite_image_bind_groups` then removes the stale bind
-                // group and rebuilds it reading our injected `GpuImage`.
-                mark_sprite_webview_images_changed,
+        app.init_resource::<PendingWebviewIoSurfaces>()
+            .configure_sets(
+                Update,
+                (
+                    WebviewSurfaceSet::Allocate,
+                    WebviewSurfaceSet::Collect,
+                    WebviewSurfaceSet::MarkChanged,
+                )
+                    .chain(),
             )
-                .chain(),
-        );
+            .add_systems(
+                Update,
+                (
+                    allocate_webview_surfaces_for::<WebviewExtendStandardMaterial>,
+                    allocate_ui_webview_surfaces,
+                    allocate_sprite_webview_surfaces,
+                )
+                    .in_set(WebviewSurfaceSet::Allocate),
+            )
+            .add_systems(
+                Update,
+                collect_webview_iosurfaces.in_set(WebviewSurfaceSet::Collect),
+            )
+            .add_systems(
+                Update,
+                (
+                    // Touch every webview material each frame so Bevy rebuilds its
+                    // bind group against the injected owned-texture view (the cached
+                    // bind group otherwise stays bound to the black placeholder).
+                    // We must NOT touch the placeholder Image asset for mesh/UI
+                    // (that would make `prepare_assets::<GpuImage>` re-upload the
+                    // black placeholder). Sprites have no material asset, so
+                    // `mark_sprite_webview_images_changed` instead fires
+                    // `AssetEvent::Modified` on the sprite's `Image`.
+                    mark_webview_materials_changed_for::<WebviewExtendStandardMaterial>,
+                    mark_webview_ui_materials_changed,
+                    mark_sprite_webview_images_changed,
+                )
+                    .in_set(WebviewSurfaceSet::MarkChanged),
+            );
 
         let Some(render_app) = app.get_sub_app_mut(RenderApp) else {
             warn!("[macos-gpu-osr] RenderApp sub-app missing; GPU texture injection disabled");
@@ -142,6 +181,11 @@ impl Plugin for WebviewGpuInjectPlugin {
                 inject_webview_gpu_images
                     .in_set(RenderSystems::PrepareAssets)
                     .after(prepare_assets::<GpuImage>)
+                    // Standard mesh material: inject before its bind-group build so
+                    // it captures our texture view. Custom materials
+                    // (WebviewExtendedMaterial<E>) intentionally do NOT add a
+                    // symmetric .before() — the at-most-1-frame warmup flash is the
+                    // accepted trade-off (spec §6, Approach A).
                     .before(prepare_erased_assets::<MeshMaterial3d<WebviewExtendStandardMaterial>>)
                     // UI: bind group for PreparedUiMaterial is built during
                     // prepare_assets, so our injection must precede it.
@@ -211,45 +255,47 @@ struct LiveWebviewSurfaceIds(bevy::platform::collections::HashSet<AssetId<Image>
 #[derive(Resource, Default)]
 struct ImportedWebviewTextures(std::sync::Mutex<Vec<Texture>>);
 
-/// Main-world system: give every webview mesh material a surface `Handle<Image>`
-/// to bind, since the macOS accelerated-paint path produces no CPU frames and
-/// therefore never allocates one.
-fn allocate_webview_surfaces(
+/// Main-world system: ensure every mesh webview material of type `M` has a
+/// surface `Handle<Image>` bound AND a `WebviewSurface` tag, since the macOS
+/// accelerated-paint path produces no CPU frames and never allocates one.
+///
+/// Idempotent: if the material's surface slot is already `Some` (e.g. a custom
+/// material the user pre-populated), reuse that handle; otherwise allocate a
+/// black BGRA placeholder and set it. Either way `WebviewSurface` is always
+/// attached so the entity is collected (mirrors the CPU path's
+/// `get_or_insert_with` + insert behavior).
+pub(crate) fn allocate_webview_surfaces_for<M: WebviewSurfaceSlot>(
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,
-    mut materials: ResMut<Assets<WebviewExtendStandardMaterial>>,
-    webviews: Query<
-        (Entity, &MeshMaterial3d<WebviewExtendStandardMaterial>),
-        Without<WebviewSurface>,
-    >,
+    mut materials: ResMut<Assets<M>>,
+    webviews: Query<(Entity, &MeshMaterial3d<M>), Without<WebviewSurface>>,
 ) {
     for (entity, material_handle) in webviews.iter() {
         let Some(material) = materials.get_mut(material_handle.id()) else {
             continue;
         };
-        if material.extension.surface.is_some() {
-            continue;
-        }
-
-        // Allocate a black BGRA placeholder image. The real pixels are injected
-        // directly into RenderAssets<GpuImage> in the render world.
-        let image = Image::new_fill(
-            Extent3d {
-                width: SURFACE_WIDTH,
-                height: SURFACE_HEIGHT,
-                depth_or_array_layers: 1,
-            },
-            bevy::render::render_resource::TextureDimension::D2,
-            &[0, 0, 0, 255],
-            TextureFormat::Bgra8UnormSrgb,
-            RenderAssetUsages::all(),
-        );
-        let handle = images.add(image);
-
-        material.extension.surface = Some(handle.clone());
-        commands
-            .entity(entity)
-            .insert(WebviewSurface(handle.clone()));
+        let handle = match material.webview_surface_slot().clone() {
+            Some(handle) => handle,
+            None => {
+                // Allocate a black BGRA placeholder image. The real pixels are
+                // injected directly into RenderAssets<GpuImage> in the render world.
+                let image = Image::new_fill(
+                    Extent3d {
+                        width: SURFACE_WIDTH,
+                        height: SURFACE_HEIGHT,
+                        depth_or_array_layers: 1,
+                    },
+                    bevy::render::render_resource::TextureDimension::D2,
+                    &[0, 0, 0, 255],
+                    TextureFormat::Bgra8UnormSrgb,
+                    RenderAssetUsages::all(),
+                );
+                let handle = images.add(image);
+                *material.webview_surface_slot() = Some(handle.clone());
+                handle
+            }
+        };
+        commands.entity(entity).insert(WebviewSurface(handle));
     }
 }
 
@@ -480,12 +526,12 @@ fn inject_webview_gpu_images(
     }
 }
 
-/// Main-world system: touch every webview material each frame so Bevy
-/// re-extracts and rebuilds its (otherwise cached) bind group, capturing the
+/// Main-world system: touch every mesh webview material of type `M` each frame so
+/// Bevy re-extracts and rebuilds its (otherwise cached) bind group, capturing the
 /// freshly injected owned-texture view rather than the black placeholder.
-fn mark_webview_materials_changed(
-    webviews: Query<&MeshMaterial3d<WebviewExtendStandardMaterial>>,
-    mut materials: ResMut<Assets<WebviewExtendStandardMaterial>>,
+pub(crate) fn mark_webview_materials_changed_for<M: WebviewSurfaceSlot>(
+    webviews: Query<&MeshMaterial3d<M>>,
+    mut materials: ResMut<Assets<M>>,
 ) {
     for handle in webviews.iter() {
         // `get_mut` flags the asset as modified → re-extract → bind group rebuild.
