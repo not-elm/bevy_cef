@@ -14,6 +14,16 @@ use std::marker::PhantomData;
 
 pub type WebviewExtendedMaterial<E> = ExtendedMaterial<WebviewMaterial, E>;
 
+#[cfg(target_os = "macos")]
+impl<E> crate::webview::gpu_surface::WebviewSurfaceSlot for WebviewExtendedMaterial<E>
+where
+    E: MaterialExtension + AsBindGroup<Data: PartialEq + Eq + Hash + Clone>,
+{
+    fn webview_surface_slot(&mut self) -> &mut Option<Handle<Image>> {
+        &mut self.base.surface
+    }
+}
+
 /// A plugin that extends the [`WebviewMaterial`] with a custom material extension.
 ///
 /// This plugin allows you to create custom materials that can be used with webviews.
@@ -39,6 +49,29 @@ where
         // CPU `OnPaint` consumer: Linux/Windows only. macOS uses the GPU path.
         #[cfg(not(target_os = "macos"))]
         app.add_systems(PostUpdate, render::<E>);
+
+        // macOS GPU path: register the generic surface allocate/mark systems for
+        // this custom material type so it flows through the same IOSurface
+        // injection pipeline as the standard material. Ordered via the shared
+        // `WebviewSurfaceSet` phases (configured by `WebviewGpuInjectPlugin`,
+        // which `CefPlugin` always adds on macOS).
+        #[cfg(target_os = "macos")]
+        {
+            use crate::webview::gpu_surface::{
+                WebviewSurfaceSet, allocate_webview_surfaces_for,
+                mark_webview_materials_changed_for,
+            };
+            app.add_systems(
+                Update,
+                allocate_webview_surfaces_for::<WebviewExtendedMaterial<E>>
+                    .in_set(WebviewSurfaceSet::Allocate),
+            )
+            .add_systems(
+                Update,
+                mark_webview_materials_changed_for::<WebviewExtendedMaterial<E>>
+                    .in_set(WebviewSurfaceSet::MarkChanged),
+            );
+        }
     }
 }
 
@@ -66,5 +99,26 @@ fn render<E: MaterialExtension>(
         {
             update_webview_image(texture, image);
         }
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod tests {
+    use super::*;
+    use crate::webview::gpu_surface::WebviewSurfaceSlot;
+
+    #[derive(Asset, TypePath, AsBindGroup, Debug, Clone, Default)]
+    struct NoopExtension {}
+    impl bevy::pbr::MaterialExtension for NoopExtension {}
+
+    #[test]
+    fn slot_points_at_base_surface() {
+        let mut m = WebviewExtendedMaterial::<NoopExtension> {
+            base: WebviewMaterial::default(),
+            extension: NoopExtension::default(),
+        };
+        assert!(m.webview_surface_slot().is_none());
+        *m.webview_surface_slot() = Some(Handle::<Image>::default());
+        assert!(m.base.surface.is_some());
     }
 }
