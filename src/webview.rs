@@ -259,6 +259,7 @@ fn create_webview(
     drag_regions_sender: Res<crate::drag::DraggableRegionSender>,
     load_handler_sender: Res<crate::navigation::LoadHandlerSender>,
     address_changed_sender: Res<crate::navigation::AddressChangedSender>,
+    title_changed_sender: Res<crate::title::TitleChangedSender>,
     webviews: Query<
         (
             Entity,
@@ -294,6 +295,7 @@ fn create_webview(
                 drag_regions_sender.0.clone(),
                 load_handler_sender.0.clone(),
                 address_changed_sender.0.clone(),
+                title_changed_sender.0.clone(),
                 &initialize_scripts.0,
                 host_window,
             );
@@ -372,6 +374,7 @@ fn create_webview_win(
     drag_regions_sender: Res<crate::drag::DraggableRegionSender>,
     load_handler_sender: Res<crate::navigation::LoadHandlerSender>,
     address_changed_sender: Res<crate::navigation::AddressChangedSender>,
+    title_changed_sender: Res<crate::title::TitleChangedSender>,
     webviews: Query<
         (
             Entity,
@@ -407,6 +410,7 @@ fn create_webview_win(
                 drag_regions_sender.0.clone(),
                 load_handler_sender.0.clone(),
                 address_changed_sender.0.clone(),
+                title_changed_sender.0.clone(),
                 &initialize_scripts.0,
                 host_window,
             );

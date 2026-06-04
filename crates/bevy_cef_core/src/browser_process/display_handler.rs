@@ -37,6 +37,7 @@ pub struct DisplayHandlerBuilder {
     webview: Entity,
     cursor_icon: SystemCursorIconSenderInner,
     address_changed_sender: AddressChangedSenderInner,
+    title_changed_sender: TitleChangedSenderInner,
 }
 
 impl DisplayHandlerBuilder {
@@ -44,12 +45,14 @@ impl DisplayHandlerBuilder {
         webview: Entity,
         cursor_icon: SystemCursorIconSenderInner,
         address_changed_sender: AddressChangedSenderInner,
+        title_changed_sender: TitleChangedSenderInner,
     ) -> cef::DisplayHandler {
         cef::DisplayHandler::new(Self {
             object: core::ptr::null_mut(),
             webview,
             cursor_icon,
             address_changed_sender,
+            title_changed_sender,
         })
     }
 }
@@ -75,6 +78,7 @@ impl Clone for DisplayHandlerBuilder {
             webview: self.webview,
             cursor_icon: self.cursor_icon.clone(),
             address_changed_sender: self.address_changed_sender.clone(),
+            title_changed_sender: self.title_changed_sender.clone(),
         }
     }
 }
@@ -132,6 +136,13 @@ impl ImplDisplayHandler for DisplayHandlerBuilder {
                     can_go_forward: browser.can_go_forward() == 1,
                 });
         }
+    }
+
+    fn on_title_change(&self, _browser: Option<&mut Browser>, title: Option<&CefString>) {
+        let _ = self.title_changed_sender.send_blocking(TitleChangedMessage {
+            webview: self.webview,
+            title: title.map(|t| t.to_string()).unwrap_or_default(),
+        });
     }
 
     fn on_cursor_change(
