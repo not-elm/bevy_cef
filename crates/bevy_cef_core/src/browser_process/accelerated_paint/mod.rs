@@ -97,7 +97,11 @@ impl RetainedIoSurface {
         // Safety: `nn` points to a live IOSurface (valid during the callback);
         // `CFRetained::retain` adds a CF reference and returns the owning handle.
         let surface = unsafe { objc2_core_foundation::CFRetained::retain(nn) };
-        Self { surface, width, height }
+        Self {
+            surface,
+            width,
+            height,
+        }
     }
 
     /// Raw `IOSurfaceRef *` for the Metal import. Valid while `self` is alive.
@@ -123,9 +127,8 @@ impl RetainedIoSurface {
         let surface_ref: &objc2_io_surface::IOSurfaceRef = &self.surface;
         // Safety: surface_ref is valid while `self` is alive (+1 CF ref).
         // `seed` is advisory; pass null.
-        let lock_result = unsafe {
-            surface_ref.lock(IOSurfaceLockOptions::ReadOnly, std::ptr::null_mut())
-        };
+        let lock_result =
+            unsafe { surface_ref.lock(IOSurfaceLockOptions::ReadOnly, std::ptr::null_mut()) };
         if lock_result != 0 {
             return None;
         }
@@ -150,7 +153,11 @@ impl RetainedIoSurface {
             surface_ref.unlock(IOSurfaceLockOptions::ReadOnly, std::ptr::null_mut());
         }
 
-        Some(AlphaBuffer { data: alpha, width: self.width, height: self.height })
+        Some(AlphaBuffer {
+            data: alpha,
+            width: self.width,
+            height: self.height,
+        })
     }
 }
 
@@ -179,7 +186,11 @@ impl WebviewGpuSurface {
     pub fn new(device: &RenderDevice, width: u32, height: u32) -> Self {
         let texture = device.create_texture(&TextureDescriptor {
             label: Some("webview-gpu-surface"),
-            size: Extent3d { width, height, depth_or_array_layers: 1 },
+            size: Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
             mip_level_count: 1,
             sample_count: 1,
             dimension: TextureDimension::D2,
@@ -188,7 +199,12 @@ impl WebviewGpuSurface {
             view_formats: &[],
         });
         let view = texture.create_view(&TextureViewDescriptor::default());
-        Self { texture, view, width, height }
+        Self {
+            texture,
+            view,
+            width,
+            height,
+        }
     }
 
     /// Returns `true` if the surface had to be (re)created for a new size.
@@ -211,7 +227,11 @@ impl WebviewGpuSurface {
             src.as_image_copy(),
             // bevy Texture derefs to wgpu::Texture, so as_image_copy() is available.
             self.texture.as_image_copy(),
-            Extent3d { width: self.width, height: self.height, depth_or_array_layers: 1 },
+            Extent3d {
+                width: self.width,
+                height: self.height,
+                depth_or_array_layers: 1,
+            },
         );
     }
 

@@ -134,7 +134,7 @@ fn resolve_ui_pos(
     #[cfg(target_os = "macos")]
     {
         let wa = webview_alphas.get(entity).ok().flatten();
-        return ui_pointer_pos_macos(node, images, wa);
+        ui_pointer_pos_macos(node, images, wa)
     }
     #[cfg(not(target_os = "macos"))]
     {

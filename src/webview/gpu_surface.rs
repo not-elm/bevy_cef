@@ -426,7 +426,11 @@ fn inject_webview_gpu_images(
             None => {
                 surfaces.0.insert(
                     entry.id,
-                    WebviewGpuSurface::new(&render_device, entry.surface.width, entry.surface.height),
+                    WebviewGpuSurface::new(
+                        &render_device,
+                        entry.surface.width,
+                        entry.surface.height,
+                    ),
                 );
             }
         }
@@ -492,10 +496,7 @@ fn allocate_ui_webview_surfaces(
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,
     mut materials: ResMut<Assets<WebviewUiMaterial>>,
-    webviews: Query<
-        (Entity, &MaterialNode<WebviewUiMaterial>),
-        Without<WebviewSurface>,
-    >,
+    webviews: Query<(Entity, &MaterialNode<WebviewUiMaterial>), Without<WebviewSurface>>,
 ) {
     for (entity, material_handle) in webviews.iter() {
         let Some(material) = materials.get_mut(material_handle.id()) else {

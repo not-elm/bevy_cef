@@ -216,7 +216,10 @@ impl Browsers {
     #[cfg(target_os = "macos")]
     pub fn latest_webview_alpha(
         &self,
-    ) -> Vec<(Entity, crate::browser_process::accelerated_paint::AlphaBuffer)> {
+    ) -> Vec<(
+        Entity,
+        crate::browser_process::accelerated_paint::AlphaBuffer,
+    )> {
         self.browsers
             .iter()
             .filter_map(|(entity, b)| {
@@ -613,10 +616,8 @@ impl Browsers {
         &self,
         webview: Entity,
         size: SharedViewSize,
-        #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
-        view_slot: SharedTexture,
-        #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
-        popup_slot: SharedTexture,
+        #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))] view_slot: SharedTexture,
+        #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))] popup_slot: SharedTexture,
         dpr: SharedDpr,
         ipc_event_sender: Sender<IpcEventRaw>,
         brp_sender: Sender<BrpMessage>,
@@ -636,16 +637,16 @@ impl Browsers {
         let render_handler =
             RenderHandlerBuilder::build(webview, view_slot, popup_slot, size.clone(), dpr);
         ClientHandlerBuilder::new(render_handler)
-        .with_display_handler(DisplayHandlerBuilder::build(
-            webview,
-            system_cursor_icon_sender,
-            address_changed_sender,
-        ))
-        .with_drag_handler(DragHandlerBuilder::build(webview, drag_regions_sender))
-        .with_load_handler(LoadHandlerBuilder::build(webview, load_handler_sender))
-        .with_message_handler(JsEmitEventHandler::new(webview, ipc_event_sender))
-        .with_message_handler(BrpHandler::new(brp_sender))
-        .build()
+            .with_display_handler(DisplayHandlerBuilder::build(
+                webview,
+                system_cursor_icon_sender,
+                address_changed_sender,
+            ))
+            .with_drag_handler(DragHandlerBuilder::build(webview, drag_regions_sender))
+            .with_load_handler(LoadHandlerBuilder::build(webview, load_handler_sender))
+            .with_message_handler(JsEmitEventHandler::new(webview, ipc_event_sender))
+            .with_message_handler(BrpHandler::new(brp_sender))
+            .build()
     }
 
     #[inline]

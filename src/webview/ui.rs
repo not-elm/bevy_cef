@@ -36,10 +36,7 @@ impl Plugin for UiWebviewPlugin {
             UiMaterialPlugin::<WebviewUiMaterial>::default(),
             WebviewUiInputPlugin,
         ))
-        .add_systems(
-            PostUpdate,
-            update_webview_ui_size.after(UiSystems::Layout),
-        );
+        .add_systems(PostUpdate, update_webview_ui_size.after(UiSystems::Layout));
 
         // CPU `OnPaint` consumer: Linux/Windows only. On macOS the GPU path
         // (`gpu_surface::allocate_ui_webview_surfaces` + injection) handles UI

@@ -48,7 +48,11 @@ pub unsafe fn import_iosurface_to_wgpu(
 
     let texture_desc = TextureDescriptor {
         label: Some("cef-iosurface-imported"),
-        size: Extent3d { width, height, depth_or_array_layers: 1 },
+        size: Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
         mip_level_count: 1,
         sample_count: 1,
         dimension: TextureDimension::D2,
@@ -132,13 +136,15 @@ pub unsafe fn import_iosurface_to_wgpu(
                 metal::MTLTextureType::D2,
                 1,
                 1,
-                wgpu::hal::CopyExtent { width, height, depth: 1 },
+                wgpu::hal::CopyExtent {
+                    width,
+                    height,
+                    depth: 1,
+                },
             ),
         )
     })?;
 
     // Safety: hal_tex was created from this device and respects texture_desc.
-    Some(unsafe {
-        device.create_texture_from_hal::<wgpu::hal::api::Metal>(hal_tex, &texture_desc)
-    })
+    Some(unsafe { device.create_texture_from_hal::<wgpu::hal::api::Metal>(hal_tex, &texture_desc) })
 }

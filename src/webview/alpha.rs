@@ -154,8 +154,18 @@ mod tests {
         let alpha = [255u8, 0u8];
         let buf_size = UVec2::new(2, 1);
         let view_size = Vec2::new(2.0, 1.0);
-        assert!(!is_pixel_transparent_buf(&alpha, buf_size, view_size, Vec2::new(0.0, 0.0)));
-        assert!(is_pixel_transparent_buf(&alpha, buf_size, view_size, Vec2::new(1.0, 0.0)));
+        assert!(!is_pixel_transparent_buf(
+            &alpha,
+            buf_size,
+            view_size,
+            Vec2::new(0.0, 0.0)
+        ));
+        assert!(is_pixel_transparent_buf(
+            &alpha,
+            buf_size,
+            view_size,
+            Vec2::new(1.0, 0.0)
+        ));
     }
 
     #[test]
@@ -196,8 +206,18 @@ mod tests {
         let alpha = [255u8, 255, 0, 0, 255, 255, 0, 0];
         let buf_size = UVec2::new(4, 2);
         let view_size = Vec2::new(2.0, 1.0);
-        assert!(!is_pixel_transparent_buf(&alpha, buf_size, view_size, Vec2::new(0.0, 0.0)));
-        assert!(is_pixel_transparent_buf(&alpha, buf_size, view_size, Vec2::new(1.0, 0.0)));
+        assert!(!is_pixel_transparent_buf(
+            &alpha,
+            buf_size,
+            view_size,
+            Vec2::new(0.0, 0.0)
+        ));
+        assert!(is_pixel_transparent_buf(
+            &alpha,
+            buf_size,
+            view_size,
+            Vec2::new(1.0, 0.0)
+        ));
     }
 
     #[test]

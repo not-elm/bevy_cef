@@ -9,6 +9,10 @@ mod render_process;
 mod util;
 
 pub mod prelude {
+    #[cfg(all(feature = "browser", target_os = "macos"))]
+    pub use crate::browser_process::accelerated_paint::{
+        AlphaBuffer, RetainedIoSurface, WebviewGpuSurface, import_iosurface_to_wgpu,
+    };
     #[cfg(all(feature = "browser", target_os = "windows"))]
     pub use crate::browser_process::cef_command::{BrowsersProxy, CefCommand};
     #[cfg(all(feature = "browser", target_os = "windows"))]
@@ -21,10 +25,6 @@ pub mod prelude {
     pub use crate::browser_process::drag_handler::DraggableRegionSenderInner;
     #[cfg(feature = "browser")]
     pub use crate::browser_process::*;
-    #[cfg(all(feature = "browser", target_os = "macos"))]
-    pub use crate::browser_process::accelerated_paint::{
-        AlphaBuffer, RetainedIoSurface, WebviewGpuSurface, import_iosurface_to_wgpu,
-    };
     pub use crate::custom_scheme::{
         CefCustomScheme, CefSchemeBody, CefSchemeHandler, CefSchemeOptions, CefSchemeRequest,
         CefSchemeResponse, init_registered_schemes,
