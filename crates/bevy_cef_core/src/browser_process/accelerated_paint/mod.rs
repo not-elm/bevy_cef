@@ -127,8 +127,19 @@ impl RetainedIoSurface {
 
         let base_ptr = surface_ref.base_address().as_ptr() as *const u8;
         let stride = surface_ref.bytes_per_row();
-        let offset = py as usize * stride + px as usize * 4 + 3;
-        // Safety: offset is within the mapped region (px < width, py < height).
+        // BGRA: the alpha byte sits at `px * 4 + 3` within the row. Guard against a
+        // row stride smaller than that (e.g. an unexpected non-BGRA surface) so the
+        // read below cannot step past the end of the row — and therefore stays
+        // within the mapped region, since `py < height` (checked above). For a
+        // normal BGRA surface `stride >= width * 4`, so this never trips.
+        let row_byte = px as usize * 4 + 3;
+        if row_byte >= stride {
+            return None;
+        }
+        let offset = py as usize * stride + row_byte;
+        // Safety: `row_byte < stride` and `py < height`, so
+        // `offset < (py + 1) * stride <= height * stride`, i.e. inside the mapped
+        // region. The read-only lock is held (guard above), keeping `base_ptr` valid.
         Some(unsafe { *base_ptr.add(offset) })
     }
 }
@@ -140,9 +151,11 @@ impl RetainedIoSurface {
 // sound. The surface MAY be aliased: the render path moves one retain into the
 // render world while the main world holds a second, independent `CFRetain` (via
 // `Clone`) in a `WebviewIoSurface` component for on-demand alpha hit-testing.
-// Both accesses are READ-ONLY — the render path imports it as a Metal texture
-// (GPU read) and hit-testing takes a read-only `IOSurfaceLock` (CPU read) — so
-// the alias is sound (no writer on our side; CEF's GPU process is the producer).
+// Both of our accesses are reads — the render path imports it as a Metal texture
+// (GPU read) and hit-testing takes a read-only `IOSurfaceLock` (CPU read). The
+// read-only `IOSurfaceLock` is a CPU cache-coherency primitive, not GPU mutual
+// exclusion; soundness rests on there being NO writer in this process — CEF's GPU
+// process is the sole producer and has finished the frame before delivering it.
 unsafe impl Send for RetainedIoSurface {}
 unsafe impl Sync for RetainedIoSurface {}
 
