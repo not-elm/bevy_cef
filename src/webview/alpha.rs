@@ -5,6 +5,8 @@
 //! pixel (and should pass through instead of reaching CEF).
 
 use bevy::prelude::*;
+#[cfg(target_os = "macos")]
+use bevy_cef_core::prelude::RetainedIoSurface;
 
 /// Returns `true` when the surface pixel under `pos_dip` is fully transparent
 /// (alpha == 0), i.e. the pointer event should pass through rather than reach
@@ -58,6 +60,30 @@ pub(crate) fn is_pixel_transparent_buf(
     let px = dip_to_pixel(pos_dip, buf_size, webview_size);
     let offset = (px.y * buf_size.x + px.x) as usize;
     alpha.get(offset) == Some(&0)
+}
+
+/// Returns `true` when the pixel under `pos_dip` is fully transparent (alpha == 0),
+/// reading a single byte on demand from the webview's retained IOSurface.
+///
+/// `webview_size` is the DIP (logical) viewport size; physical pixel coordinates
+/// are derived via `dip_to_pixel` using the surface's physical dimensions. Returns
+/// `false` (opaque) for a zero-area viewport, out-of-range pixel, or lock failure —
+/// so a not-yet-painted surface forwards events instead of swallowing them.
+///
+/// macOS GPU path only: `Image.data` is a black placeholder there, so the real
+/// alpha lives in the IOSurface behind `WebviewIoSurface`.
+#[cfg(target_os = "macos")]
+pub(crate) fn is_pixel_transparent_surface(
+    surface: &RetainedIoSurface,
+    webview_size: Vec2,
+    pos_dip: Vec2,
+) -> bool {
+    let buf_size = UVec2::new(surface.width, surface.height);
+    if buf_size.x == 0 || buf_size.y == 0 || webview_size.x <= 0.0 || webview_size.y <= 0.0 {
+        return false;
+    }
+    let px = dip_to_pixel(pos_dip, buf_size, webview_size);
+    surface.read_alpha_at(px.x, px.y) == Some(0)
 }
 
 /// Converts a DIP (logical-pixel) coordinate to a physical pixel index inside an

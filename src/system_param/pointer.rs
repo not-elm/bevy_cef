@@ -1,5 +1,5 @@
 #[cfg(target_os = "macos")]
-use crate::common::WebviewAlpha;
+use crate::common::WebviewIoSurface;
 use crate::common::WebviewSurface;
 use crate::prelude::{WebviewSize, WebviewSource};
 use crate::system_param::mesh_aabb::MeshAabb;
@@ -20,11 +20,11 @@ pub struct WebviewPointer<'w, 's, C: Component = Camera3d> {
     parents: Query<'w, 's, (Option<&'static ChildOf>, Has<WebviewSource>)>,
     surfaces: Query<'w, 's, &'static WebviewSurface>,
     images: Res<'w, Assets<Image>>,
-    /// [macOS GPU OSR] Per-webview CPU alpha buffer for transparent hit-testing.
-    /// On macOS the `Image` in `WebviewSurface` is a black placeholder; the real
-    /// alpha lives here.
+    /// [macOS GPU OSR] Per-webview retained IOSurface for on-demand transparent
+    /// hit-testing. On macOS the `Image` in `WebviewSurface` is a black
+    /// placeholder; the real alpha is read on demand from this surface.
     #[cfg(target_os = "macos")]
-    webview_alpha: Query<'w, 's, &'static WebviewAlpha>,
+    webview_iosurface: Query<'w, 's, &'static WebviewIoSurface>,
 }
 
 impl<C: Component> WebviewPointer<'_, '_, C> {
@@ -98,16 +98,15 @@ impl<C: Component> WebviewPointer<'_, '_, C> {
             return false;
         };
 
-        // On macOS the GPU path stores real alpha in `WebviewAlpha`; the `Image`
-        // in `WebviewSurface` is a black placeholder (alpha always 255 or 0).
-        // Use the CPU alpha buffer when available, fall through to the Image path
-        // when it hasn't been populated yet (e.g. before the first accelerated
-        // paint frame).
+        // On macOS the GPU path keeps the latest IOSurface in `WebviewIoSurface`;
+        // the `Image` in `WebviewSurface` is a black placeholder (alpha always 255
+        // or 0). Read one alpha byte on demand from that surface when available,
+        // and fall through to the Image path when it hasn't been populated yet
+        // (e.g. before the first accelerated paint frame).
         #[cfg(target_os = "macos")]
-        if let Ok(wa) = self.webview_alpha.get(webview) {
-            return crate::webview::alpha::is_pixel_transparent_buf(
-                &wa.data,
-                wa.size,
+        if let Ok(surface) = self.webview_iosurface.get(webview) {
+            return crate::webview::alpha::is_pixel_transparent_surface(
+                &surface.0,
                 webview_size.0,
                 pos,
             );

@@ -48,7 +48,7 @@
 //! node blits into the same texture each frame, and the injected `GpuImage`
 //! reuses the same `texture_view`, so the material bind group stays valid.
 
-use crate::common::{WebviewAlpha, WebviewSource};
+use crate::common::{WebviewAlpha, WebviewIoSurface, WebviewSource};
 use crate::prelude::{WebviewExtendStandardMaterial, WebviewSurface};
 use crate::webview::ui::WebviewUiMaterial;
 use bevy::asset::{AssetId, RenderAssetUsages};
@@ -263,6 +263,7 @@ fn allocate_webview_surfaces(
 /// `AssetId<Image>`. Any retain whose webview has no allocated surface yet is
 /// dropped (released) here.
 fn collect_webview_iosurfaces(
+    mut commands: Commands,
     browsers: NonSend<Browsers>,
     surfaces: Query<&WebviewSurface>,
     pending: ResMut<PendingWebviewIoSurfaces>,
@@ -278,6 +279,15 @@ fn collect_webview_iosurfaces(
             // No surface id yet; dropping `retained` releases the IOSurface.
             continue;
         };
+        // Keep the latest retained surface on the entity for on-demand alpha
+        // hit-testing. `clone()` is a second, independent `CFRetain`; the original
+        // retain still moves to the render path below. Overwriting the component
+        // releases the previous frame's retain (latest-wins). On no-paint frames
+        // `take_latest_webview_iosurfaces` yields nothing, so the component keeps
+        // its prior (sticky) value.
+        commands
+            .entity(entity)
+            .insert(WebviewIoSurface(retained.clone()));
         pending.push(PendingIoSurface {
             id: surface.0.id(),
             surface: retained,
