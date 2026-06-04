@@ -2,6 +2,8 @@ use bevy::prelude::*;
 use bevy_cef_core::prelude::{HOST_CEF, SCHEME_CEF};
 use serde::{Deserialize, Serialize};
 
+use crate::title::WebviewTitle;
+
 pub(crate) struct WebviewCoreComponentsPlugin;
 
 impl Plugin for WebviewCoreComponentsPlugin {
@@ -25,7 +27,14 @@ impl Plugin for WebviewCoreComponentsPlugin {
 /// automatically navigates to the new source without being recreated.
 #[derive(Component, Debug, Clone, Reflect)]
 #[reflect(Component, Debug)]
-#[require(WebviewSize, ZoomLevel, AudioMuted, PreloadScripts, WebviewDpr)]
+#[require(
+    WebviewSize,
+    ZoomLevel,
+    AudioMuted,
+    PreloadScripts,
+    WebviewDpr,
+    WebviewTitle
+)]
 pub enum WebviewSource {
     /// A remote or local URL (e.g. `"https://..."` or `"cef://localhost/file.html"`).
     Url(String),

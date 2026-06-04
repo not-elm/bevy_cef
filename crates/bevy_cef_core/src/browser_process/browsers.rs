@@ -38,6 +38,7 @@ use crate::browser_process::browsers::devtool_render_handler::DevToolRenderHandl
 #[cfg(not(target_os = "windows"))]
 use crate::browser_process::display_handler::{
     AddressChangedSenderInner, DisplayHandlerBuilder, SystemCursorIconSenderInner,
+    TitleChangedSenderInner,
 };
 #[cfg(not(target_os = "windows"))]
 use crate::browser_process::drag_handler::{DragHandlerBuilder, DraggableRegionSenderInner};
@@ -87,6 +88,7 @@ impl Browsers {
         drag_regions_sender: DraggableRegionSenderInner,
         load_handler_sender: LoadHandlerSenderInner,
         address_changed_sender: AddressChangedSenderInner,
+        title_changed_sender: TitleChangedSenderInner,
         initialize_scripts: &[String],
         _window_handle: Option<RawWindowHandle>,
     ) {
@@ -139,6 +141,7 @@ impl Browsers {
                 latest_iosurface.clone(),
                 #[cfg(target_os = "macos")]
                 latest_alpha.clone(),
+                title_changed_sender,
             )),
             Some(&uri.into()),
             Some(&BrowserSettings {
@@ -629,6 +632,7 @@ impl Browsers {
         latest_iosurface: crate::browser_process::accelerated_paint::SharedRetainedIoSurface,
         #[cfg(target_os = "macos")]
         latest_alpha: crate::browser_process::accelerated_paint::SharedAlphaBuffer,
+        title_changed_sender: TitleChangedSenderInner,
     ) -> Client {
         #[cfg(target_os = "macos")]
         let render_handler =
@@ -641,6 +645,7 @@ impl Browsers {
                 webview,
                 system_cursor_icon_sender,
                 address_changed_sender,
+                title_changed_sender,
             ))
             .with_drag_handler(DragHandlerBuilder::build(webview, drag_regions_sender))
             .with_load_handler(LoadHandlerBuilder::build(webview, load_handler_sender))

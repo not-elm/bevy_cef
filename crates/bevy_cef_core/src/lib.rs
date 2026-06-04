@@ -19,7 +19,8 @@ pub mod prelude {
     pub use crate::browser_process::cef_thread::{drain_commands, init_cef_browsers};
     #[cfg(feature = "browser")]
     pub use crate::browser_process::display_handler::{
-        AddressChangedMessage, AddressChangedSenderInner,
+        AddressChangedMessage, AddressChangedSenderInner, TitleChangedMessage,
+        TitleChangedSenderInner,
     };
     #[cfg(feature = "browser")]
     pub use crate::browser_process::drag_handler::DraggableRegionSenderInner;

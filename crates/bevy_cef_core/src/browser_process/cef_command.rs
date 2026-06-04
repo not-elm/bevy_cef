@@ -13,7 +13,7 @@ use raw_window_handle::RawWindowHandle;
 
 use crate::browser_process::client_handler::IpcEventRaw;
 use crate::browser_process::display_handler::{
-    AddressChangedSenderInner, SystemCursorIconSenderInner,
+    AddressChangedSenderInner, SystemCursorIconSenderInner, TitleChangedSenderInner,
 };
 use crate::browser_process::drag_handler::DraggableRegionSenderInner;
 use crate::browser_process::load_handler::LoadHandlerSenderInner;
@@ -50,6 +50,7 @@ pub enum CefCommand {
         drag_regions_sender: DraggableRegionSenderInner,
         load_handler_sender: LoadHandlerSenderInner,
         address_changed_sender: AddressChangedSenderInner,
+        title_changed_sender: TitleChangedSenderInner,
         initialize_scripts: Vec<String>,
         window_handle: Option<SendRawWindowHandle>,
     },
@@ -188,6 +189,7 @@ impl BrowsersProxy {
         drag_regions_sender: DraggableRegionSenderInner,
         load_handler_sender: LoadHandlerSenderInner,
         address_changed_sender: AddressChangedSenderInner,
+        title_changed_sender: TitleChangedSenderInner,
         initialize_scripts: &[String],
         window_handle: Option<RawWindowHandle>,
     ) {
@@ -203,6 +205,7 @@ impl BrowsersProxy {
             drag_regions_sender,
             load_handler_sender,
             address_changed_sender,
+            title_changed_sender,
             initialize_scripts: initialize_scripts.to_vec(),
             window_handle: window_handle.map(SendRawWindowHandle),
         });

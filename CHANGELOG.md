@@ -7,6 +7,10 @@
   render-graph node (no CPU readback). Supported for 3D mesh (`WebviewExtendStandardMaterial`)
   and `bevy_ui` (`WebviewUiMaterial`) webviews. The CPU `OnPaint` path is no longer used on macOS.
 
+### Features
+
+- Add `WebviewTitle` component and `TitleChanged` Event trigger to propagate the webview title changes to the ECS.
+
 ### Notes
 
 - macOS: set `CefPlugin { root_cache_path: Some(...), .. }` (CEF's default-cache process-singleton

@@ -4,6 +4,9 @@
 //!
 //! - Press `Z` to go back in history.
 //! - Press `X` to go forward in history.
+//!
+//! Title changes are logged via both a push-style observer (`TitleChanged` event)
+//! and a pull-style change-detection system (`WebviewTitle` component).
 
 use bevy::input::common_conditions::input_just_pressed;
 use bevy::prelude::*;
@@ -12,6 +15,7 @@ use bevy_cef::prelude::*;
 fn main() {
     App::new()
         .add_plugins((DefaultPlugins, CefPlugin::default()))
+        .add_observer(report_title_changed)
         .add_systems(
             Startup,
             (spawn_camera, spawn_directional_light, spawn_webview),
@@ -21,6 +25,7 @@ fn main() {
             (
                 request_go_back.run_if(input_just_pressed(KeyCode::KeyZ)),
                 request_go_forward.run_if(input_just_pressed(KeyCode::KeyX)),
+                report_title_component,
             ),
         )
         .run();
@@ -65,5 +70,17 @@ fn request_go_back(mut commands: Commands, webviews: Query<Entity, With<DebugWeb
 fn request_go_forward(mut commands: Commands, webviews: Query<Entity, With<DebugWebview>>) {
     for webview in webviews.iter() {
         commands.trigger(RequestGoForward { webview });
+    }
+}
+
+/// Push style (observer): called once each time the title changes.
+fn report_title_changed(on: On<TitleChanged>) {
+    info!("TitleChanged event: {:?}", on.title);
+}
+
+/// Pull style (component + change detection): reacts on the frame `WebviewTitle` is updated.
+fn report_title_component(titles: Query<&WebviewTitle, Changed<WebviewTitle>>) {
+    for title in titles.iter() {
+        info!("WebviewTitle component now: {:?}", title.0);
     }
 }
