@@ -7,8 +7,8 @@
 //! differs from the current value (dedup).
 
 use async_channel::Receiver;
-use bevy::ecs::event::EntityTrigger;
 use bevy::prelude::*;
+use bevy::{ecs::event::EntityTrigger, platform::collections::HashMap};
 use bevy_cef_core::prelude::{TitleChangedMessage, TitleChangedSenderInner};
 use serde::{Deserialize, Serialize};
 
@@ -50,33 +50,17 @@ fn drain_title_changed(
     receiver: Res<TitleChangedReceiver>,
     titles: Query<&WebviewTitle>,
 ) {
-    // 同一フレーム内で同じ entity に複数メッセージが来ても正しく dedup するため、
-    // この drain 中に適用した最新タイトルを覚えておく(Commands は遅延適用のため、
-    // titles クエリはループ内の insert を反映しない)。
-    let mut applied: std::collections::HashMap<Entity, String> = Default::default();
     while let Ok(msg) = receiver.0.try_recv() {
-        let current = applied
-            .get(&msg.webview)
-            .map(String::as_str)
-            .or_else(|| titles.get(msg.webview).ok().map(|t| t.0.as_str()));
-        // dedup: 現在値と同じタイトルなら component 更新も event 発火もしない。
+        let current = titles.get(msg.webview).ok().map(|t| t.0.as_str());
         if current == Some(msg.title.as_str()) {
             continue;
         }
-        applied.insert(msg.webview, msg.title.clone());
-        // webview が despawn 済みなら component 更新もイベント発火もスキップする
-        // (存在確認で insert の panic を防ぎつつ、dead entity を指す TitleChanged も出さない)。
-        if commands.get_entity(msg.webview).is_ok() {
-            commands
-                .entity(msg.webview)
-                .insert(WebviewTitle(msg.title.clone()));
-            commands.trigger_with(
-                TitleChanged {
-                    webview: msg.webview,
-                    title: msg.title,
-                },
-                EntityTrigger,
-            );
+        if let Ok(mut cmd) = commands.get_entity(msg.webview) {
+            cmd.insert(WebviewTitle(msg.title.clone()));
+            cmd.trigger(|webview| TitleChanged {
+                webview,
+                title: msg.title,
+            });
         }
     }
 }
