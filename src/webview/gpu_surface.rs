@@ -52,11 +52,11 @@
 //! reuses the same `texture_view`, so the material bind group stays valid
 //! between rebind events.
 
-use crate::common::{WebviewIoSurface, WebviewSize, WebviewSource};
+use crate::common::{WebviewIoSurface, WebviewSize, WebviewSource, WebviewTextureTarget};
 use crate::prelude::{WebviewExtendStandardMaterial, WebviewSurface};
 use crate::webview::ui::WebviewUiMaterial;
 use bevy::asset::{AssetId, RenderAssetUsages};
-use bevy::platform::collections::HashMap;
+use bevy::platform::collections::{HashMap, HashSet};
 use bevy::prelude::*;
 use bevy::render::{
     Extract, Render, RenderApp, RenderSystems,
@@ -132,6 +132,7 @@ impl Plugin for WebviewGpuInjectPlugin {
                     allocate_webview_surfaces_for::<WebviewExtendStandardMaterial>,
                     allocate_ui_webview_surfaces,
                     allocate_sprite_webview_surfaces,
+                    allocate_target_webview_surfaces,
                 )
                     .in_set(WebviewSurfaceSet::Allocate),
             )
@@ -250,7 +251,7 @@ struct WebviewGpuSurfaces(HashMap<AssetId<Image>, WebviewGpuSurface>);
 /// `WebviewGpuSurfaces` entries whose webview has despawned — otherwise the owned
 /// GPU texture (~2.5 MB each) leaks and a dead `GpuImage` is re-injected forever.
 #[derive(Resource, Default)]
-struct LiveWebviewSurfaceIds(bevy::platform::collections::HashSet<AssetId<Image>>);
+struct LiveWebviewSurfaceIds(HashSet<AssetId<Image>>);
 
 /// Black, fully-opaque BGRA placeholder for a webview surface `Image`. The real
 /// pixels are injected directly into `RenderAssets<GpuImage>` in the render
@@ -289,7 +290,10 @@ pub(crate) fn allocate_webview_surfaces_for<M: WebviewSurfaceSlot>(
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,
     mut materials: ResMut<Assets<M>>,
-    webviews: Query<(Entity, &MeshMaterial3d<M>, Option<&WebviewSurface>), With<WebviewSource>>,
+    webviews: Query<
+        (Entity, &MeshMaterial3d<M>, Option<&WebviewSurface>),
+        (With<WebviewSource>, Without<WebviewTextureTarget>),
+    >,
 ) {
     for (entity, material_handle, existing) in webviews.iter() {
         let Some(material) = materials.get(material_handle.id()) else {
@@ -311,6 +315,72 @@ pub(crate) fn allocate_webview_surfaces_for<M: WebviewSurfaceSlot>(
                     *material.webview_surface_slot_mut() = Some(handle.clone());
                 }
                 commands.entity(entity).try_insert(WebviewSurface(handle));
+            }
+        }
+    }
+}
+
+/// Main-world system: keep every headless webview (one carrying
+/// [`WebviewTextureTarget`]) wired to a `WebviewSurface` keyed by the
+/// user-supplied handle. Writes the canonical placeholder INTO the user's
+/// asset (preserving the handle, like the sprite path) so the image has the
+/// pipeline's required format/usages before the first injected frame.
+///
+/// Per-frame reconciliation like the other allocate paths: a handle swap on
+/// the pub field shows up as an id mismatch and re-keys the surface (the
+/// existing `CollectedSurfaceId` machinery re-pushes the sticky IOSurface for
+/// the new id without waiting for a CEF repaint).
+fn allocate_target_webview_surfaces(
+    mut commands: Commands,
+    mut images: ResMut<Assets<Image>>,
+    webviews: Query<
+        (Entity, &WebviewTextureTarget, Option<&WebviewSurface>),
+        With<WebviewSource>,
+    >,
+    changed: Query<(), Changed<WebviewTextureTarget>>,
+    mut warned_shared: Local<HashSet<AssetId<Image>>>,
+) {
+    for (entity, target, existing) in webviews.iter() {
+        if target.0 == Handle::default() {
+            bevy::log::warn_once!(
+                "[bevy_cef] WebviewTextureTarget holds Handle::default(); create a \
+                 dedicated image with `images.add(Image::default())` instead"
+            );
+            continue;
+        }
+        let id = target.0.id();
+        if existing.is_none_or(|surface| surface.0.id() != id) {
+            if let Err(err) = images.insert(id, placeholder_surface_image(UVec2::ONE)) {
+                warn!(
+                    "[bevy_cef] WebviewTextureTarget handle is stale; surface not \
+                     allocated for {entity}: {err}"
+                );
+                continue;
+            }
+            commands
+                .entity(entity)
+                .try_insert(WebviewSurface(target.0.clone()));
+        }
+    }
+
+    // Shared-handle detection: two webviews blitting one asset id is
+    // last-blit-wins. Scan only on frames where a target was added/changed
+    // (`Changed` includes `Added`), and warn once per distinct id —
+    // `warn_once!` is per-callsite and would swallow the second distinct
+    // conflict.
+    if !changed.is_empty() {
+        let mut seen: HashMap<AssetId<Image>, Entity> = HashMap::default();
+        for (entity, target, _) in webviews.iter() {
+            if target.0 == Handle::default() {
+                continue;
+            }
+            if let Some(first) = seen.insert(target.0.id(), entity)
+                && warned_shared.insert(target.0.id())
+            {
+                warn!(
+                    "[bevy_cef] WebviewTextureTarget handle shared by {first} and \
+                     {entity}; only one webview's frames will be visible (last blit wins)"
+                );
             }
         }
     }
@@ -578,7 +648,7 @@ fn allocate_ui_webview_surfaces(
             &MaterialNode<WebviewUiMaterial>,
             Option<&WebviewSurface>,
         ),
-        With<WebviewSource>,
+        (With<WebviewSource>, Without<WebviewTextureTarget>),
     >,
 ) {
     for (entity, material_handle, existing) in webviews.iter() {
@@ -641,7 +711,11 @@ fn allocate_sprite_webview_surfaces(
     mut images: ResMut<Assets<Image>>,
     mut webviews: Query<
         (Entity, &mut Sprite, &WebviewSize),
-        (With<WebviewSource>, Without<WebviewSurface>),
+        (
+            With<WebviewSource>,
+            Without<WebviewSurface>,
+            Without<WebviewTextureTarget>,
+        ),
     >,
 ) {
     for (entity, mut sprite, size) in webviews.iter_mut() {
