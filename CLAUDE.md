@@ -36,6 +36,7 @@ CefPlugin (root — accepts CommandLineConfig, CefExtensions, root_cache_path)
 - `AudioMuted`: bool audio control
 - `PreloadScripts`: Vec<String> scripts executed before page scripts
 - `CefExtensions`: Custom JS extensions via `register_extension` (global to all webviews)
+- `WebviewTextureTarget`: Headless render target — user-supplied `Handle<Image>` the webview renders into, for sampling from third-party materials without any display component (macOS GPU path only; pair with `WebviewTextureSlot` + `WebviewTargetUiMaterialPlugin` for bind-group rebinds)
 
 ### Webview Lifecycle (spans multiple files)
 1. User adds `WebviewSource` component → auto-requires `WebviewSize`, `ZoomLevel`, `AudioMuted`, `PreloadScripts`
@@ -112,7 +113,7 @@ If the render process binary is not installed, call `bevy_cef::prelude::early_ex
 
 No automated tests. Testing done through examples:
 - `cargo test --workspace --all-features` (for any future tests)
-- Examples: simple, inline_html, js_emit, host_emit, brp, navigation, zoom_level, sprite, devtool, custom_material, preload_scripts, extensions
+- Examples: simple, inline_html, js_emit, host_emit, brp, navigation, zoom_level, sprite, devtool, custom_material, preload_scripts, extensions, headless_texture
 
 ## Workspace Structure
 

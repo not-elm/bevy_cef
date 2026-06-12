@@ -335,11 +335,12 @@ pub(crate) fn allocate_webview_surfaces_for<M: WebviewSurfaceSlot>(
 fn allocate_target_webview_surfaces(
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,
-    webviews: Query<
-        (Entity, &WebviewTextureTarget, Option<&WebviewSurface>),
-        With<WebviewSource>,
-    >,
+    webviews: Query<(Entity, &WebviewTextureTarget, Option<&WebviewSurface>), With<WebviewSource>>,
     changed: Query<(), Changed<WebviewTextureTarget>>,
+    // `warned` is shared by the stale-handle warning and the shared-handle
+    // warning below. An id that already fired as stale will not re-fire as
+    // shared (and vice versa) — one diagnostic signal per misconfigured id is
+    // intentional; re-warning would be noisy with no new information.
     mut warned: Local<HashSet<AssetId<Image>>>,
 ) {
     for (entity, target, existing) in webviews.iter() {

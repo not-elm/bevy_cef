@@ -28,9 +28,9 @@ pub(crate) mod alpha;
 #[cfg(target_os = "macos")]
 pub(crate) mod gpu_surface;
 mod mesh;
+pub mod texture_target;
 mod ui;
 pub(crate) mod webview_sprite;
-pub mod texture_target;
 
 pub mod prelude {
     pub use crate::webview::{

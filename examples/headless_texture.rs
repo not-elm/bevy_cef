@@ -3,6 +3,8 @@
 //! emulator uses to composite an inline webview in its own shader.
 //!
 //! macOS only: the headless texture path rides the GPU IOSurface pipeline.
+//! On Linux/Windows this compiles and runs but the node stays black — the
+//! headless path is not wired there yet.
 //! Run with: `cargo run --example headless_texture --features debug`
 
 use bevy::asset::AssetId;
