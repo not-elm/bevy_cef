@@ -24,6 +24,16 @@
 //! }
 //! ```
 //!
+//! Ordering caveat for the manual path: the rebind image-touch ALSO makes
+//! `prepare_assets::<GpuImage>` re-upload the CPU placeholder that same frame
+//! (the `Modified` event is shared). A material bind group rebuilt that frame
+//! must therefore be prepared AFTER bevy_cef's GPU injection, or it can
+//! capture the placeholder instead of the webview texture — and stay black
+//! forever, because nothing rebuilds it once the rebind window closes.
+//! [`WebviewTargetUiMaterialPlugin`] configures that ordering automatically;
+//! manual consumers must order [`WebviewGpuImageInjectSet`] before their
+//! material's `prepare_assets` in the `Render` schedule (see the set's docs).
+//!
 //! This module is compiled on every platform so downstream crates never need
 //! `#[cfg]`; on non-macOS the plugin registers nothing (the headless texture
 //! path is macOS-only).
@@ -31,6 +41,28 @@
 use bevy::asset::AssetId;
 use bevy::prelude::*;
 use std::marker::PhantomData;
+
+/// Render-world system set containing bevy_cef's webview GPU texture injection
+/// (`RenderSystems::PrepareAssets` phase; populated on macOS only).
+///
+/// A material that samples a `WebviewTextureTarget` image must build its bind
+/// group AFTER this set: on rebind frames the image-touch re-uploads the CPU
+/// placeholder, and an unordered rebuild can land between that re-upload and
+/// the injection, capturing the placeholder permanently.
+/// [`WebviewTargetUiMaterialPlugin`] adds the required edge automatically;
+/// manual consumers do:
+///
+/// ```ignore
+/// use bevy::render::{Render, RenderApp, render_asset::prepare_assets};
+/// use bevy::ui_render::PreparedUiMaterial;
+///
+/// render_app.configure_sets(
+///     Render,
+///     WebviewGpuImageInjectSet.before(prepare_assets::<PreparedUiMaterial<MyMaterial>>),
+/// );
+/// ```
+#[derive(SystemSet, Clone, Debug, Hash, PartialEq, Eq)]
+pub struct WebviewGpuImageInjectSet;
 
 /// Tells bevy_cef which webview texture targets an asset references, so
 /// [`WebviewTargetUiMaterialPlugin`] can rebuild its bind group on rebind
@@ -77,10 +109,27 @@ where
             use crate::webview::gpu_surface::{
                 WebviewSurfaceSet, mark_target_materials_changed_for,
             };
+            use bevy::render::{Render, RenderApp, render_asset::prepare_assets};
+            use bevy::ui_render::PreparedUiMaterial;
+
             _app.add_systems(
                 Update,
                 mark_target_materials_changed_for::<M>.in_set(WebviewSurfaceSet::MarkChanged),
             );
+
+            // Deterministic rebind: the rebind image-touch re-uploads the CPU
+            // placeholder in the very frames this plugin rebuilds M's bind
+            // group. Without this edge the rebuild can run between the
+            // placeholder re-upload and the GPU injection and capture the
+            // placeholder — permanently, since nothing rebuilds the bind group
+            // after the rebind window closes (observed as a forever-black
+            // texture on machines where the scheduler picks that order).
+            if let Some(render_app) = _app.get_sub_app_mut(RenderApp) {
+                render_app.configure_sets(
+                    Render,
+                    WebviewGpuImageInjectSet.before(prepare_assets::<PreparedUiMaterial<M>>),
+                );
+            }
         }
     }
 }

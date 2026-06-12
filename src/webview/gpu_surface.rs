@@ -54,7 +54,7 @@
 
 use crate::common::{WebviewIoSurface, WebviewSize, WebviewSource, WebviewTextureTarget};
 use crate::prelude::{WebviewExtendStandardMaterial, WebviewSurface};
-use crate::webview::texture_target::WebviewTextureSlot;
+use crate::webview::texture_target::{WebviewGpuImageInjectSet, WebviewTextureSlot};
 use crate::webview::ui::WebviewUiMaterial;
 use bevy::asset::{AssetId, RenderAssetUsages};
 use bevy::platform::collections::{HashMap, HashSet};
@@ -168,14 +168,21 @@ impl Plugin for WebviewGpuInjectPlugin {
             // Ordering: AFTER `prepare_assets::<GpuImage>` so the insert overwrites
             // the black placeholder GpuImage for the same AssetId; BEFORE each
             // material's bind-group build so the rebuilt bind group captures the
-            // injected view. Custom materials (`WebviewExtendedMaterial<E>`)
-            // intentionally have NO `.before()` edge — the at-most-1-frame warmup
-            // flash is the accepted trade-off (spec §6, Approach A); the
-            // REBIND_FRAMES echo makes their rebuild order-independent.
+            // injected view. Custom MESH materials (`WebviewExtendedMaterial<E>`)
+            // intentionally have NO `.before()` edge — their rebind path touches
+            // only the material (never the image), so on the echo frame the
+            // injected entry persists in `RenderAssets<GpuImage>` and the rebuild
+            // is order-independent (at-most-1-frame warmup flash, spec §6).
+            // Headless targets are DIFFERENT: their rebind path touches the image,
+            // which re-uploads the CPU placeholder in the same frames the
+            // consumer's bind group rebuilds — so consumers MUST order after
+            // `WebviewGpuImageInjectSet` (the turnkey plugin does it per material
+            // type) or they can capture the placeholder permanently.
             .add_systems(
                 Render,
                 inject_webview_gpu_images
                     .in_set(RenderSystems::PrepareAssets)
+                    .in_set(WebviewGpuImageInjectSet)
                     .after(prepare_assets::<GpuImage>)
                     .before(prepare_erased_assets::<MeshMaterial3d<WebviewExtendStandardMaterial>>)
                     .before(prepare_assets::<PreparedUiMaterial<WebviewUiMaterial>>),
