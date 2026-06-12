@@ -1,3 +1,5 @@
+#[cfg(target_os = "macos")]
+pub mod accelerated_paint;
 mod app;
 mod browser_process_handler;
 mod browsers;

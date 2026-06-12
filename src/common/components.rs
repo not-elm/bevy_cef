@@ -1,4 +1,6 @@
 use bevy::prelude::*;
+#[cfg(target_os = "macos")]
+use bevy_cef_core::prelude::RetainedIoSurface;
 use bevy_cef_core::prelude::{HOST_CEF, SCHEME_CEF};
 use serde::{Deserialize, Serialize};
 
@@ -152,3 +154,17 @@ where
 /// It provides material-type-agnostic access to the webview texture.
 #[derive(Component, Debug, Clone)]
 pub(crate) struct WebviewSurface(pub(crate) Handle<Image>);
+
+/// [macOS GPU OSR] Per-webview holder of the latest retained IOSurface, used for
+/// on-demand transparent-pixel hit-testing.
+///
+/// The hit-test code (`is_pixel_transparent_surface`) reads a single alpha byte
+/// from this surface only when a pointer is over the webview — replacing the old
+/// per-frame full-plane alpha extraction. Updated in place on each new
+/// accelerated-paint frame by `collect_webview_iosurfaces` (a `Clone` =
+/// independent `CFRetain`). The retain keeps the surface object alive (memory
+/// safe), but CEF's frame pool may recycle the buffer, so a read between paints
+/// can observe a newer frame than the one displayed — acceptable for hit-testing.
+#[cfg(target_os = "macos")]
+#[derive(Component)]
+pub(crate) struct WebviewIoSurface(pub(crate) RetainedIoSurface);

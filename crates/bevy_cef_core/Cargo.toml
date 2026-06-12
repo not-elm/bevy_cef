@@ -43,4 +43,22 @@ browser = [
     "bevy/bevy_sprite",
     "bevy/bevy_window",
     "bevy/picking",
+    "dep:metal",
+    "dep:objc",
+    "dep:objc2-core-foundation",
+    "dep:objc2-io-surface",
+    "dep:wgpu",
 ]
+
+# Used only by `browser_process::accelerated_paint` (macOS GPU OSR), so they are
+# optional and activated by the `browser` feature — the render-process subprocess
+# binaries (default-features = false) must not pull the wgpu/Metal stack.
+[target.'cfg(target_os = "macos")'.dependencies]
+metal = { version = "0.32", optional = true }
+objc = { version = "0.2", optional = true }
+objc2-core-foundation = { version = "0.3", optional = true }
+objc2-io-surface = { version = "0.3", optional = true }
+wgpu = { version = "27", default-features = false, optional = true }
+
+[lints]
+workspace = true

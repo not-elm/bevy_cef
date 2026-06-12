@@ -2,8 +2,12 @@
 //! its CEF webview, mirroring the mesh path but sourcing the position from the
 //! node's `RelativeCursorPosition` instead of a raycast.
 
+#[cfg(target_os = "macos")]
+use crate::common::WebviewIoSurface;
 use crate::prelude::{WebviewSize, WebviewSource, WebviewSurface};
 use crate::webview::alpha::is_pixel_transparent;
+#[cfg(target_os = "macos")]
+use crate::webview::alpha::is_pixel_transparent_surface;
 use crate::webview::ui::material::WebviewUiMaterial;
 use bevy::ecs::lifecycle::HookContext;
 use bevy::ecs::world::DeferredWorld;
@@ -86,6 +90,58 @@ fn ui_pointer_pos(node: UiNode, images: &Assets<Image>) -> Option<Vec2> {
     Some(pos)
 }
 
+/// Resolves the DIP pointer position for a UI webview node on macOS, where the
+/// real alpha is read on demand from the retained IOSurface (`WebviewIoSurface`)
+/// rather than `Image.data` (which is a black placeholder on the GPU OSR path).
+///
+/// Falls back to the Image path when `webview_iosurface` is `None` (i.e. before
+/// the first accelerated-paint frame has been received).
+#[cfg(target_os = "macos")]
+fn ui_pointer_pos_macos(
+    node: UiNode,
+    images: &Assets<Image>,
+    webview_iosurface: Option<&WebviewIoSurface>,
+) -> Option<Vec2> {
+    let (rel, computed, _surface, size) = node;
+    let normalized = rel.normalized?;
+    let pos = ui_pos_to_dip(normalized, computed.size(), computed.inverse_scale_factor());
+
+    if let Some(surface) = webview_iosurface {
+        if is_pixel_transparent_surface(&surface.0, size.0, pos) {
+            return None;
+        }
+        return Some(pos);
+    }
+
+    ui_pointer_pos(node, images)
+}
+
+/// Resolve pointer position for a UI webview, dispatching to the macOS GPU-path
+/// alpha buffer when available.
+///
+/// On macOS, reads `WebviewIoSurface` from `webview_iosurfaces`; on other
+/// platforms (or before the first GPU frame on macOS) falls back to `Image.data`
+/// via `ui_pointer_pos`.
+#[cfg(not(target_os = "windows"))]
+fn resolve_ui_pos(
+    entity: bevy::ecs::entity::Entity,
+    node: UiNode,
+    images: &Assets<Image>,
+    #[cfg(target_os = "macos")] webview_iosurfaces: &Query<Option<&WebviewIoSurface>>,
+) -> Option<Vec2> {
+    #[cfg(target_os = "macos")]
+    {
+        let surface = webview_iosurfaces.get(entity).ok().flatten();
+        ui_pointer_pos_macos(node, images, surface)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = entity;
+        ui_pointer_pos(node, images)
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 #[cfg(not(target_os = "windows"))]
 fn on_ui_pointer_move(
     trigger: On<Pointer<Move>>,
@@ -93,6 +149,7 @@ fn on_ui_pointer_move(
     browsers: NonSend<Browsers>,
     nodes: Query<UiNode, With<MaterialNode<WebviewUiMaterial>>>,
     images: Res<Assets<Image>>,
+    #[cfg(target_os = "macos")] webview_iosurfaces: Query<Option<&WebviewIoSurface>>,
     drag_state: Res<crate::drag::DragState>,
     resize_state: Res<crate::resize::ResizeState>,
 ) {
@@ -102,7 +159,13 @@ fn on_ui_pointer_move(
     let Ok(node) = nodes.get(trigger.entity) else {
         return;
     };
-    let Some(pos) = ui_pointer_pos(node, &images) else {
+    let Some(pos) = resolve_ui_pos(
+        trigger.entity,
+        node,
+        &images,
+        #[cfg(target_os = "macos")]
+        &webview_iosurfaces,
+    ) else {
         return;
     };
     browsers.send_mouse_move(&trigger.entity, input.get_pressed(), pos, false);
@@ -114,6 +177,7 @@ fn on_ui_pointer_pressed(
     browsers: NonSend<Browsers>,
     nodes: Query<UiNode, With<MaterialNode<WebviewUiMaterial>>>,
     images: Res<Assets<Image>>,
+    #[cfg(target_os = "macos")] webview_iosurfaces: Query<Option<&WebviewIoSurface>>,
     drag_state: Res<crate::drag::DragState>,
     resize_state: Res<crate::resize::ResizeState>,
 ) {
@@ -123,7 +187,13 @@ fn on_ui_pointer_pressed(
     let Ok(node) = nodes.get(trigger.entity) else {
         return;
     };
-    let Some(pos) = ui_pointer_pos(node, &images) else {
+    let Some(pos) = resolve_ui_pos(
+        trigger.entity,
+        node,
+        &images,
+        #[cfg(target_os = "macos")]
+        &webview_iosurfaces,
+    ) else {
         return;
     };
     browsers.send_mouse_click(&trigger.entity, pos, trigger.button, false);
@@ -135,6 +205,7 @@ fn on_ui_pointer_released(
     browsers: NonSend<Browsers>,
     nodes: Query<UiNode, With<MaterialNode<WebviewUiMaterial>>>,
     images: Res<Assets<Image>>,
+    #[cfg(target_os = "macos")] webview_iosurfaces: Query<Option<&WebviewIoSurface>>,
     drag_state: Res<crate::drag::DragState>,
     resize_state: Res<crate::resize::ResizeState>,
 ) {
@@ -144,7 +215,13 @@ fn on_ui_pointer_released(
     let Ok(node) = nodes.get(trigger.entity) else {
         return;
     };
-    let Some(pos) = ui_pointer_pos(node, &images) else {
+    let Some(pos) = resolve_ui_pos(
+        trigger.entity,
+        node,
+        &images,
+        #[cfg(target_os = "macos")]
+        &webview_iosurfaces,
+    ) else {
         return;
     };
     browsers.send_mouse_click(&trigger.entity, pos, trigger.button, true);
@@ -156,6 +233,7 @@ fn on_ui_pointer_scroll(
     browsers: NonSend<Browsers>,
     nodes: Query<UiNode, With<MaterialNode<WebviewUiMaterial>>>,
     images: Res<Assets<Image>>,
+    #[cfg(target_os = "macos")] webview_iosurfaces: Query<Option<&WebviewIoSurface>>,
     drag_state: Res<crate::drag::DragState>,
     resize_state: Res<crate::resize::ResizeState>,
 ) {
@@ -165,7 +243,13 @@ fn on_ui_pointer_scroll(
     let Ok(node) = nodes.get(trigger.entity) else {
         return;
     };
-    let Some(pos) = ui_pointer_pos(node, &images) else {
+    let Some(pos) = resolve_ui_pos(
+        trigger.entity,
+        node,
+        &images,
+        #[cfg(target_os = "macos")]
+        &webview_iosurfaces,
+    ) else {
         return;
     };
     let delta = scroll_delta(trigger.unit, trigger.x, trigger.y);

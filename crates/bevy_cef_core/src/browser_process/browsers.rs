@@ -51,10 +51,15 @@ pub struct WebviewBrowser {
     pub host: BrowserHost,
     pub size: SharedViewSize,
     pub dpr: SharedDpr,
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "linux")]
     pub view_slot: SharedTexture,
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(target_os = "linux")]
     pub popup_slot: SharedTexture,
+    /// [macOS GPU OSR] Latest IOSurface retained by `on_accelerated_paint`
+    /// (Approach 2). Drained by the main-world collect system for extraction
+    /// into the render world, where `WebviewBlitNode` imports + blits it.
+    #[cfg(target_os = "macos")]
+    pub latest_iosurface: crate::browser_process::accelerated_paint::SharedRetainedIoSurface,
 }
 
 #[derive(Default)]
@@ -85,12 +90,21 @@ impl Browsers {
         let mut context = Self::request_context(requester);
         let size: SharedViewSize = Rc::new(Cell::new(webview_size));
         let dpr: SharedDpr = Rc::new(Cell::new(initial_dpr));
+        #[cfg(target_os = "linux")]
         let view_slot: SharedTexture = Rc::new(Cell::new(None));
+        #[cfg(target_os = "linux")]
         let popup_slot: SharedTexture = Rc::new(Cell::new(None));
+        #[cfg(target_os = "macos")]
+        let latest_iosurface: crate::browser_process::accelerated_paint::SharedRetainedIoSurface =
+            Rc::new(std::cell::RefCell::new(None));
         let browser = browser_host_create_browser_sync(
             Some(&WindowInfo {
                 windowless_rendering_enabled: true as _,
                 external_begin_frame_enabled: true as _,
+                // macOS GPU OSR: ask CEF to deliver GPU shared textures (IOSurface)
+                // via on_accelerated_paint instead of CPU buffers via on_paint.
+                #[cfg(target_os = "macos")]
+                shared_texture_enabled: true as _,
                 #[cfg(target_os = "macos")]
                 parent_view: match _window_handle {
                     Some(RawWindowHandle::AppKit(handle)) => handle.ns_view.as_ptr(),
@@ -104,7 +118,9 @@ impl Browsers {
             Some(&mut self.client_handler(
                 webview,
                 size.clone(),
+                #[cfg(target_os = "linux")]
                 view_slot.clone(),
+                #[cfg(target_os = "linux")]
                 popup_slot.clone(),
                 dpr.clone(),
                 ipc_event_sender,
@@ -113,6 +129,8 @@ impl Browsers {
                 drag_regions_sender,
                 load_handler_sender,
                 address_changed_sender,
+                #[cfg(target_os = "macos")]
+                latest_iosurface.clone(),
                 title_changed_sender,
             )),
             Some(&uri.into()),
@@ -130,8 +148,12 @@ impl Browsers {
             client: browser,
             size,
             dpr,
+            #[cfg(target_os = "linux")]
             view_slot,
+            #[cfg(target_os = "linux")]
             popup_slot,
+            #[cfg(target_os = "macos")]
+            latest_iosurface,
         };
 
         self.browsers.insert(webview, webview_browser);
@@ -141,6 +163,51 @@ impl Browsers {
         for browser in self.browsers.values_mut() {
             browser.host.send_external_begin_frame();
         }
+    }
+
+    /// [macOS GPU OSR] Drains the latest retained IOSurface for every webview
+    /// that has received a new accelerated-paint frame since the last call
+    /// (Approach 2).
+    ///
+    /// Returns `(entity, RetainedIoSurface)` pairs, **transferring ownership** of
+    /// the retain (the +1 IOSurface use-count) to the caller. This is essential
+    /// under pipelined rendering: the render world consumes the surface one frame
+    /// behind the main world, so the retain must travel with the data — reading a
+    /// raw pointer that `on_accelerated_paint` may release on the next main-world
+    /// frame would dereference a freed IOSurface (segfault in Metal's
+    /// `newTextureWithDescriptor:iosurface:`).
+    ///
+    /// A webview that fails the `keep` predicate (e.g. its surface
+    /// `Handle<Image>` is not allocated yet) is NOT drained: the retain stays in
+    /// its latest-frame slot so the frame can be collected once the consumer is
+    /// ready. This matters for static pages — under external begin-frames CEF
+    /// never repaints undamaged content, so dropping the only delivered frame
+    /// would leave the webview on its black placeholder forever. The slot is
+    /// latest-wins, so a deferred frame is bounded to one retained surface per
+    /// webview.
+    ///
+    /// A webview with no new frame this call yields nothing; its owned GPU
+    /// texture already holds the last good contents, so sampling stays correct.
+    #[cfg(target_os = "macos")]
+    pub fn take_latest_webview_iosurfaces(
+        &self,
+        keep: impl Fn(Entity) -> bool,
+    ) -> Vec<(
+        Entity,
+        crate::browser_process::accelerated_paint::RetainedIoSurface,
+    )> {
+        self.browsers
+            .iter()
+            .filter_map(|(entity, b)| {
+                if !keep(*entity) {
+                    return None;
+                }
+                b.latest_iosurface
+                    .borrow_mut()
+                    .take()
+                    .map(|retained| (*entity, retained))
+            })
+            .collect()
     }
 
     pub fn send_mouse_move<'a>(
@@ -295,7 +362,9 @@ impl Browsers {
     }
 
     /// Drains the latest texture from each webview's view and popup slots.
-    #[cfg(not(target_os = "windows"))]
+    ///
+    /// Linux-only: the CPU `OnPaint` path. macOS uses the GPU IOSurface path.
+    #[cfg(target_os = "linux")]
     pub fn try_receive_textures(&self) -> impl Iterator<Item = RenderTextureMessage> + '_ {
         self.browsers.values().flat_map(|b| {
             [b.view_slot.take(), b.popup_slot.take()]
@@ -526,8 +595,8 @@ impl Browsers {
         &self,
         webview: Entity,
         size: SharedViewSize,
-        view_slot: SharedTexture,
-        popup_slot: SharedTexture,
+        #[cfg(target_os = "linux")] view_slot: SharedTexture,
+        #[cfg(target_os = "linux")] popup_slot: SharedTexture,
         dpr: SharedDpr,
         ipc_event_sender: Sender<IpcEventRaw>,
         brp_sender: Sender<BrpMessage>,
@@ -535,26 +604,28 @@ impl Browsers {
         drag_regions_sender: DraggableRegionSenderInner,
         load_handler_sender: LoadHandlerSenderInner,
         address_changed_sender: AddressChangedSenderInner,
+        #[cfg(target_os = "macos")]
+        latest_iosurface: crate::browser_process::accelerated_paint::SharedRetainedIoSurface,
         title_changed_sender: TitleChangedSenderInner,
     ) -> Client {
-        ClientHandlerBuilder::new(RenderHandlerBuilder::build(
-            webview,
-            view_slot,
-            popup_slot,
-            size.clone(),
-            dpr,
-        ))
-        .with_display_handler(DisplayHandlerBuilder::build(
-            webview,
-            system_cursor_icon_sender,
-            address_changed_sender,
-            title_changed_sender,
-        ))
-        .with_drag_handler(DragHandlerBuilder::build(webview, drag_regions_sender))
-        .with_load_handler(LoadHandlerBuilder::build(webview, load_handler_sender))
-        .with_message_handler(JsEmitEventHandler::new(webview, ipc_event_sender))
-        .with_message_handler(BrpHandler::new(brp_sender))
-        .build()
+        #[cfg(target_os = "macos")]
+        let render_handler =
+            RenderHandlerBuilder::build(webview, size.clone(), dpr, latest_iosurface);
+        #[cfg(target_os = "linux")]
+        let render_handler =
+            RenderHandlerBuilder::build(webview, view_slot, popup_slot, size.clone(), dpr);
+        ClientHandlerBuilder::new(render_handler)
+            .with_display_handler(DisplayHandlerBuilder::build(
+                webview,
+                system_cursor_icon_sender,
+                address_changed_sender,
+                title_changed_sender,
+            ))
+            .with_drag_handler(DragHandlerBuilder::build(webview, drag_regions_sender))
+            .with_load_handler(LoadHandlerBuilder::build(webview, load_handler_sender))
+            .with_message_handler(JsEmitEventHandler::new(webview, ipc_event_sender))
+            .with_message_handler(BrpHandler::new(brp_sender))
+            .build()
     }
 
     #[inline]

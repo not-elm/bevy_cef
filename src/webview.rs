@@ -24,6 +24,9 @@ use crate::common::CommandChannelReceiver;
 use crate::common::TextureSenderRes;
 
 pub(crate) mod alpha;
+// [macos-gpu-osr] Injects the owned CEF webview GPU texture into RenderAssets<GpuImage>.
+#[cfg(target_os = "macos")]
+pub(crate) mod gpu_surface;
 mod mesh;
 mod ui;
 pub(crate) mod webview_sprite;
@@ -153,6 +156,9 @@ impl Plugin for WebviewPlugin {
                 )
                 .add_observer(apply_request_show_devtool)
                 .add_observer(apply_request_close_devtool);
+
+            #[cfg(target_os = "macos")]
+            app.add_plugins(crate::webview::gpu_surface::WebviewGpuInjectPlugin);
         }
 
         // Windows: BrowsersProxy already inserted by MessageLoopPlugin.

@@ -14,3 +14,6 @@ categories.workspace = true
 cef = { workspace = true }
 bevy_cef_core = { workspace = true, features = ["debug"] }
 cef-dll-sys = { workspace = true }
+
+[lints]
+workspace = true

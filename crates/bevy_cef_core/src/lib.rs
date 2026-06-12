@@ -9,6 +9,8 @@ mod render_process;
 mod util;
 
 pub mod prelude {
+    #[cfg(all(feature = "browser", target_os = "macos"))]
+    pub use crate::browser_process::accelerated_paint::{RetainedIoSurface, WebviewGpuSurface};
     #[cfg(all(feature = "browser", target_os = "windows"))]
     pub use crate::browser_process::cef_command::{BrowsersProxy, CefCommand};
     #[cfg(all(feature = "browser", target_os = "windows"))]

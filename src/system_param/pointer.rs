@@ -1,3 +1,5 @@
+#[cfg(target_os = "macos")]
+use crate::common::WebviewIoSurface;
 use crate::common::WebviewSurface;
 use crate::prelude::{WebviewSize, WebviewSource};
 use crate::system_param::mesh_aabb::MeshAabb;
@@ -18,6 +20,11 @@ pub struct WebviewPointer<'w, 's, C: Component = Camera3d> {
     parents: Query<'w, 's, (Option<&'static ChildOf>, Has<WebviewSource>)>,
     surfaces: Query<'w, 's, &'static WebviewSurface>,
     images: Res<'w, Assets<Image>>,
+    /// [macOS GPU OSR] Per-webview retained IOSurface for on-demand transparent
+    /// hit-testing. On macOS the `Image` in `WebviewSurface` is a black
+    /// placeholder; the real alpha is read on demand from this surface.
+    #[cfg(target_os = "macos")]
+    webview_iosurface: Query<'w, 's, &'static WebviewIoSurface>,
 }
 
 impl<C: Component> WebviewPointer<'_, '_, C> {
@@ -87,13 +94,26 @@ impl<C: Component> WebviewPointer<'_, '_, C> {
     }
 
     fn is_transparent_at(&self, webview: Entity, pos: Vec2) -> bool {
+        let Ok((_, webview_size)) = self.webviews.get(webview) else {
+            return false;
+        };
+
+        // On macOS the `Image` is a black placeholder; the real alpha lives in
+        // the retained IOSurface. Fall through to the Image path only before the
+        // first accelerated-paint frame.
+        #[cfg(target_os = "macos")]
+        if let Ok(surface) = self.webview_iosurface.get(webview) {
+            return crate::webview::alpha::is_pixel_transparent_surface(
+                &surface.0,
+                webview_size.0,
+                pos,
+            );
+        }
+
         let Ok(surface) = self.surfaces.get(webview) else {
             return false;
         };
         let Some(image) = self.images.get(surface.0.id()) else {
-            return false;
-        };
-        let Ok((_, webview_size)) = self.webviews.get(webview) else {
             return false;
         };
         crate::webview::alpha::is_pixel_transparent(image, webview_size.0, pos)
