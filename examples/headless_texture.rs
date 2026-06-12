@@ -11,6 +11,7 @@ use bevy::asset::AssetId;
 use bevy::prelude::*;
 use bevy::render::render_resource::AsBindGroup;
 use bevy::shader::ShaderRef;
+use bevy::window::PrimaryWindow;
 use bevy_cef::prelude::*;
 
 fn main() {
@@ -22,6 +23,7 @@ fn main() {
             WebviewTargetUiMaterialPlugin::<TintedWebviewMaterial>::default(),
         ))
         .add_systems(Startup, (spawn_camera, spawn_headless_webview))
+        .add_systems(Update, sync_webview_size_to_window)
         .run();
 }
 
@@ -54,6 +56,23 @@ fn spawn_headless_webview(
             webview: Some(target),
         })),
     ));
+}
+
+/// Headless contract: bevy_cef does not know where the texture is displayed,
+/// so matching `WebviewSize` to the display geometry is the consumer's job —
+/// without this the default 800×800 page would be stretched across the
+/// full-screen node. Driving it from the window size also exercises the
+/// resize → IOSurface re-create → rebind path live.
+fn sync_webview_size_to_window(
+    window: Single<&Window, With<PrimaryWindow>>,
+    mut webviews: Query<&mut WebviewSize, With<WebviewTextureTarget>>,
+) {
+    let size = Vec2::new(window.width(), window.height());
+    for mut webview_size in webviews.iter_mut() {
+        if webview_size.0 != size {
+            webview_size.0 = size;
+        }
+    }
 }
 
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone, Default)]
