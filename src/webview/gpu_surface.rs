@@ -351,7 +351,7 @@ fn allocate_target_webview_surfaces(
         let id = target.0.id();
         if existing.is_none_or(|surface| surface.0.id() != id) {
             if let Err(err) = images.insert(id, placeholder_surface_image(UVec2::ONE)) {
-                warn!(
+                bevy::log::warn_once!(
                     "[bevy_cef] WebviewTextureTarget handle is stale; surface not \
                      allocated for {entity}: {err}"
                 );
@@ -365,9 +365,9 @@ fn allocate_target_webview_surfaces(
 
     // Shared-handle detection: two webviews blitting one asset id is
     // last-blit-wins. Scan only on frames where a target was added/changed
-    // (`Changed` includes `Added`), and warn once per distinct id —
-    // `warn_once!` is per-callsite and would swallow the second distinct
-    // conflict.
+    // (`Changed` includes `Added`), and warn once per distinct id via the
+    // `Local` set — each conflicting id is recorded once, ever (a conflict
+    // resolved and later re-introduced on the same id will not re-warn).
     if !changed.is_empty() {
         let mut seen: HashMap<AssetId<Image>, Entity> = HashMap::default();
         for (entity, target, _) in webviews.iter() {
