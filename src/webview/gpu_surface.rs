@@ -146,6 +146,7 @@ impl Plugin for WebviewGpuInjectPlugin {
                     mark_webview_materials_changed_for::<WebviewExtendStandardMaterial>,
                     mark_webview_ui_materials_changed,
                     mark_sprite_webview_images_changed,
+                    mark_target_webview_images_changed,
                 )
                     .in_set(WebviewSurfaceSet::MarkChanged),
             );
@@ -750,6 +751,30 @@ fn mark_sprite_webview_images_changed(
         (
             With<WebviewSource>,
             With<Sprite>,
+            With<WebviewSurfaceRebind>,
+        ),
+    >,
+    mut images: ResMut<Assets<Image>>,
+) {
+    for surface in webviews.iter() {
+        let _ = images.get_mut(surface.0.id());
+    }
+}
+
+/// Main-world system: touch a headless webview's target `Image` on rebind
+/// frames (see [`WebviewSurfaceRebind`]) so `AssetEvent::Modified` fires for
+/// its id. This is the PUBLIC rebind signal for third-party consumers: Bevy
+/// only rebuilds a material's bind group on the *material's own* asset events,
+/// never on a referenced image's, so a consumer must `get_mut` its material
+/// when this event fires (or use `WebviewTargetUiMaterialPlugin`). Mirrors
+/// `mark_sprite_webview_images_changed`; the CPU placeholder re-upload this
+/// triggers is harmless — injection overwrites it the same frame.
+fn mark_target_webview_images_changed(
+    webviews: Query<
+        &WebviewSurface,
+        (
+            With<WebviewSource>,
+            With<WebviewTextureTarget>,
             With<WebviewSurfaceRebind>,
         ),
     >,
