@@ -179,11 +179,13 @@ unsafe impl Send for RetainedIoSurface {}
 unsafe impl Sync for RetainedIoSurface {}
 
 /// Per-webview owned destination texture (MVP: single buffer).
-/// CEF の IOSurface を import したテクスチャからここへ blit する。
-/// Bevy のマテリアルはこの texture を `RenderAssets<GpuImage>` 経由でサンプルする。
 ///
-/// `texture` and `view` are stored as bevy's wrapper types so that Task 7 can
-/// build a `GpuImage { texture, texture_view, .. }` directly without conversion.
+/// The blit node copies into it from the imported IOSurface texture; Bevy
+/// materials sample it through `RenderAssets<GpuImage>`.
+///
+/// `texture` and `view` are stored as bevy's wrapper types so a
+/// `GpuImage { texture, texture_view, .. }` can be built directly without
+/// conversion.
 pub struct WebviewGpuSurface {
     pub texture: Texture,
     pub view: TextureView,
