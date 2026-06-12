@@ -321,11 +321,11 @@ pub(crate) fn allocate_webview_surfaces_for<M: WebviewSurfaceSlot>(
 /// [`WebviewSurfaceRebinds`] for the `mark_*` systems.
 fn collect_webview_iosurfaces(
     mut commands: Commands,
-    browsers: NonSend<Browsers>,
-    mut webviews: Query<(Entity, &WebviewSurface, Option<&mut WebviewIoSurface>)>,
-    pending: ResMut<PendingWebviewIoSurfaces>,
     mut rebinds: ResMut<WebviewSurfaceRebinds>,
     mut last_ids: ResMut<LastCollectedSurfaceIds>,
+    mut webviews: Query<(Entity, &WebviewSurface, Option<&mut WebviewIoSurface>)>,
+    browsers: NonSend<Browsers>,
+    pending: ResMut<PendingWebviewIoSurfaces>,
 ) {
     rebinds.0.retain(|_, frames| {
         *frames -= 1;
@@ -525,9 +525,9 @@ fn inject_webview_gpu_images(
 /// group, capturing the freshly injected owned-texture view rather than the
 /// black placeholder. No-op on steady-state frames.
 pub(crate) fn mark_webview_materials_changed_for<M: WebviewSurfaceSlot>(
-    webviews: Query<(&MeshMaterial3d<M>, &WebviewSurface), With<WebviewSource>>,
-    rebinds: Res<WebviewSurfaceRebinds>,
     mut materials: ResMut<Assets<M>>,
+    rebinds: Res<WebviewSurfaceRebinds>,
+    webviews: Query<(&MeshMaterial3d<M>, &WebviewSurface), With<WebviewSource>>,
 ) {
     if rebinds.0.is_empty() {
         return;
