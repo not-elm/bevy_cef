@@ -339,7 +339,7 @@ fn allocate_target_webview_surfaces(
         With<WebviewSource>,
     >,
     changed: Query<(), Changed<WebviewTextureTarget>>,
-    mut warned_shared: Local<HashSet<AssetId<Image>>>,
+    mut warned: Local<HashSet<AssetId<Image>>>,
 ) {
     for (entity, target, existing) in webviews.iter() {
         if target.0 == Handle::default() {
@@ -352,10 +352,12 @@ fn allocate_target_webview_surfaces(
         let id = target.0.id();
         if existing.is_none_or(|surface| surface.0.id() != id) {
             if let Err(err) = images.insert(id, placeholder_surface_image(UVec2::ONE)) {
-                bevy::log::warn_once!(
-                    "[bevy_cef] WebviewTextureTarget handle is stale; surface not \
-                     allocated for {entity}: {err}"
-                );
+                if warned.insert(id) {
+                    warn!(
+                        "[bevy_cef] WebviewTextureTarget handle is stale; surface not \
+                         allocated for {entity}: {err}"
+                    );
+                }
                 continue;
             }
             commands
@@ -376,7 +378,7 @@ fn allocate_target_webview_surfaces(
                 continue;
             }
             if let Some(first) = seen.insert(target.0.id(), entity)
-                && warned_shared.insert(target.0.id())
+                && warned.insert(target.0.id())
             {
                 warn!(
                     "[bevy_cef] WebviewTextureTarget handle shared by {first} and \
