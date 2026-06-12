@@ -30,11 +30,12 @@ pub(crate) mod gpu_surface;
 mod mesh;
 mod ui;
 pub(crate) mod webview_sprite;
+pub mod texture_target;
 
 pub mod prelude {
     pub use crate::webview::{
         BeginFrameInterval, RequestCloseDevtool, RequestShowDevTool, WebviewPlugin, mesh::*,
-        ui::WebviewUiMaterial,
+        texture_target::*, ui::WebviewUiMaterial,
     };
 }
 

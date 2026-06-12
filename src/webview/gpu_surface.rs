@@ -54,6 +54,7 @@
 
 use crate::common::{WebviewIoSurface, WebviewSize, WebviewSource, WebviewTextureTarget};
 use crate::prelude::{WebviewExtendStandardMaterial, WebviewSurface};
+use crate::webview::texture_target::WebviewTextureSlot;
 use crate::webview::ui::WebviewUiMaterial;
 use bevy::asset::{AssetId, RenderAssetUsages};
 use bevy::platform::collections::{HashMap, HashSet};
@@ -784,5 +785,37 @@ fn mark_target_webview_images_changed(
 ) {
     for surface in webviews.iter() {
         let _ = images.get_mut(surface.0.id());
+    }
+}
+
+/// Main-world system: touch every third-party asset of type `M` that
+/// references a rebinding headless webview target (see
+/// `crate::webview::texture_target::WebviewTextureSlot`), so Bevy rebuilds its
+/// bind group against the freshly injected texture. Registered per material
+/// type by `WebviewTargetUiMaterialPlugin`.
+pub(crate) fn mark_target_materials_changed_for<M: WebviewTextureSlot>(
+    rebinding: Query<&WebviewSurface, (With<WebviewTextureTarget>, With<WebviewSurfaceRebind>)>,
+    mut materials: ResMut<Assets<M>>,
+) {
+    let rebind_ids: HashSet<AssetId<Image>> =
+        rebinding.iter().map(|surface| surface.0.id()).collect();
+    if rebind_ids.is_empty() {
+        return;
+    }
+    // Two-phase on purpose: `iter_mut` would flag every `M` asset Modified; a
+    // read-only scan plus targeted `get_mut` touches only the matches. The
+    // linear scan is fine — rebind frames are rare and material asset counts
+    // are small (a reverse index was considered and rejected in the spec).
+    let to_touch: Vec<AssetId<M>> = materials
+        .iter()
+        .filter(|(_, material)| {
+            material
+                .webview_targets()
+                .any(|target| rebind_ids.contains(&target))
+        })
+        .map(|(id, _)| id)
+        .collect();
+    for id in to_touch {
+        let _ = materials.get_mut(id);
     }
 }
