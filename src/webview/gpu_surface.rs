@@ -26,10 +26,11 @@
 //! 2. Main world (`Update`, after allocation): `collect_webview_iosurfaces` pulls
 //!    the latest retained IOSurface ptr per webview out of `Browsers` (`NonSend`)
 //!    and pairs each with its surface `AssetId<Image>` into
-//!    `PendingWebviewIoSurfaces`. It also schedules bind-group rebuilds
-//!    (`WebviewSurfaceRebinds`) on first-frame / resize / re-key events, which
-//!    the `mark_*` systems consume — webview materials are NOT dirtied every
-//!    frame.
+//!    `PendingWebviewIoSurfaces`. It also schedules bind-group rebuilds by
+//!    tagging the entity with the `WebviewSurfaceRebind` marker on first-frame /
+//!    resize / re-key events, which the `mark_*` systems consume via a
+//!    `With<WebviewSurfaceRebind>` filter — webview materials are NOT dirtied
+//!    every frame.
 //! 3. `ExtractSchedule`: `extract_webview_iosurfaces` copies the pending list into
 //!    the render world (`ExtractedWebviewIoSurfaces`), and
 //!    `extract_live_webview_surface_ids` records the live webviews' surface ids
@@ -116,8 +117,6 @@ pub struct WebviewGpuInjectPlugin;
 impl Plugin for WebviewGpuInjectPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PendingWebviewIoSurfaces>()
-            .init_resource::<WebviewSurfaceRebinds>()
-            .init_resource::<LastCollectedSurfaceIds>()
             .configure_sets(
                 Update,
                 (
@@ -210,23 +209,31 @@ struct PendingIoSurface {
 #[derive(Resource, Default)]
 struct PendingWebviewIoSurfaces(std::sync::Mutex<Vec<PendingIoSurface>>);
 
-/// Main-world map of surface ids whose bind groups must be rebuilt, with the
-/// number of remaining frames to keep marking (see [`REBIND_FRAMES`]).
+/// Marker: this webview's bind group must be rebuilt for the next
+/// [`REBIND_FRAMES`] frames.
 ///
-/// Filled by `collect_webview_iosurfaces` when a webview receives its first
-/// IOSurface, changes size, or is re-keyed to a new surface id; consumed by the
-/// `mark_*` systems. This replaces dirtying every webview material/image every
-/// frame, which forced a per-webview bind-group rebuild each frame and — for
-/// sprites — a ~2.5 MB placeholder re-upload each frame.
-#[derive(Resource, Default)]
-pub(crate) struct WebviewSurfaceRebinds(HashMap<AssetId<Image>, u8>);
+/// Attached by `collect_webview_iosurfaces` when the webview receives its first
+/// IOSurface, changes size, or is re-keyed to a new surface id; removed by the
+/// same system once `frames_left` runs out. The `mark_*` systems filter on
+/// `With<Self>`, so steady-state frames iterate zero archetypes. This replaces
+/// dirtying every webview material/image every frame, which forced a
+/// per-webview bind-group rebuild each frame and — for sprites — a ~2.5 MB
+/// placeholder re-upload each frame.
+///
+/// Known degenerate gap: when two webviews share one material handle and the
+/// triggering entity despawns within the echo window, the surviving entity's
+/// echo mark is lost (the marker dies with the entity).
+#[derive(Component)]
+pub(crate) struct WebviewSurfaceRebind {
+    frames_left: u8,
+}
 
-/// Main-world map of the surface id last pushed per webview entity, used to
-/// detect re-keying (material swap → new surface handle) so the sticky
-/// IOSurface can be re-pushed for the new id even when CEF delivers no new
-/// frame (a static page never repaints under external begin-frames).
-#[derive(Resource, Default)]
-struct LastCollectedSurfaceIds(HashMap<Entity, AssetId<Image>>);
+/// The surface id last pushed for this webview, used to detect re-keying
+/// (material swap → new surface handle) so the sticky IOSurface can be
+/// re-pushed for the new id even when CEF delivers no new frame (a static page
+/// never repaints under external begin-frames).
+#[derive(Component)]
+struct CollectedSurfaceId(AssetId<Image>);
 
 /// Render-world copy of the latest retained IOSurfaces to import + blit this frame.
 #[derive(Resource, Default)]
@@ -317,21 +324,29 @@ pub(crate) fn allocate_webview_surfaces_for<M: WebviewSurfaceSlot>(
 /// would leave a static page black forever).
 ///
 /// Also detects the events that require a bind-group rebuild — first frame,
-/// IOSurface size change, surface re-key — and schedules them in
-/// [`WebviewSurfaceRebinds`] for the `mark_*` systems.
+/// IOSurface size change, surface re-key — and tags the entity with
+/// [`WebviewSurfaceRebind`] for the `mark_*` systems.
 fn collect_webview_iosurfaces(
     mut commands: Commands,
-    mut rebinds: ResMut<WebviewSurfaceRebinds>,
-    mut last_ids: ResMut<LastCollectedSurfaceIds>,
-    mut webviews: Query<(Entity, &WebviewSurface, Option<&mut WebviewIoSurface>)>,
+    mut rebinds: Query<(Entity, &mut WebviewSurfaceRebind)>,
+    mut webviews: Query<(
+        Entity,
+        &WebviewSurface,
+        Option<&mut WebviewIoSurface>,
+        Option<&mut CollectedSurfaceId>,
+    )>,
     browsers: NonSend<Browsers>,
     pending: ResMut<PendingWebviewIoSurfaces>,
 ) {
-    rebinds.0.retain(|_, frames| {
-        *frames -= 1;
-        *frames > 0
-    });
-    last_ids.0.retain(|entity, _| webviews.contains(*entity));
+    // Decrement BEFORE any trigger inserts below: the same command queue applies
+    // FIFO, so a `try_remove` queued here followed by a re-trigger's `try_insert`
+    // leaves the marker present with a fresh count.
+    for (entity, mut rebind) in rebinds.iter_mut() {
+        rebind.frames_left = rebind.frames_left.saturating_sub(1);
+        if rebind.frames_left == 0 {
+            commands.entity(entity).try_remove::<WebviewSurfaceRebind>();
+        }
+    }
 
     let Ok(mut pending) = pending.0.lock() else {
         return;
@@ -344,7 +359,7 @@ fn collect_webview_iosurfaces(
         .into_iter()
         .collect();
 
-    for (entity, surface, io_surface) in webviews.iter_mut() {
+    for (entity, surface, io_surface, collected_id) in webviews.iter_mut() {
         let id = surface.0.id();
         if let Some(retained) = new_frames.remove(&entity) {
             // The sticky component keeps an independent retain (`clone()` =
@@ -361,21 +376,32 @@ fn collect_webview_iosurfaces(
                     .try_insert(WebviewIoSurface(retained.clone()));
                 true
             };
-            let rekeyed = last_ids.0.insert(entity, id) != Some(id);
+            let rekeyed = if let Some(mut collected_id) = collected_id {
+                let rekeyed = collected_id.0 != id;
+                collected_id.0 = id;
+                rekeyed
+            } else {
+                commands.entity(entity).try_insert(CollectedSurfaceId(id));
+                true
+            };
             if needs_rebind || rekeyed {
-                rebinds.0.insert(id, REBIND_FRAMES);
+                commands.entity(entity).try_insert(WebviewSurfaceRebind {
+                    frames_left: REBIND_FRAMES,
+                });
             }
             pending.push(PendingIoSurface {
                 id,
                 surface: retained,
             });
-        } else if let Some(io_surface) = io_surface {
+        } else if let (Some(io_surface), Some(mut collected_id)) = (io_surface, collected_id) {
             // No new frame, but the surface id was re-keyed (e.g. material swap):
             // re-push the sticky surface so the new id gets pixels — CEF never
             // repaints a static page on its own.
-            if last_ids.0.get(&entity) != Some(&id) {
-                last_ids.0.insert(entity, id);
-                rebinds.0.insert(id, REBIND_FRAMES);
+            if collected_id.0 != id {
+                collected_id.0 = id;
+                commands.entity(entity).try_insert(WebviewSurfaceRebind {
+                    frames_left: REBIND_FRAMES,
+                });
                 pending.push(PendingIoSurface {
                     id,
                     surface: io_surface.0.clone(),
@@ -465,10 +491,10 @@ impl Node for WebviewBlitNode {
 /// exist before the material bind group is built. The `WebviewBlitNode` (render
 /// graph) fills this same texture's contents from the IOSurface each frame.
 fn inject_webview_gpu_images(
-    extracted: Res<ExtractedWebviewIoSurfaces>,
-    render_device: Res<RenderDevice>,
     mut surfaces: ResMut<WebviewGpuSurfaces>,
     mut gpu_images: ResMut<RenderAssets<GpuImage>>,
+    extracted: Res<ExtractedWebviewIoSurfaces>,
+    render_device: Res<RenderDevice>,
     default_sampler: Res<DefaultImageSampler>,
     live: Res<LiveWebviewSurfaceIds>,
 ) {
@@ -521,21 +547,16 @@ fn inject_webview_gpu_images(
 }
 
 /// Main-world system: touch a mesh webview material of type `M` on rebind frames
-/// (see [`WebviewSurfaceRebinds`]) so Bevy re-extracts and rebuilds its bind
+/// (see [`WebviewSurfaceRebind`]) so Bevy re-extracts and rebuilds its bind
 /// group, capturing the freshly injected owned-texture view rather than the
-/// black placeholder. No-op on steady-state frames.
+/// black placeholder. On steady-state frames no entity carries the marker, so
+/// the query matches zero archetypes.
 pub(crate) fn mark_webview_materials_changed_for<M: WebviewSurfaceSlot>(
     mut materials: ResMut<Assets<M>>,
-    rebinds: Res<WebviewSurfaceRebinds>,
-    webviews: Query<(&MeshMaterial3d<M>, &WebviewSurface), With<WebviewSource>>,
+    webviews: Query<&MeshMaterial3d<M>, (With<WebviewSource>, With<WebviewSurfaceRebind>)>,
 ) {
-    if rebinds.0.is_empty() {
-        return;
-    }
-    for (handle, surface) in webviews.iter() {
-        if rebinds.0.contains_key(&surface.0.id()) {
-            let _ = materials.get_mut(handle.id());
-        }
+    for handle in webviews.iter() {
+        let _ = materials.get_mut(handle.id());
     }
 }
 
@@ -589,17 +610,14 @@ fn allocate_ui_webview_surfaces(
 /// rebuilds the `PreparedUiMaterial` bind group (capturing the injected
 /// owned-texture view rather than the black placeholder).
 fn mark_webview_ui_materials_changed(
-    webviews: Query<(&MaterialNode<WebviewUiMaterial>, &WebviewSurface), With<WebviewSource>>,
-    rebinds: Res<WebviewSurfaceRebinds>,
+    webviews: Query<
+        &MaterialNode<WebviewUiMaterial>,
+        (With<WebviewSource>, With<WebviewSurfaceRebind>),
+    >,
     mut materials: ResMut<Assets<WebviewUiMaterial>>,
 ) {
-    if rebinds.0.is_empty() {
-        return;
-    }
-    for (handle, surface) in webviews.iter() {
-        if rebinds.0.contains_key(&surface.0.id()) {
-            let _ = materials.get_mut(handle.id());
-        }
+    for handle in webviews.iter() {
+        let _ = materials.get_mut(handle.id());
     }
 }
 
@@ -653,16 +671,17 @@ fn allocate_sprite_webview_surfaces(
 /// placeholder that frame — harmless, since injection overwrites it — which is
 /// exactly why this only fires on rebind frames instead of every frame.)
 fn mark_sprite_webview_images_changed(
-    webviews: Query<&WebviewSurface, (With<WebviewSource>, With<Sprite>)>,
-    rebinds: Res<WebviewSurfaceRebinds>,
+    webviews: Query<
+        &WebviewSurface,
+        (
+            With<WebviewSource>,
+            With<Sprite>,
+            With<WebviewSurfaceRebind>,
+        ),
+    >,
     mut images: ResMut<Assets<Image>>,
 ) {
-    if rebinds.0.is_empty() {
-        return;
-    }
     for surface in webviews.iter() {
-        if rebinds.0.contains_key(&surface.0.id()) {
-            let _ = images.get_mut(surface.0.id());
-        }
+        let _ = images.get_mut(surface.0.id());
     }
 }
