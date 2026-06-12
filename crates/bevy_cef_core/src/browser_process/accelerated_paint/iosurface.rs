@@ -10,7 +10,6 @@
 //! (the older `objc` 0.2 crate trait used by `msg_send!`). We therefore pass the raw
 //! `*mut c_void` CEF handle directly — `*mut c_void` does implement `objc::Encode` ("^v").
 //! The Metal runtime accepts any opaque IOSurface pointer at this position.
-#![allow(unexpected_cfgs)]
 
 use std::os::raw::c_void;
 
@@ -39,13 +38,6 @@ pub unsafe fn import_iosurface_to_wgpu(
         return None;
     }
 
-    // Confirm the device uses the Metal backend before touching any Metal APIs.
-    // Safety: we are only inspecting the backend type, not retaining any handles.
-    let is_metal = unsafe { device.as_hal::<wgpu::hal::api::Metal>().is_some() };
-    if !is_metal {
-        return None;
-    }
-
     let texture_desc = TextureDescriptor {
         label: Some("cef-iosurface-imported"),
         size: Extent3d {
@@ -63,11 +55,10 @@ pub unsafe fn import_iosurface_to_wgpu(
 
     let metal_pixel_format = {
         use metal::MTLPixelFormat;
-        // Each wgpu format maps to its exact Metal equivalent. The sRGB variants
-        // MUST get their own arms: `texture_from_raw` is told `texture_desc.format`
-        // (the sRGB format) below, so the Metal texture's actual pixel format must
-        // agree, or `texture_from_raw`'s safety invariant is violated. The blit is a
-        // byte copy, so this is visually identical to the previous mapping.
+        // The sRGB variants MUST get their own arms: `texture_from_raw` is told
+        // `texture_desc.format` (the sRGB format) below, so the Metal texture's
+        // actual pixel format must agree, or `texture_from_raw`'s safety
+        // invariant is violated.
         match format {
             TextureFormat::Bgra8Unorm => MTLPixelFormat::BGRA8Unorm,
             TextureFormat::Bgra8UnormSrgb => MTLPixelFormat::BGRA8Unorm_sRGB,
@@ -78,41 +69,35 @@ pub unsafe fn import_iosurface_to_wgpu(
     };
 
     let hal_tex = objc::rc::autoreleasepool(|| unsafe {
-        // `ForeignType` (re-exported by the `metal` crate from `foreign_types`)
-        // provides `Texture::from_ptr`, used below to take ownership of the +1
-        // MTLTexture returned by the ObjC selector after a null check.
         use metal::foreign_types::ForeignType;
         use metal::{MTLStorageMode, MTLTextureType, MTLTextureUsage};
 
-        // Build the MTLTextureDescriptor for the IOSurface-backed texture.
+        let hal_device = device.as_hal::<wgpu::hal::api::Metal>()?;
+        let device_guard = hal_device.raw_device().lock();
+
         let metal_desc = metal::TextureDescriptor::new();
         metal_desc.set_width(width as u64);
         metal_desc.set_height(height as u64);
         metal_desc.set_texture_type(MTLTextureType::D2);
         metal_desc.set_pixel_format(metal_pixel_format);
         metal_desc.set_usage(MTLTextureUsage::ShaderRead);
-        // Apple Silicon: an IOSurface-backed Metal texture must use Shared storage.
-        // With Managed, GPU writes from CEF's process may not propagate, giving
-        // black/stale content.
-        metal_desc.set_storage_mode(MTLStorageMode::Shared);
+        // Storage mode must match the device's memory architecture: Shared
+        // textures exist only on unified-memory (Apple-silicon) devices — on
+        // Intel/AMD Macs `newTextureWithDescriptor:iosurface:plane:` rejects
+        // Shared and the import would fail every frame (permanently black
+        // webviews, since macOS has no CPU fallback). Chromium and the cef
+        // crate's reference importer use Managed there. On Apple silicon,
+        // Shared is required: with Managed, GPU writes from CEF's process may
+        // not propagate, giving black/stale content.
+        metal_desc.set_storage_mode(if device_guard.has_unified_memory() {
+            MTLStorageMode::Shared
+        } else {
+            MTLStorageMode::Managed
+        });
 
-        // Acquire a scoped reference to the wgpu-hal Metal device.
-        // `as_hal` returns `Option<impl Deref<Target = hal::metal::Device>>`.
-        let hal_device = device.as_hal::<wgpu::hal::api::Metal>()?;
-
-        // wgpu-hal 27: raw_device() → &parking_lot::Mutex<metal::Device>
-        // Lock it; the guard derefs to `metal::Device`, then to `metal::DeviceRef`.
-        let device_guard = hal_device.raw_device().lock();
-
-        // Call the ObjC selector  -newTextureWithDescriptor:iosurface:plane:
-        // Receiver: &DeviceRef (via double-deref: MutexGuard<Device> → Device → DeviceRef).
-        // `metal::DeviceRef` implements `objc::Message`; `metal::Device` does not.
-        // `handle` is `*mut c_void` which implements `objc::Encode` ("^v").
-        //
-        // Capture the raw object pointer first so we can null-check before building
-        // a `metal::Texture`. `newTextureWithDescriptor:…` returns nil on failure
-        // (e.g. OOM or an invalid surface); without this check the nil would be wrapped
-        // in a `Texture` and later dereferenced by the blit, crashing.
+        // `newTextureWithDescriptor:…` returns nil on failure (e.g. OOM or an
+        // invalid surface); null-check before wrapping in `metal::Texture`, or
+        // the blit would dereference nil later.
         let raw: *mut objc::runtime::Object = msg_send![
             &**device_guard,
             newTextureWithDescriptor: metal_desc.as_ref()
@@ -122,9 +107,8 @@ pub unsafe fn import_iosurface_to_wgpu(
         if raw.is_null() {
             return None;
         }
-        // `newTexture…` returns a +1-owned MTLTexture; `from_ptr` takes that ownership
-        // without an extra retain (the `metal` crate re-exports the `foreign_types`
-        // `ForeignType` trait that provides `from_ptr`).
+        // The returned MTLTexture is +1-owned; `from_ptr` takes that ownership
+        // without an extra retain.
         let mtl_texture = metal::Texture::from_ptr(raw.cast());
 
         Some(

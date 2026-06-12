@@ -22,7 +22,7 @@ impl Plugin for WebviewMaterialPlugin {
         #[cfg(not(target_os = "macos"))]
         app.add_message::<RenderTextureMessage>();
 
-        #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+        #[cfg(target_os = "linux")]
         app.add_systems(Update, send_render_textures);
 
         #[cfg(target_os = "windows")]
@@ -49,7 +49,7 @@ pub struct WebviewMaterial {
 
 impl Material for WebviewMaterial {}
 
-#[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+#[cfg(target_os = "linux")]
 fn send_render_textures(mut ew: MessageWriter<RenderTextureMessage>, browsers: NonSend<Browsers>) {
     for texture in browsers.try_receive_textures() {
         ew.write(texture);

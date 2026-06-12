@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use cef::rc::{Rc, RcImpl};
 use cef::*;
 use cef_dll_sys::cef_paint_element_type_t;
-#[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+#[cfg(target_os = "linux")]
 use std::cell::Cell;
 use std::os::raw::c_int;
 
@@ -15,7 +15,7 @@ use std::os::raw::c_int;
 ///
 /// Linux-only: the CPU `OnPaint` path. macOS uses the GPU IOSurface accelerated-paint
 /// path (no slots); Windows uses `TextureSender`.
-#[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+#[cfg(target_os = "linux")]
 pub type SharedTexture = std::rc::Rc<Cell<Option<RenderTextureMessage>>>;
 
 #[cfg(target_os = "windows")]
@@ -65,9 +65,9 @@ pub type SharedDpr = std::sync::Arc<std::sync::Mutex<f32>>;
 pub struct RenderHandlerBuilder {
     object: *mut RcImpl<sys::cef_render_handler_t, Self>,
     webview: Entity,
-    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    #[cfg(target_os = "linux")]
     view_slot: SharedTexture,
-    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    #[cfg(target_os = "linux")]
     popup_slot: SharedTexture,
     #[cfg(target_os = "windows")]
     texture_sender: TextureSender,
@@ -100,7 +100,7 @@ impl RenderHandlerBuilder {
         })
     }
 
-    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    #[cfg(target_os = "linux")]
     pub fn build(
         webview: Entity,
         view_slot: SharedTexture,
@@ -160,9 +160,9 @@ impl Clone for RenderHandlerBuilder {
         Self {
             object,
             webview: self.webview,
-            #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+            #[cfg(target_os = "linux")]
             view_slot: self.view_slot.clone(),
-            #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+            #[cfg(target_os = "linux")]
             popup_slot: self.popup_slot.clone(),
             #[cfg(target_os = "windows")]
             texture_sender: self.texture_sender.clone(),
@@ -253,6 +253,7 @@ impl ImplRenderHandler for RenderHandlerBuilder {
         }
     }
 
+    #[cfg(target_os = "macos")]
     fn on_accelerated_paint(
         &self,
         _browser: Option<&mut Browser>,
@@ -260,7 +261,9 @@ impl ImplRenderHandler for RenderHandlerBuilder {
         _dirty_rects: Option<&[cef::Rect]>,
         info: Option<&AcceleratedPaintInfo>,
     ) {
-        // MVP: handle the main view only; popups are out of scope for now.
+        // MVP: handle the main view only; popup widgets (PET_POPUP — e.g.
+        // <select> dropdown lists) are dropped and therefore do not render on
+        // macOS yet.
         //
         // Approach 2: do NO GPU work here. Bevy owns ordered command submission
         // (its render graph submits once per frame and then presents); an
@@ -269,40 +272,44 @@ impl ImplRenderHandler for RenderHandlerBuilder {
         // *retain* the freshly delivered IOSurface and publish it to the latest-
         // frame slot. The actual import + blit happens in a Bevy render-graph node
         // (`WebviewBlitNode`) that records into the frame's command encoder.
-        #[cfg(target_os = "macos")]
-        {
-            if !matches!(type_.as_ref(), cef_paint_element_type_t::PET_VIEW) {
-                return;
-            }
-            let Some(info) = info else { return };
-            if info.shared_texture_io_surface.is_null() {
-                return;
-            }
-            let width = info.extra.coded_size.width as u32;
-            let height = info.extra.coded_size.height as u32;
-            if width == 0 || height == 0 {
-                return;
-            }
-
-            // Retain the IOSurface so it stays valid until the render-graph node
-            // imports + blits it later this frame. Storing the new retained
-            // surface replaces (and thus drops/releases) the previous one —
-            // latest-frame-wins, 1-deep release-previous. The previous frame's
-            // blit has already completed by the time CEF delivers a new frame.
-            let retained = unsafe {
-                crate::browser_process::accelerated_paint::RetainedIoSurface::retain(
-                    info.shared_texture_io_surface,
-                    width,
-                    height,
-                )
-            };
-
-            *self.latest_iosurface.borrow_mut() = Some(retained);
+        if !matches!(type_.as_ref(), cef_paint_element_type_t::PET_VIEW) {
+            return;
         }
-        #[cfg(not(target_os = "macos"))]
-        {
-            let _ = (type_, info);
+        let Some(info) = info else { return };
+        // The whole downstream path assumes BGRA (Bgra8UnormSrgb import, alpha at
+        // byte +3). macOS OSR delivers BGRA today; if Chromium ever switches the
+        // capture format, drop the frame loudly instead of silently swapping R/B.
+        if !matches!(
+            info.format.as_ref(),
+            cef_dll_sys::cef_color_type_t::CEF_COLOR_TYPE_BGRA_8888
+        ) {
+            bevy::log::error_once!(
+                "[macos-gpu-osr] unsupported accelerated-paint color type {:?} \
+                 (expected CEF_COLOR_TYPE_BGRA_8888); dropping frames",
+                info.format.as_ref()
+            );
+            return;
         }
+        if info.shared_texture_io_surface.is_null() {
+            return;
+        }
+        let width = info.extra.coded_size.width as u32;
+        let height = info.extra.coded_size.height as u32;
+        if width == 0 || height == 0 {
+            return;
+        }
+
+        // Safety: null-checked above; the pointer is valid for the duration of
+        // this callback.
+        let retained = unsafe {
+            crate::browser_process::accelerated_paint::RetainedIoSurface::retain(
+                info.shared_texture_io_surface,
+                width,
+                height,
+            )
+        };
+
+        *self.latest_iosurface.borrow_mut() = Some(retained);
     }
 
     #[inline]

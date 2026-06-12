@@ -51,9 +51,9 @@ pub struct WebviewBrowser {
     pub host: BrowserHost,
     pub size: SharedViewSize,
     pub dpr: SharedDpr,
-    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    #[cfg(target_os = "linux")]
     pub view_slot: SharedTexture,
-    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    #[cfg(target_os = "linux")]
     pub popup_slot: SharedTexture,
     /// [macOS GPU OSR] Latest IOSurface retained by `on_accelerated_paint`
     /// (Approach 2). Drained by the main-world collect system for extraction
@@ -90,9 +90,9 @@ impl Browsers {
         let mut context = Self::request_context(requester);
         let size: SharedViewSize = Rc::new(Cell::new(webview_size));
         let dpr: SharedDpr = Rc::new(Cell::new(initial_dpr));
-        #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+        #[cfg(target_os = "linux")]
         let view_slot: SharedTexture = Rc::new(Cell::new(None));
-        #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+        #[cfg(target_os = "linux")]
         let popup_slot: SharedTexture = Rc::new(Cell::new(None));
         #[cfg(target_os = "macos")]
         let latest_iosurface: crate::browser_process::accelerated_paint::SharedRetainedIoSurface =
@@ -101,8 +101,8 @@ impl Browsers {
             Some(&WindowInfo {
                 windowless_rendering_enabled: true as _,
                 external_begin_frame_enabled: true as _,
-                // [poc-osr] macOS accelerated paint (IOSurface) smoke test:
-                // ask CEF to deliver GPU shared textures via on_accelerated_paint.
+                // macOS GPU OSR: ask CEF to deliver GPU shared textures (IOSurface)
+                // via on_accelerated_paint instead of CPU buffers via on_paint.
                 #[cfg(target_os = "macos")]
                 shared_texture_enabled: true as _,
                 #[cfg(target_os = "macos")]
@@ -118,9 +118,9 @@ impl Browsers {
             Some(&mut self.client_handler(
                 webview,
                 size.clone(),
-                #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+                #[cfg(target_os = "linux")]
                 view_slot.clone(),
-                #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+                #[cfg(target_os = "linux")]
                 popup_slot.clone(),
                 dpr.clone(),
                 ipc_event_sender,
@@ -148,9 +148,9 @@ impl Browsers {
             client: browser,
             size,
             dpr,
-            #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+            #[cfg(target_os = "linux")]
             view_slot,
-            #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+            #[cfg(target_os = "linux")]
             popup_slot,
             #[cfg(target_os = "macos")]
             latest_iosurface,
@@ -177,11 +177,21 @@ impl Browsers {
     /// frame would dereference a freed IOSurface (segfault in Metal's
     /// `newTextureWithDescriptor:iosurface:`).
     ///
+    /// A webview that fails the `keep` predicate (e.g. its surface
+    /// `Handle<Image>` is not allocated yet) is NOT drained: the retain stays in
+    /// its latest-frame slot so the frame can be collected once the consumer is
+    /// ready. This matters for static pages — under external begin-frames CEF
+    /// never repaints undamaged content, so dropping the only delivered frame
+    /// would leave the webview on its black placeholder forever. The slot is
+    /// latest-wins, so a deferred frame is bounded to one retained surface per
+    /// webview.
+    ///
     /// A webview with no new frame this call yields nothing; its owned GPU
     /// texture already holds the last good contents, so sampling stays correct.
     #[cfg(target_os = "macos")]
     pub fn take_latest_webview_iosurfaces(
         &self,
+        keep: impl Fn(Entity) -> bool,
     ) -> Vec<(
         Entity,
         crate::browser_process::accelerated_paint::RetainedIoSurface,
@@ -189,6 +199,9 @@ impl Browsers {
         self.browsers
             .iter()
             .filter_map(|(entity, b)| {
+                if !keep(*entity) {
+                    return None;
+                }
                 b.latest_iosurface
                     .borrow_mut()
                     .take()
@@ -351,7 +364,7 @@ impl Browsers {
     /// Drains the latest texture from each webview's view and popup slots.
     ///
     /// Linux-only: the CPU `OnPaint` path. macOS uses the GPU IOSurface path.
-    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    #[cfg(target_os = "linux")]
     pub fn try_receive_textures(&self) -> impl Iterator<Item = RenderTextureMessage> + '_ {
         self.browsers.values().flat_map(|b| {
             [b.view_slot.take(), b.popup_slot.take()]
@@ -582,8 +595,8 @@ impl Browsers {
         &self,
         webview: Entity,
         size: SharedViewSize,
-        #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))] view_slot: SharedTexture,
-        #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))] popup_slot: SharedTexture,
+        #[cfg(target_os = "linux")] view_slot: SharedTexture,
+        #[cfg(target_os = "linux")] popup_slot: SharedTexture,
         dpr: SharedDpr,
         ipc_event_sender: Sender<IpcEventRaw>,
         brp_sender: Sender<BrpMessage>,
@@ -598,7 +611,7 @@ impl Browsers {
         #[cfg(target_os = "macos")]
         let render_handler =
             RenderHandlerBuilder::build(webview, size.clone(), dpr, latest_iosurface);
-        #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+        #[cfg(target_os = "linux")]
         let render_handler =
             RenderHandlerBuilder::build(webview, view_slot, popup_slot, size.clone(), dpr);
         ClientHandlerBuilder::new(render_handler)

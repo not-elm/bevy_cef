@@ -98,11 +98,9 @@ impl<C: Component> WebviewPointer<'_, '_, C> {
             return false;
         };
 
-        // On macOS the GPU path keeps the latest IOSurface in `WebviewIoSurface`;
-        // the `Image` in `WebviewSurface` is a black placeholder (alpha always 255
-        // or 0). Read one alpha byte on demand from that surface when available,
-        // and fall through to the Image path when it hasn't been populated yet
-        // (e.g. before the first accelerated paint frame).
+        // On macOS the `Image` is a black placeholder; the real alpha lives in
+        // the retained IOSurface. Fall through to the Image path only before the
+        // first accelerated-paint frame.
         #[cfg(target_os = "macos")]
         if let Ok(surface) = self.webview_iosurface.get(webview) {
             return crate::webview::alpha::is_pixel_transparent_surface(

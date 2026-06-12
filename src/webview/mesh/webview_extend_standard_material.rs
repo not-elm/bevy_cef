@@ -69,7 +69,11 @@ fn render_standard_materials(
 
 #[cfg(target_os = "macos")]
 impl crate::webview::gpu_surface::WebviewSurfaceSlot for WebviewExtendStandardMaterial {
-    fn webview_surface_slot(&mut self) -> &mut Option<Handle<Image>> {
+    fn webview_surface_slot(&self) -> &Option<Handle<Image>> {
+        &self.extension.surface
+    }
+
+    fn webview_surface_slot_mut(&mut self) -> &mut Option<Handle<Image>> {
         &mut self.extension.surface
     }
 }
@@ -89,7 +93,7 @@ mod tests {
         // Default has no surface yet.
         assert!(m.webview_surface_slot().is_none());
         // Writing through the slot must land in `extension.surface`.
-        *m.webview_surface_slot() = Some(Handle::<Image>::default());
+        *m.webview_surface_slot_mut() = Some(Handle::<Image>::default());
         assert!(m.extension.surface.is_some());
     }
 }

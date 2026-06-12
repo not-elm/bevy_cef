@@ -107,14 +107,12 @@ fn ui_pointer_pos_macos(
     let pos = ui_pos_to_dip(normalized, computed.size(), computed.inverse_scale_factor());
 
     if let Some(surface) = webview_iosurface {
-        // Read a single alpha byte on demand from the IOSurface.
         if is_pixel_transparent_surface(&surface.0, size.0, pos) {
             return None;
         }
         return Some(pos);
     }
 
-    // Before the first GPU frame: fall through to Image.data path.
     ui_pointer_pos(node, images)
 }
 

@@ -2,7 +2,7 @@
 #![cfg(target_os = "macos")]
 
 mod iosurface;
-pub use iosurface::import_iosurface_to_wgpu;
+use iosurface::import_iosurface_to_wgpu;
 
 use std::os::raw::c_void;
 
@@ -37,7 +37,7 @@ pub type SharedRetainedIoSurface = std::rc::Rc<std::cell::RefCell<Option<Retaine
 /// for as long as this wrapper exists — across the main→render world handoff
 /// (even one frame behind under pipelined rendering).
 ///
-/// ## Retain/release lifetime model (verified leak/tearing-free under continuous repaint, C1)
+/// ## Retain/release lifetime model
 /// - `on_accelerated_paint` `CFRetain`s the freshly delivered IOSurface and stores
 ///   it in the per-webview latest-frame slot, **dropping (CFRelease-ing) the
 ///   previously stored retain** — latest-frame-wins, 1-deep. So the in-flight
@@ -45,14 +45,26 @@ pub type SharedRetainedIoSurface = std::rc::Rc<std::cell::RefCell<Option<Retaine
 ///   held at a time (no unbounded accumulation).
 /// - The main-world collect system *moves* the retain out of the slot into the
 ///   render world (the wrapper is `Send`), where the render-graph node imports +
-///   blits it. The retain is finally released on the **next** frame's extract
-///   (when the render-world `ExtractedWebviewIoSurfaces` is cleared) — which is
-///   strictly after the current frame's blit was submitted and after the imported
-///   transient texture (which aliases the surface) was dropped. So the surface
-///   always outlives every GPU resource that references it.
+///   blits it; the retain is released on the next frame's extract. The CF retain
+///   only needs to keep the surface alive **until the Metal import**: the
+///   `MTLTexture` created via `newTextureWithDescriptor:iosurface:plane:` holds
+///   its own reference to the IOSurface, and wgpu keeps the recorded texture
+///   alive until the submitted command buffer finishes on the GPU — so the blit
+///   source stays valid even after our retain drops.
 /// - Net: balanced CFRetain/CFRelease per frame, bounded to ~1 in-flight surface;
-///   measured RSS stays flat under a 60fps hue-cycling page (no IOSurface leak),
-///   and the owned texture updates every frame with no tearing.
+///   measured RSS stays flat under a 60fps hue-cycling page (no IOSurface leak).
+///
+/// ## Known deviation from CEF's documented contract
+/// CEF documents that the delivered surface "cannot be accessed outside of this
+/// callback" and is released back to Chromium's frame pool when the callback
+/// returns. Deferring the copy to the render graph (and keeping a sticky clone
+/// for alpha hit-testing) is therefore an accepted, contract-violating
+/// optimization: the `CFRetain` guarantees *memory safety* (the object cannot be
+/// freed under us), but Chromium may recycle the pooled buffer and render a
+/// newer frame into it while we still read it. The pool is several buffers
+/// deep, so in practice the ~1-frame blit window is clean under normal load,
+/// but torn/newer content is possible under heavy load, and the sticky alpha
+/// component may hit-test against a newer frame than the one displayed.
 #[derive(Clone)]
 pub struct RetainedIoSurface {
     surface: objc2_core_foundation::CFRetained<objc2_io_surface::IOSurfaceRef>,
@@ -112,7 +124,6 @@ impl RetainedIoSurface {
             return None;
         }
 
-        // RAII: unlock on every exit path with the same ReadOnly flag.
         struct UnlockGuard<'a>(&'a objc2_io_surface::IOSurfaceRef);
         impl Drop for UnlockGuard<'_> {
             fn drop(&mut self) {
@@ -125,19 +136,27 @@ impl RetainedIoSurface {
         }
         let _guard = UnlockGuard(surface_ref);
 
+        // Bound the row index by the surface's OWN allocation, not just the
+        // CEF-reported `coded_size` captured into `self.height`: the unsafe read
+        // below must stay inside the mapped region even if CEF's metadata ever
+        // disagrees with the actual IOSurface allocation.
+        if py as usize >= surface_ref.height() {
+            return None;
+        }
+
         let base_ptr = surface_ref.base_address().as_ptr() as *const u8;
         let stride = surface_ref.bytes_per_row();
         // BGRA: the alpha byte sits at `px * 4 + 3` within the row. Guard against a
         // row stride smaller than that (e.g. an unexpected non-BGRA surface) so the
         // read below cannot step past the end of the row — and therefore stays
-        // within the mapped region, since `py < height` (checked above). For a
-        // normal BGRA surface `stride >= width * 4`, so this never trips.
+        // within the mapped region, since `py < IOSurfaceGetHeight` (checked above).
+        // For a normal BGRA surface `stride >= width * 4`, so this never trips.
         let row_byte = px as usize * 4 + 3;
         if row_byte >= stride {
             return None;
         }
         let offset = py as usize * stride + row_byte;
-        // Safety: `row_byte < stride` and `py < height`, so
+        // Safety: `row_byte < stride` and `py < IOSurfaceGetHeight`, so
         // `offset < (py + 1) * stride <= height * stride`, i.e. inside the mapped
         // region. The read-only lock is held (guard above), keeping `base_ptr` valid.
         Some(unsafe { *base_ptr.add(offset) })
@@ -168,8 +187,6 @@ unsafe impl Sync for RetainedIoSurface {}
 pub struct WebviewGpuSurface {
     pub texture: Texture,
     pub view: TextureView,
-    pub width: u32,
-    pub height: u32,
 }
 
 impl WebviewGpuSurface {
@@ -189,77 +206,86 @@ impl WebviewGpuSurface {
             view_formats: &[],
         });
         let view = texture.create_view(&TextureViewDescriptor::default());
-        Self {
-            texture,
-            view,
-            width,
-            height,
-        }
+        Self { texture, view }
     }
 
-    /// Returns `true` if the surface had to be (re)created for a new size.
-    pub fn ensure_size(&mut self, device: &RenderDevice, width: u32, height: u32) -> bool {
-        if self.width == width && self.height == height {
-            return false;
+    /// Recreates the owned texture when the requested size differs.
+    pub fn ensure_size(&mut self, device: &RenderDevice, width: u32, height: u32) {
+        if self.texture.width() == width && self.texture.height() == height {
+            return;
         }
         *self = Self::new(device, width, height);
-        true
     }
 
-    /// Records a full-surface blit from `src` (an imported IOSurface texture) into the owned
-    /// texture. `src` must be at least `width`×`height`.
+    /// Records a blit from `src` (an imported IOSurface texture) into the owned
+    /// texture, copying the intersection of the two extents.
     ///
-    /// `src` takes a raw `&wgpu::Texture` because `import_iosurface_to_wgpu` returns
-    /// `wgpu::Texture` directly.  Bevy's `Texture` also implements `Deref<Target =
-    /// wgpu::Texture>`, so callers with a bevy wrapper can pass `&*bevy_tex`.
+    /// Clamping (rather than asserting `src >= dst`) keeps a mismatched pair —
+    /// e.g. two webviews of different sizes sharing one material surface handle —
+    /// from recording an out-of-bounds copy, which wgpu turns into a validation
+    /// panic. The shared-handle case still cannot render both pages correctly
+    /// (one texture, two producers), so it is warned about, but it no longer
+    /// aborts the app.
     pub fn blit_from(&self, encoder: &mut wgpu::CommandEncoder, src: &wgpu::Texture) {
+        let width = self.texture.width().min(src.width());
+        let height = self.texture.height().min(src.height());
+        if width < self.texture.width() || height < self.texture.height() {
+            bevy::log::warn_once!(
+                "[macos-gpu-osr] blit source {}x{} smaller than destination {}x{}; copying the \
+                 intersection (do multiple webviews share one material surface handle?)",
+                src.width(),
+                src.height(),
+                self.texture.width(),
+                self.texture.height()
+            );
+        }
         encoder.copy_texture_to_texture(
             src.as_image_copy(),
-            // bevy Texture derefs to wgpu::Texture, so as_image_copy() is available.
             self.texture.as_image_copy(),
             Extent3d {
-                width: self.width,
-                height: self.height,
+                width,
+                height,
                 depth_or_array_layers: 1,
             },
         );
     }
 
-    /// Imports the retained IOSurface `ptr` (size `width`×`height`) into a transient
-    /// wgpu texture and records a full-surface blit into this owned surface's
-    /// `encoder`. Returns the imported transient texture so the caller can keep it
-    /// alive until the encoder is submitted (wgpu keeps recorded resources alive,
-    /// but holding it explicitly until end-of-frame avoids any ambiguity).
+    /// Imports the retained IOSurface into a transient wgpu texture and records a
+    /// blit into this owned surface via `encoder`. Returns `false` if the import
+    /// failed (non-Metal backend or Metal allocation failure).
     ///
     /// This is the single place where raw `wgpu`/`metal`/IOSurface naming lives, so
     /// the Bevy render-graph node (in the root crate) can call it using only Bevy
-    /// types. Returns `None` if the import failed (logged by the caller).
+    /// types.
     ///
-    /// # Safety
-    /// `ptr` must be a valid `IOSurfaceRef *` that stays alive for the duration of
-    /// this call (guaranteed while the `RetainedIoSurface` wrapper is held).
-    pub unsafe fn import_and_blit(
+    /// Safe API: the `&RetainedIoSurface` borrow proves the +1 CF retain is alive
+    /// for the duration of the call, which is all the unsafe import needs. The
+    /// transient texture is dropped on return — recording the copy makes wgpu hold
+    /// the texture (and, via the MTLTexture's own IOSurface reference, the surface)
+    /// alive until the submitted command buffer completes on the GPU.
+    pub fn import_and_blit(
         &self,
         device: &RenderDevice,
         encoder: &mut wgpu::CommandEncoder,
-        ptr: *mut std::os::raw::c_void,
-        width: u32,
-        height: u32,
-    ) -> Option<Texture> {
+        surface: &RetainedIoSurface,
+    ) -> bool {
         // Use Bgra8UnormSrgb to match the owned surface format so the copy is a
         // same-format blit.
+        // Safety: `surface.ptr()` is valid while the `&RetainedIoSurface` borrow
+        // lives (the wrapper owns a +1 CF reference).
         let imported = unsafe {
             import_iosurface_to_wgpu(
                 device.wgpu_device(),
-                ptr,
-                width,
-                height,
+                surface.ptr(),
+                surface.width,
+                surface.height,
                 wgpu::TextureFormat::Bgra8UnormSrgb,
             )
-        }?;
+        };
+        let Some(imported) = imported else {
+            return false;
+        };
         self.blit_from(encoder, &imported);
-        // Wrap in bevy's `Texture` so the caller (render-graph node in the root
-        // crate) can hold it alive without naming the raw `wgpu` crate.
-        Some(Texture::from(imported))
+        true
     }
 }

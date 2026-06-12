@@ -1,3 +1,5 @@
+#[cfg(target_os = "macos")]
+use crate::common::WebviewIoSurface;
 use crate::common::{WebviewSize, WebviewSource};
 #[cfg(not(target_os = "macos"))]
 use crate::prelude::update_webview_image;
@@ -19,8 +21,9 @@ impl Plugin for WebviewSpritePlugin {
             app.add_plugins(SpritePickingPlugin);
         }
 
-        // CPU `OnPaint` consumer: Linux/Windows only. macOS GPU sprite path is
-        // deferred; the CPU path was already non-functional on macOS.
+        // CPU `OnPaint` consumer: Linux/Windows only. On macOS sprites render
+        // via the GPU IOSurface path (`gpu_surface::allocate_sprite_webview_surfaces`
+        // + injection); `RenderTextureMessage` is never emitted there.
         #[cfg(not(target_os = "macos"))]
         app.add_systems(
             PostUpdate,
@@ -76,6 +79,31 @@ fn setup_observers(
     }
 }
 
+/// [macOS GPU OSR] Returns `true` when `pos` (webview DIP space) lands on a
+/// fully transparent pixel of the webview's retained IOSurface, in which case
+/// the event should pass through instead of reaching CEF.
+///
+/// On macOS `Sprite.image` is an opaque black placeholder (the real pixels only
+/// exist on the GPU), so bevy's sprite picking backend cannot alpha-test — the
+/// test happens here instead, mirroring the mesh/UI input paths. Limitation:
+/// the picking backend still treats the whole sprite rect as a hit, so
+/// transparent regions continue to block lower pickable entities.
+#[cfg(target_os = "macos")]
+fn sprite_pos_transparent(
+    entity: Entity,
+    pos: Vec2,
+    webviews: &Query<(&Sprite, &WebviewSize, &GlobalTransform)>,
+    io_surfaces: &Query<&WebviewIoSurface>,
+) -> bool {
+    let Ok((_, webview_size, _)) = webviews.get(entity) else {
+        return false;
+    };
+    io_surfaces.get(entity).is_ok_and(|io_surface| {
+        crate::webview::alpha::is_pixel_transparent_surface(&io_surface.0, webview_size.0, pos)
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
 #[cfg(not(target_os = "windows"))]
 fn apply_on_pointer_move(
     trigger: On<Pointer<Move>>,
@@ -83,6 +111,7 @@ fn apply_on_pointer_move(
     browsers: NonSend<Browsers>,
     cameras: Query<(&Camera, &GlobalTransform)>,
     webviews: Query<(&Sprite, &WebviewSize, &GlobalTransform)>,
+    #[cfg(target_os = "macos")] io_surfaces: Query<&WebviewIoSurface>,
     drag_state: Res<crate::drag::DragState>,
     resize_state: Res<crate::resize::ResizeState>,
 ) {
@@ -95,15 +124,21 @@ fn apply_on_pointer_move(
     let Some(pos) = obtain_relative_pos_from_trigger(&trigger, &webviews, &cameras) else {
         return;
     };
+    #[cfg(target_os = "macos")]
+    if sprite_pos_transparent(trigger.entity, pos, &webviews, &io_surfaces) {
+        return;
+    }
     browsers.send_mouse_move(&trigger.entity, input.get_pressed(), pos, false);
 }
 
+#[allow(clippy::too_many_arguments)]
 #[cfg(not(target_os = "windows"))]
 fn apply_on_pointer_pressed(
     trigger: On<Pointer<Press>>,
     browsers: NonSend<Browsers>,
     cameras: Query<(&Camera, &GlobalTransform)>,
     webviews: Query<(&Sprite, &WebviewSize, &GlobalTransform)>,
+    #[cfg(target_os = "macos")] io_surfaces: Query<&WebviewIoSurface>,
     drag_state: Res<crate::drag::DragState>,
     resize_state: Res<crate::resize::ResizeState>,
 ) {
@@ -116,15 +151,21 @@ fn apply_on_pointer_pressed(
     let Some(pos) = obtain_relative_pos_from_trigger(&trigger, &webviews, &cameras) else {
         return;
     };
+    #[cfg(target_os = "macos")]
+    if sprite_pos_transparent(trigger.entity, pos, &webviews, &io_surfaces) {
+        return;
+    }
     browsers.send_mouse_click(&trigger.entity, pos, trigger.button, false);
 }
 
+#[allow(clippy::too_many_arguments)]
 #[cfg(not(target_os = "windows"))]
 fn apply_on_pointer_released(
     trigger: On<Pointer<Release>>,
     browsers: NonSend<Browsers>,
     cameras: Query<(&Camera, &GlobalTransform)>,
     webviews: Query<(&Sprite, &WebviewSize, &GlobalTransform)>,
+    #[cfg(target_os = "macos")] io_surfaces: Query<&WebviewIoSurface>,
     drag_state: Res<crate::drag::DragState>,
     resize_state: Res<crate::resize::ResizeState>,
 ) {
@@ -137,9 +178,14 @@ fn apply_on_pointer_released(
     let Some(pos) = obtain_relative_pos_from_trigger(&trigger, &webviews, &cameras) else {
         return;
     };
+    #[cfg(target_os = "macos")]
+    if sprite_pos_transparent(trigger.entity, pos, &webviews, &io_surfaces) {
+        return;
+    }
     browsers.send_mouse_click(&trigger.entity, pos, trigger.button, true);
 }
 
+#[allow(clippy::too_many_arguments)]
 #[cfg(not(target_os = "windows"))]
 fn on_mouse_wheel(
     mut er: MessageReader<MouseWheel>,
@@ -147,6 +193,7 @@ fn on_mouse_wheel(
     webviews: Query<(Entity, &Sprite, &WebviewSize, &GlobalTransform)>,
     cameras: Query<(&Camera, &GlobalTransform)>,
     windows: Query<&Window>,
+    #[cfg(target_os = "macos")] io_surfaces: Query<&WebviewIoSurface>,
     drag_state: Res<crate::drag::DragState>,
     resize_state: Res<crate::resize::ResizeState>,
 ) {
@@ -165,6 +212,16 @@ fn on_mouse_wheel(
             else {
                 continue;
             };
+            #[cfg(target_os = "macos")]
+            if io_surfaces.get(webview).is_ok_and(|io_surface| {
+                crate::webview::alpha::is_pixel_transparent_surface(
+                    &io_surface.0,
+                    webview_size.0,
+                    pos,
+                )
+            }) {
+                continue;
+            }
 
             let delta = match event.unit {
                 MouseScrollUnit::Line => {

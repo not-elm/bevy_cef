@@ -19,7 +19,11 @@ impl<E> crate::webview::gpu_surface::WebviewSurfaceSlot for WebviewExtendedMater
 where
     E: MaterialExtension + AsBindGroup<Data: PartialEq + Eq + Hash + Clone>,
 {
-    fn webview_surface_slot(&mut self) -> &mut Option<Handle<Image>> {
+    fn webview_surface_slot(&self) -> &Option<Handle<Image>> {
+        &self.base.surface
+    }
+
+    fn webview_surface_slot_mut(&mut self) -> &mut Option<Handle<Image>> {
         &mut self.base.surface
     }
 }
@@ -118,7 +122,7 @@ mod tests {
             extension: NoopExtension::default(),
         };
         assert!(m.webview_surface_slot().is_none());
-        *m.webview_surface_slot() = Some(Handle::<Image>::default());
+        *m.webview_surface_slot_mut() = Some(Handle::<Image>::default());
         assert!(m.base.surface.is_some());
     }
 }
