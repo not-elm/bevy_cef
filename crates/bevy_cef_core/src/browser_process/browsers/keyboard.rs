@@ -69,10 +69,15 @@ pub fn create_cef_key_events(modifiers: u32, key_event: &KeyboardInput) -> Vec<c
         // (e.g. `gg`). winit leaves `text` None on release, so the character is
         // derived from `logical_key` here.
         let up_character = if cfg!(target_os = "macos") {
-            match &key_event.logical_key {
-                Key::Character(s) => s.chars().next().unwrap_or('\0') as u16,
-                _ => 0,
-            }
+            // Special keys (Backspace, arrows, …) carry their macOS NSEvent
+            // character so the KEYUP isn't reclassified as NSFlagsChanged; other
+            // keys fall back to the logical character winit reports on release.
+            macos_special_character(&key_event.key_code)
+                .or_else(|| match &key_event.logical_key {
+                    Key::Character(s) => s.chars().next().map(|c| c as u16),
+                    _ => None,
+                })
+                .unwrap_or(0)
         } else {
             0
         };
@@ -97,8 +102,17 @@ pub fn create_cef_key_events(modifiers: u32, key_event: &KeyboardInput) -> Vec<c
     // key-down MUST carry the character. Windows derives the down event from
     // windows_key_code and keeps its character at 0 (the following CHAR carries
     // it, mirroring the native WM_KEYDOWN → WM_CHAR sequence).
+    //
+    // For editing/navigation keys, winit's reported text does NOT match the
+    // character a real macOS key press carries — most importantly Backspace,
+    // which winit reports as U+0008 (NSBackspaceCharacter / Ctrl-H) but the
+    // macOS Backspace ("delete") key produces as U+007F (NSDeleteCharacter).
+    // Feeding U+0008 alongside native_key_code 0x33 makes Blink delete twice
+    // (one press → two characters removed). `macos_special_character` supplies
+    // the value the native event would carry (Backspace → U+007F); regular
+    // character keys fall back to winit's text.
     let key_down_character = if cfg!(target_os = "macos") {
-        character
+        macos_special_character(&key_event.key_code).unwrap_or(character)
     } else {
         0
     };
@@ -183,6 +197,53 @@ fn is_not_character_key_code(keycode: &KeyCode) -> bool {
         // All other keys (letters, numbers, punctuation, space, numpad) are character keys
         _ => false,
     }
+}
+
+/// Returns the `NSEvent.characters` value a real macOS key press would carry for
+/// keys whose character winit reports incorrectly (or not at all).
+///
+/// CEF on macOS reconstructs a native `NSEvent` from `native_key_code` +
+/// `character`, so the character must match what AppKit produces. The critical
+/// case is Backspace: winit reports U+0008 (`NSBackspaceCharacter`, i.e. Ctrl-H),
+/// but the macOS Backspace key actually emits U+007F (`NSDeleteCharacter`).
+/// Sending U+0008 with `native_key_code` 0x33 makes Blink run the deletion twice
+/// (a single press removes two characters); returning U+007F makes it delete one.
+///
+/// Function and navigation keys use AppKit's `NSxxxFunctionKey` private-use code
+/// points (0xF700+). Returning `None` (letters, digits, punctuation, modifiers)
+/// lets the caller fall back to winit's reported text — 0 for modifier keys,
+/// which correctly remain `NSFlagsChanged`.
+fn macos_special_character(keycode: &KeyCode) -> Option<u16> {
+    let character: u16 = match keycode {
+        KeyCode::Backspace => 0x007F, // NSDeleteCharacter (the macOS "delete"/Backspace key)
+        KeyCode::Delete => 0xF728,    // NSDeleteFunctionKey (forward delete)
+        KeyCode::Enter => 0x000D,     // carriage return
+        KeyCode::Tab => 0x0009,
+        KeyCode::Escape => 0x001B,
+        KeyCode::ArrowUp => 0xF700, // NSUpArrowFunctionKey
+        KeyCode::ArrowDown => 0xF701,
+        KeyCode::ArrowLeft => 0xF702,
+        KeyCode::ArrowRight => 0xF703,
+        KeyCode::F1 => 0xF704, // NSF1FunctionKey … NSF12FunctionKey
+        KeyCode::F2 => 0xF705,
+        KeyCode::F3 => 0xF706,
+        KeyCode::F4 => 0xF707,
+        KeyCode::F5 => 0xF708,
+        KeyCode::F6 => 0xF709,
+        KeyCode::F7 => 0xF70A,
+        KeyCode::F8 => 0xF70B,
+        KeyCode::F9 => 0xF70C,
+        KeyCode::F10 => 0xF70D,
+        KeyCode::F11 => 0xF70E,
+        KeyCode::F12 => 0xF70F,
+        KeyCode::Insert => 0xF727,   // NSInsertFunctionKey
+        KeyCode::Home => 0xF729,     // NSHomeFunctionKey
+        KeyCode::End => 0xF72B,      // NSEndFunctionKey
+        KeyCode::PageUp => 0xF72C,   // NSPageUpFunctionKey
+        KeyCode::PageDown => 0xF72D, // NSPageDownFunctionKey
+        _ => return None,
+    };
+    Some(character)
 }
 
 fn keycode_to_windows_vk(keycode: KeyCode) -> i32 {
