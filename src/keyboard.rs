@@ -140,6 +140,7 @@ struct IsImeCommiting(bool);
 struct IsImeComposing(bool);
 
 #[cfg(not(target_os = "windows"))]
+#[allow(clippy::too_many_arguments)]
 fn send_key_event(
     mut er: MessageReader<KeyboardInput>,
     mut is_ime_commiting: ResMut<IsImeCommiting>,
@@ -245,6 +246,7 @@ fn ime_event(
 }
 
 #[cfg(target_os = "windows")]
+#[allow(clippy::too_many_arguments)]
 fn send_key_event_win(
     mut er: MessageReader<KeyboardInput>,
     mut is_ime_commiting: ResMut<IsImeCommiting>,
