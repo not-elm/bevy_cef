@@ -31,6 +31,7 @@ use bevy_remote::RemotePlugin;
 
 pub mod prelude {
     pub use crate::focus::FocusedWebview;
+    pub use crate::keyboard::{CefKeyboardFilter, KeyboardDeliverSet, ModifiersState};
     pub use crate::resize::components::{AspectLockMode, WebviewResizable};
     pub use crate::{
         CefPlugin, RunOnMainThread, common::*, navigation::*, title::*, webview::prelude::*,

@@ -8,6 +8,42 @@ use bevy_cef_core::prelude::Browsers;
 use bevy_cef_core::prelude::BrowsersProxy;
 use bevy_cef_core::prelude::{create_cef_key_events, keyboard_modifiers};
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
+
+/// A keyboard modifier snapshot used by [`CefKeyboardFilter`] entries.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Default, Debug)]
+pub struct ModifiersState {
+    pub alt: bool,
+    pub ctrl: bool,
+    pub shift: bool,
+    pub logo: bool,
+}
+
+/// Embedder-provided filter: `(focused webview, physical key, modifiers)` triples
+/// that must NOT be delivered to CEF this frame (the embedder routes them
+/// elsewhere, e.g. to a PTY). The embedder fills this each frame before the
+/// keyboard-delivery systems run (see [`KeyboardDeliverSet`]).
+#[derive(Resource, Default)]
+pub struct CefKeyboardFilter {
+    suppressed: HashSet<(Entity, KeyCode, ModifiersState)>,
+}
+
+impl CefKeyboardFilter {
+    /// Replaces the suppressed set.
+    pub fn set(&mut self, entries: impl IntoIterator<Item = (Entity, KeyCode, ModifiersState)>) {
+        self.suppressed = entries.into_iter().collect();
+    }
+
+    /// Whether `(webview, code, mods)` is withheld from CEF this frame.
+    pub fn contains(&self, webview: Entity, code: KeyCode, mods: ModifiersState) -> bool {
+        self.suppressed.contains(&(webview, code, mods))
+    }
+}
+
+/// System set covering the keyboard-delivery systems, so an embedder can order
+/// its `CefKeyboardFilter` population `.before(KeyboardDeliverSet)`.
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct KeyboardDeliverSet;
 
 /// The plugin to handle keyboard inputs.
 ///
@@ -22,7 +58,8 @@ pub(super) struct KeyboardPlugin;
 impl Plugin for KeyboardPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<IsImeCommiting>()
-            .init_resource::<IsImeComposing>();
+            .init_resource::<IsImeComposing>()
+            .init_resource::<CefKeyboardFilter>();
 
         #[cfg(not(target_os = "windows"))]
         app.add_systems(
@@ -34,7 +71,8 @@ impl Plugin for KeyboardPlugin {
                 ime_event.run_if(on_message::<Ime>),
                 send_key_event.run_if(on_message::<KeyboardInput>),
             )
-                .chain(),
+                .chain()
+                .in_set(KeyboardDeliverSet),
         );
 
         #[cfg(target_os = "windows")]
@@ -45,7 +83,8 @@ impl Plugin for KeyboardPlugin {
                 ime_event_win.run_if(on_message::<Ime>),
                 send_key_event_win.run_if(on_message::<KeyboardInput>),
             )
-                .chain(),
+                .chain()
+                .in_set(KeyboardDeliverSet),
         );
     }
 }
@@ -108,6 +147,7 @@ fn send_key_event(
     input: Res<ButtonInput<KeyCode>>,
     browsers: NonSend<Browsers>,
     focused: Res<FocusedWebview>,
+    filter: Res<CefKeyboardFilter>,
     webviews: Query<Entity, With<WebviewSource>>,
 ) {
     let modifiers = keyboard_modifiers(&input);
@@ -133,6 +173,17 @@ fn send_key_event(
         let Some(webview) = target else {
             continue;
         };
+        let ms = ModifiersState {
+            alt: input.pressed(KeyCode::AltLeft) || input.pressed(KeyCode::AltRight),
+            ctrl: input.pressed(KeyCode::ControlLeft) || input.pressed(KeyCode::ControlRight),
+            shift: input.pressed(KeyCode::ShiftLeft) || input.pressed(KeyCode::ShiftRight),
+            logo: input.pressed(KeyCode::SuperLeft) || input.pressed(KeyCode::SuperRight),
+        };
+        if filter.contains(webview, event.key_code, ms) {
+            // NOTE: the embedder routes this key elsewhere (e.g. a PTY); skipping this
+            // `continue` would leak the key to CEF despite the filter.
+            continue;
+        }
         for key_event in create_cef_key_events(modifiers, event) {
             browsers.send_key(&webview, key_event);
         }
@@ -201,6 +252,7 @@ fn send_key_event_win(
     input: Res<ButtonInput<KeyCode>>,
     proxy: Res<BrowsersProxy>,
     focused: Res<FocusedWebview>,
+    filter: Res<CefKeyboardFilter>,
     webviews: Query<Entity, With<WebviewSource>>,
 ) {
     let modifiers = keyboard_modifiers(&input);
@@ -222,6 +274,17 @@ fn send_key_event_win(
         let Some(webview) = target else {
             continue;
         };
+        let ms = ModifiersState {
+            alt: input.pressed(KeyCode::AltLeft) || input.pressed(KeyCode::AltRight),
+            ctrl: input.pressed(KeyCode::ControlLeft) || input.pressed(KeyCode::ControlRight),
+            shift: input.pressed(KeyCode::ShiftLeft) || input.pressed(KeyCode::ShiftRight),
+            logo: input.pressed(KeyCode::SuperLeft) || input.pressed(KeyCode::SuperRight),
+        };
+        if filter.contains(webview, event.key_code, ms) {
+            // NOTE: the embedder routes this key elsewhere (e.g. a PTY); skipping this
+            // `continue` would leak the key to CEF despite the filter.
+            continue;
+        }
         for key_event in create_cef_key_events(modifiers, event) {
             proxy.send_key(&webview, key_event);
         }
@@ -272,5 +335,24 @@ fn ime_event_win(
             }
             _ => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn filter_contains_matches_only_exact_triple() {
+        let mut f = CefKeyboardFilter::default();
+        let e = Entity::from_raw_u32(7).unwrap();
+        let alt = ModifiersState {
+            alt: true,
+            ..Default::default()
+        };
+        f.set([(e, KeyCode::KeyH, alt)]);
+        assert!(f.contains(e, KeyCode::KeyH, alt));
+        assert!(!f.contains(e, KeyCode::KeyH, ModifiersState::default()));
+        assert!(!f.contains(Entity::from_raw_u32(8).unwrap(), KeyCode::KeyH, alt));
     }
 }
