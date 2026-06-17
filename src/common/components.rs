@@ -16,7 +16,8 @@ impl Plugin for WebviewCoreComponentsPlugin {
             .register_type::<ZoomLevel>()
             .register_type::<AudioMuted>()
             .register_type::<PreloadScripts>()
-            .register_type::<WebviewDpr>();
+            .register_type::<WebviewDpr>()
+            .register_type::<WebviewTextureTarget>();
     }
 }
 
@@ -168,3 +169,53 @@ pub(crate) struct WebviewSurface(pub(crate) Handle<Image>);
 #[cfg(target_os = "macos")]
 #[derive(Component)]
 pub(crate) struct WebviewIoSurface(pub(crate) RetainedIoSurface);
+
+/// The render target for a *headless* webview — one that has none of the
+/// display components (mesh material / `MaterialNode<WebviewUiMaterial>` /
+/// `Sprite`). bevy_cef renders the page into the referenced `Image` asset so
+/// third-party materials can sample it (e.g. a terminal shader compositing an
+/// inline webview).
+///
+/// The asset's contents and format (`Bgra8UnormSrgb`) are MANAGED BY bevy_cef:
+/// anything the user wrote into the image is overwritten with a placeholder on
+/// allocation, and the GPU path injects the live page texture for this asset
+/// id each frame. Create the handle with `images.add(Image::default())`. Do
+/// NOT pass `Handle::default()` (shared by every defaulted handle; skipped
+/// with a warning), a handle the `AssetServer` is still loading into (the
+/// finished load would clobber the placeholder), or one handle shared between
+/// two webviews (last blit wins; a warning is logged).
+///
+/// Platform: the texture is only written on macOS (GPU IOSurface path). On
+/// Linux/Windows the component is inert — note the browser itself is still
+/// created and keeps painting CPU frames that nothing consumes.
+///
+/// Rebind contract: when the injected GPU texture is (re)created — first
+/// frame, resize, handle swap — bevy_cef touches this `Image` asset so
+/// `AssetEvent::Modified { id }` fires. A consumer material must rebuild its
+/// bind group then: either implement `WebviewTextureSlot` and register
+/// `WebviewTargetUiMaterialPlugin` (turnkey), or listen for the event and
+/// `get_mut` your own material asset.
+///
+/// After the webview despawns, the texture freezes on the last frame until the
+/// image asset is next modified; drop the last handle to release it.
+#[derive(Component, Reflect, Debug, Clone, PartialEq)]
+#[reflect(Component, Debug)]
+pub struct WebviewTextureTarget(pub Handle<Image>);
+
+impl From<Handle<Image>> for WebviewTextureTarget {
+    fn from(handle: Handle<Image>) -> Self {
+        Self(handle)
+    }
+}
+
+#[cfg(test)]
+mod texture_target_tests {
+    use super::*;
+
+    #[test]
+    fn from_handle_preserves_id() {
+        let handle = Handle::<Image>::default();
+        let target = WebviewTextureTarget::from(handle.clone());
+        assert_eq!(target.0.id(), handle.id());
+    }
+}
