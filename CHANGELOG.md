@@ -11,6 +11,17 @@
 ### Features
 
 - Add `WebviewTitle` component and `TitleChanged` Event trigger to propagate the webview title changes to the ECS.
+- Add `WebviewTextureTarget` for headless webviews: a webview with no display component renders into a
+  user-supplied `Handle<Image>`, so third-party materials can sample it (e.g. a terminal shader compositing
+  an inline webview). On rebind (first frame / resize / handle swap) bevy_cef touches the target image,
+  firing `AssetEvent::Modified`; pair `WebviewTextureSlot` + `WebviewTargetUiMaterialPlugin<M>` for turnkey
+  bind-group rebinds, or handle the event manually. macOS GPU path only. See the `headless_texture` example.
+
+### Bug Fixes
+
+- macOS: special keys (Backspace, Delete, arrows, F-keys, navigation keys) now carry the correct
+  `NSEvent.characters` value. Backspace was sent as U+0008 (`NSBackspaceCharacter`/Ctrl-H) instead of
+  U+007F (`NSDeleteCharacter`), which made Blink delete two characters per press.
 
 ### Notes
 
