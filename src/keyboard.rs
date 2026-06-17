@@ -188,6 +188,21 @@ fn send_key_event(
         for key_event in create_cef_key_events(modifiers, event) {
             browsers.send_key(&webview, key_event);
         }
+
+        // macOS windowless (OSR) has no real NSView, so CEF never translates
+        // keyboard shortcuts into editor commands (copy/cut/paste/…). Detect the
+        // ⌘ shortcuts and invoke the command explicitly, in addition to the key
+        // event above (which still drives the DOM `keydown`). This block sits
+        // after the `filter.contains` `continue`, so suppressed keys never reach
+        // it; the `repeat` / IME guards avoid multi-fire and composition clashes.
+        #[cfg(target_os = "macos")]
+        if event.state == bevy::input::ButtonState::Pressed
+            && !event.repeat
+            && !is_ime_composing.0
+            && let Some(cmd) = edit_command_for(event.key_code, ms)
+        {
+            browsers.exec_edit_command(&webview, cmd);
+        }
     }
 }
 
