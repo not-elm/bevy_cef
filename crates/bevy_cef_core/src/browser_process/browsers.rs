@@ -303,6 +303,7 @@ impl Browsers {
     /// No-op when the webview has no browser or no focused frame. Used on macOS
     /// to make clipboard/editing shortcuts work under windowless rendering,
     /// where CEF does not translate key events into editor commands itself.
+    #[inline]
     pub fn exec_edit_command(&self, webview: &Entity, cmd: EditCommand) {
         if let Some(browser) = self.browsers.get(webview)
             && let Some(frame) = browser.client.focused_frame()
