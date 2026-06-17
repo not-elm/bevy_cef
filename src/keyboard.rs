@@ -410,7 +410,10 @@ mod tests {
         assert_eq!(edit_command_for(KeyCode::KeyC, m), Some(EditCommand::Copy));
         assert_eq!(edit_command_for(KeyCode::KeyX, m), Some(EditCommand::Cut));
         assert_eq!(edit_command_for(KeyCode::KeyV, m), Some(EditCommand::Paste));
-        assert_eq!(edit_command_for(KeyCode::KeyA, m), Some(EditCommand::SelectAll));
+        assert_eq!(
+            edit_command_for(KeyCode::KeyA, m),
+            Some(EditCommand::SelectAll)
+        );
         assert_eq!(edit_command_for(KeyCode::KeyZ, m), Some(EditCommand::Undo));
     }
 
@@ -425,16 +428,28 @@ mod tests {
     #[test]
     fn edit_command_for_rejects_extra_modifiers_and_bare_keys() {
         // ⌃/⌥ held alongside ⌘ → different shortcut.
-        assert_eq!(edit_command_for(KeyCode::KeyC, cmd(false, true, false)), None);
-        assert_eq!(edit_command_for(KeyCode::KeyC, cmd(false, false, true)), None);
+        assert_eq!(
+            edit_command_for(KeyCode::KeyC, cmd(false, true, false)),
+            None
+        );
+        assert_eq!(
+            edit_command_for(KeyCode::KeyC, cmd(false, false, true)),
+            None
+        );
         // ⇧⌘C is not a copy shortcut.
-        assert_eq!(edit_command_for(KeyCode::KeyC, cmd(true, false, false)), None);
+        assert_eq!(
+            edit_command_for(KeyCode::KeyC, cmd(true, false, false)),
+            None
+        );
         // No ⌘ at all.
         assert_eq!(
             edit_command_for(KeyCode::KeyC, ModifiersState::default()),
             None
         );
         // Unmapped key.
-        assert_eq!(edit_command_for(KeyCode::KeyB, cmd(false, false, false)), None);
+        assert_eq!(
+            edit_command_for(KeyCode::KeyB, cmd(false, false, false)),
+            None
+        );
     }
 }
