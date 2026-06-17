@@ -62,6 +62,22 @@ pub struct WebviewBrowser {
     pub latest_iosurface: crate::browser_process::accelerated_paint::SharedRetainedIoSurface,
 }
 
+/// Editor commands dispatched to a webview's focused frame.
+///
+/// On macOS the windowless (OSR) browser has no real `NSView`, so the AppKit
+/// key-binding → editor-command translation never runs and shortcuts like ⌘C
+/// never reach Blink's editor. The embedder detects those shortcuts and
+/// dispatches the matching command via [`Browsers::exec_edit_command`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EditCommand {
+    Copy,
+    Cut,
+    Paste,
+    SelectAll,
+    Undo,
+    Redo,
+}
+
 #[derive(Default)]
 pub struct Browsers {
     browsers: HashMap<Entity, WebviewBrowser>,
@@ -279,6 +295,27 @@ impl Browsers {
     pub fn send_key(&self, webview: &Entity, event: cef::KeyEvent) {
         if let Some(browser) = self.get_focused_browser(webview) {
             browser.host.send_key_event(Some(&event));
+        }
+    }
+
+    /// Dispatches an editor command to the webview's focused frame.
+    ///
+    /// No-op when the webview has no browser or no focused frame. Used on macOS
+    /// to make clipboard/editing shortcuts work under windowless rendering,
+    /// where CEF does not translate key events into editor commands itself.
+    #[inline]
+    pub fn exec_edit_command(&self, webview: &Entity, cmd: EditCommand) {
+        if let Some(browser) = self.browsers.get(webview)
+            && let Some(frame) = browser.client.focused_frame()
+        {
+            match cmd {
+                EditCommand::Copy => frame.copy(),
+                EditCommand::Cut => frame.cut(),
+                EditCommand::Paste => frame.paste(),
+                EditCommand::SelectAll => frame.select_all(),
+                EditCommand::Undo => frame.undo(),
+                EditCommand::Redo => frame.redo(),
+            }
         }
     }
 

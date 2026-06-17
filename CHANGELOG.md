@@ -19,6 +19,12 @@
 
 ### Bug Fixes
 
+- macOS: clipboard/editing keyboard shortcuts (⌘C / ⌘X / ⌘V / ⌘A, ⌘Z / ⇧⌘Z) now work in offscreen
+  (OSR) webviews. Without a real `NSView`, AppKit never translates these shortcuts into editor commands
+  and Blink treats them as command-key system keys it ignores, so forwarding the key event alone did
+  nothing. The focused webview's shortcut is now dispatched to `CefFrame::Copy/Cut/Paste/SelectAll/Undo/Redo`
+  (in addition to the existing key-event forwarding, so the DOM `keydown` still fires). macOS only;
+  Windows/Linux already handle these renderer-side and are unchanged.
 - macOS: special keys (Backspace, Delete, arrows, F-keys, navigation keys) now carry the correct
   `NSEvent.characters` value. Backspace was sent as U+0008 (`NSBackspaceCharacter`/Ctrl-H) instead of
   U+007F (`NSDeleteCharacter`), which made Blink delete two characters per press.

@@ -6,7 +6,7 @@ use bevy::prelude::*;
 use bevy_cef_core::prelude::Browsers;
 #[cfg(target_os = "windows")]
 use bevy_cef_core::prelude::BrowsersProxy;
-use bevy_cef_core::prelude::{create_cef_key_events, keyboard_modifiers};
+use bevy_cef_core::prelude::{EditCommand, create_cef_key_events, keyboard_modifiers};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
@@ -188,6 +188,21 @@ fn send_key_event(
         for key_event in create_cef_key_events(modifiers, event) {
             browsers.send_key(&webview, key_event);
         }
+
+        // macOS windowless (OSR) has no real NSView, so CEF never translates
+        // keyboard shortcuts into editor commands (copy/cut/paste/…). Detect the
+        // ⌘ shortcuts and invoke the command explicitly, in addition to the key
+        // event above (which still drives the DOM `keydown`). This block sits
+        // after the `filter.contains` `continue`, so suppressed keys never reach
+        // it; the `repeat` / IME guards avoid multi-fire and composition clashes.
+        #[cfg(target_os = "macos")]
+        if event.state == bevy::input::ButtonState::Pressed
+            && !event.repeat
+            && !is_ime_composing.0
+            && let Some(cmd) = edit_command_for(event.key_code, ms)
+        {
+            browsers.exec_edit_command(&webview, cmd);
+        }
     }
 }
 
@@ -340,6 +355,28 @@ fn ime_event_win(
     }
 }
 
+/// Maps a macOS clipboard/editing keyboard shortcut to its [`EditCommand`].
+///
+/// Matches on the physical [`KeyCode`] (layout-independent, consistent with
+/// [`CefKeyboardFilter`]). Only a plain ⌘ combination qualifies — ⌃/⌥ held
+/// alongside denotes a different shortcut and yields `None`. ⇧ selects redo
+/// vs. undo for `KeyZ`.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn edit_command_for(code: KeyCode, ms: ModifiersState) -> Option<EditCommand> {
+    if !ms.logo || ms.ctrl || ms.alt {
+        return None;
+    }
+    Some(match (code, ms.shift) {
+        (KeyCode::KeyC, false) => EditCommand::Copy,
+        (KeyCode::KeyX, false) => EditCommand::Cut,
+        (KeyCode::KeyV, false) => EditCommand::Paste,
+        (KeyCode::KeyA, false) => EditCommand::SelectAll,
+        (KeyCode::KeyZ, false) => EditCommand::Undo,
+        (KeyCode::KeyZ, true) => EditCommand::Redo,
+        _ => return None,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -356,5 +393,63 @@ mod tests {
         assert!(f.contains(e, KeyCode::KeyH, alt));
         assert!(!f.contains(e, KeyCode::KeyH, ModifiersState::default()));
         assert!(!f.contains(Entity::from_raw_u32(8).unwrap(), KeyCode::KeyH, alt));
+    }
+
+    fn cmd(shift: bool, ctrl: bool, alt: bool) -> ModifiersState {
+        ModifiersState {
+            logo: true,
+            shift,
+            ctrl,
+            alt,
+        }
+    }
+
+    #[test]
+    fn edit_command_for_maps_plain_cmd_shortcuts() {
+        let m = cmd(false, false, false);
+        assert_eq!(edit_command_for(KeyCode::KeyC, m), Some(EditCommand::Copy));
+        assert_eq!(edit_command_for(KeyCode::KeyX, m), Some(EditCommand::Cut));
+        assert_eq!(edit_command_for(KeyCode::KeyV, m), Some(EditCommand::Paste));
+        assert_eq!(
+            edit_command_for(KeyCode::KeyA, m),
+            Some(EditCommand::SelectAll)
+        );
+        assert_eq!(edit_command_for(KeyCode::KeyZ, m), Some(EditCommand::Undo));
+    }
+
+    #[test]
+    fn edit_command_for_shift_cmd_z_is_redo() {
+        assert_eq!(
+            edit_command_for(KeyCode::KeyZ, cmd(true, false, false)),
+            Some(EditCommand::Redo)
+        );
+    }
+
+    #[test]
+    fn edit_command_for_rejects_extra_modifiers_and_bare_keys() {
+        // ⌃/⌥ held alongside ⌘ → different shortcut.
+        assert_eq!(
+            edit_command_for(KeyCode::KeyC, cmd(false, true, false)),
+            None
+        );
+        assert_eq!(
+            edit_command_for(KeyCode::KeyC, cmd(false, false, true)),
+            None
+        );
+        // ⇧⌘C is not a copy shortcut.
+        assert_eq!(
+            edit_command_for(KeyCode::KeyC, cmd(true, false, false)),
+            None
+        );
+        // No ⌘ at all.
+        assert_eq!(
+            edit_command_for(KeyCode::KeyC, ModifiersState::default()),
+            None
+        );
+        // Unmapped key.
+        assert_eq!(
+            edit_command_for(KeyCode::KeyB, cmd(false, false, false)),
+            None
+        );
     }
 }
