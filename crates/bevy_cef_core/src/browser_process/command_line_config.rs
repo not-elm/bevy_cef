@@ -63,6 +63,34 @@ impl CommandLineConfig {
     }
 }
 
+/// Produces the *effective* command-line config handed to CEF.
+///
+/// - Strips a single leading `--` from each switch name.
+/// - De-duplicates switches, preserving first-seen order.
+/// - When `strip_no_zygote` is true, drops the `no-zygote` switch (used on Linux
+///   when the sandbox is enabled, since the zygote is part of the sandbox model).
+///
+/// `switch_values` are passed through unchanged.
+pub fn effective_command_line_config(
+    config: &CommandLineConfig,
+    strip_no_zygote: bool,
+) -> CommandLineConfig {
+    let mut switches: Vec<&'static str> = Vec::new();
+    for &switch in &config.switches {
+        let normalized = switch.strip_prefix("--").unwrap_or(switch);
+        if strip_no_zygote && normalized == "no-zygote" {
+            continue;
+        }
+        if !switches.contains(&normalized) {
+            switches.push(normalized);
+        }
+    }
+    CommandLineConfig {
+        switches,
+        switch_values: config.switch_values.clone(),
+    }
+}
+
 /// Typo-safe constants for common security-relaxing CEF switch names, plus helpers
 /// to detect them.
 ///
@@ -143,5 +171,26 @@ mod tests {
                 "default must not enable risky switch: {risky}"
             );
         }
+    }
+
+    #[test]
+    fn effective_dedups_and_normalizes() {
+        let cfg = CommandLineConfig {
+            switches: vec!["--disable-gpu", "disable-gpu", "no-zygote"],
+            switch_values: vec![("remote-debugging-port", "9222")],
+        };
+        let eff = effective_command_line_config(&cfg, false);
+        assert_eq!(eff.switches, vec!["disable-gpu", "no-zygote"]);
+        assert_eq!(eff.switch_values, vec![("remote-debugging-port", "9222")]);
+    }
+
+    #[test]
+    fn effective_strips_no_zygote_when_requested() {
+        let cfg = CommandLineConfig {
+            switches: vec!["no-zygote", "disable-gpu"],
+            switch_values: vec![],
+        };
+        let eff = effective_command_line_config(&cfg, true);
+        assert_eq!(eff.switches, vec!["disable-gpu"]);
     }
 }
