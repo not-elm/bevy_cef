@@ -1,5 +1,16 @@
 ## Unreleased
 
+### Security
+- **Breaking:** bevy_cef no longer enables `disable-web-security`,
+  `ignore-certificate-errors`, `ignore-ssl-errors`, or
+  `allow-running-insecure-content` by default. Apps that relied on these must opt in
+  explicitly, e.g. `CommandLineConfig::default().with_switch(switches::DISABLE_WEB_SECURITY)`.
+  User-supplied switches are now forwarded to CEF child processes (so the opt-in
+  reaches the renderer/network process), and a startup warning is logged whenever a
+  security-relaxing switch is active.
+- Added `CefPlugin::sandbox: SandboxMode` to control Chromium's OS-level sandbox.
+  `SandboxMode::PlatformDefault` (the default) preserves current per-platform behavior.
+
 ### Added
 
 - macOS: GPU offscreen rendering via CEF `OnAcceleratedPaint` + IOSurface. The webview is
