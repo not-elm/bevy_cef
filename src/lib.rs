@@ -97,6 +97,18 @@ impl Plugin for CefPlugin {
             );
         }
 
+        // Warn when the sandbox is requested on Linux, which requires a SUID-root
+        // `chrome-sandbox` helper installed alongside the render process.
+        #[cfg(target_os = "linux")]
+        if self.sandbox == SandboxMode::Enabled {
+            warn!(
+                "bevy_cef: SandboxMode::Enabled requested on Linux; the sandbox requires a \
+                 correctly-installed SUID-root chrome-sandbox helper alongside the render \
+                 process. Without it, Chromium aborts the renderer with no bevy_cef-side \
+                 diagnostic. See the plugin-configuration docs."
+            );
+        }
+
         app.add_plugins((
             LocalHostPlugin,
             MessageLoopPlugin {
