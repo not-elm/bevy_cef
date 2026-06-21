@@ -33,6 +33,9 @@ impl Default for CommandLineConfig {
     fn default() -> Self {
         Self {
             switches: vec![
+                // Suppress Chromium's "restore pages?" bubble. Harmless UX, not a
+                // security relaxation; visible here so users can override it.
+                "disable-session-crashed-bubble",
                 #[cfg(all(target_os = "macos", debug_assertions))]
                 "use-mock-keychain",
                 // Without this Chromium tries to launch a zygote process on Linux even
@@ -125,5 +128,20 @@ mod tests {
     fn risky_present_empty_when_none_risky() {
         let input = ["disable-gpu", "no-zygote"];
         assert!(switches::risky_present(&input).is_empty());
+    }
+
+    #[test]
+    fn default_is_secure_and_keeps_session_bubble() {
+        let cfg = CommandLineConfig::default();
+        assert!(
+            cfg.switches.contains(&"disable-session-crashed-bubble"),
+            "default should keep the session-crashed bubble suppressed"
+        );
+        for risky in switches::RISKY_SWITCHES {
+            assert!(
+                !cfg.switches.contains(risky),
+                "default must not enable risky switch: {risky}"
+            );
+        }
     }
 }

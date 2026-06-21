@@ -74,13 +74,6 @@ impl ImplBrowserProcessHandler for BrowserProcessHandlerBuilder {
             command_line.append_switch(Some(&(*switch).into()));
         }
 
-        command_line.append_switch(Some(&"disable-web-security".into()));
-        command_line.append_switch(Some(&"allow-running-insecure-content".into()));
-        command_line.append_switch(Some(&"disable-session-crashed-bubble".into()));
-        command_line.append_switch(Some(&"ignore-certificate-errors".into()));
-        command_line.append_switch(Some(&"ignore-ssl-errors".into()));
-        command_line.append_switch(Some(&"enable-logging=stderr".into()));
-        command_line.append_switch(Some(&"disable-web-security".into()));
         // Pass extensions to the render process via command line.
         if !self.extensions.is_empty()
             && let Ok(json) = serde_json::to_string(&self.extensions.0)
