@@ -66,7 +66,12 @@ impl Plugin for MessageLoopPlugin {
             self.no_sandbox,
         );
         #[cfg(target_os = "macos")]
-        cef_initialize(&args, &mut cef_app, self.root_cache_path.as_deref(), self.no_sandbox);
+        cef_initialize(
+            &args,
+            &mut cef_app,
+            self.root_cache_path.as_deref(),
+            self.no_sandbox,
+        );
 
         app.insert_non_send_resource(cef_app);
 
@@ -116,7 +121,12 @@ fn load_cef_library(app: &mut App) {
 }
 
 #[cfg(target_os = "macos")]
-fn cef_initialize(args: &Args, cef_app: &mut cef::App, root_cache_path: Option<&str>, no_sandbox: bool) {
+fn cef_initialize(
+    args: &Args,
+    cef_app: &mut cef::App,
+    root_cache_path: Option<&str>,
+    no_sandbox: bool,
+) {
     // Ensure the cache directory exists before CEF tries to use it.
     // Empty/whitespace paths are valid (CEF treats them as "use default"), so skip those.
     if let Some(path) = root_cache_path.filter(|p| !p.trim().is_empty()) {
