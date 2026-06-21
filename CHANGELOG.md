@@ -8,6 +8,9 @@
   User-supplied switches are now forwarded to CEF child processes (so the opt-in
   reaches the renderer/network process), and a startup warning is logged whenever a
   security-relaxing switch is active.
+  - The `disable-session-crashed-bubble` switch has been relocated into `CommandLineConfig::default()`,
+    so it now applies to both the browser and child processes (previously child-process only);
+    this is benign and overridable via `CommandLineConfig`.
 - Added `CefPlugin::sandbox: SandboxMode` to control Chromium's OS-level sandbox.
   `SandboxMode::PlatformDefault` (the default) preserves current per-platform behavior.
 

@@ -3,7 +3,7 @@
 - **Date:** 2026-06-21
 - **Status:** Draft (pending review)
 - **Crate(s):** `bevy_cef` (root), `bevy_cef_core`
-- **Breaking change:** Yes (acceptable at `0.4.0-dev`, pre-1.0)
+- **Breaking change:** Yes (acceptable at `0.11.0-dev`, pre-1.0)
 
 ## 1. Problem Statement
 

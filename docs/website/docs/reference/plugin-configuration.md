@@ -126,7 +126,7 @@ For most use cases, the default configuration is sufficient:
 app.add_plugins((DefaultPlugins, CefPlugin::default()));
 ```
 
-This initializes CEF with no custom command-line arguments, no extensions, and an in-memory cache.
+This initializes CEF with no custom command-line arguments, no extensions, no custom schemes, an in-memory cache, and the platform-default sandbox (`SandboxMode::PlatformDefault`).
 
 ## Sub-Plugin Tree
 
