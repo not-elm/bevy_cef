@@ -14,7 +14,8 @@ mod webview;
 mod zoom;
 
 use crate::common::{
-    LocalHostPlugin, MessageLoopPlugin, WebviewCoreComponentsPlugin, WebviewDpiPlugin,
+    LocalHostPlugin, MessageLoopPlugin, SandboxMode, WebviewCoreComponentsPlugin, WebviewDpiPlugin,
+    resolve_no_sandbox,
 };
 use crate::cursor_icon::SystemCursorIconPlugin;
 use crate::drag::DragPlugin;
@@ -26,7 +27,9 @@ use crate::resize::plugin::ResizePlugin;
 use crate::title::TitlePlugin;
 use crate::zoom::ZoomPlugin;
 use bevy::prelude::*;
-use bevy_cef_core::prelude::{CefCustomScheme, CefExtensions, CommandLineConfig};
+use bevy_cef_core::prelude::{
+    CefCustomScheme, CefExtensions, CommandLineConfig, effective_command_line_config, switches,
+};
 use bevy_remote::RemotePlugin;
 
 pub mod prelude {
@@ -38,7 +41,7 @@ pub mod prelude {
     };
     pub use bevy_cef_core::prelude::{
         CefCustomScheme, CefExtensions, CefSchemeBody, CefSchemeHandler, CefSchemeOptions,
-        CefSchemeRequest, CefSchemeResponse, CommandLineConfig,
+        CefSchemeRequest, CefSchemeResponse, CommandLineConfig, switches,
     };
 }
 
@@ -55,6 +58,9 @@ pub struct CefPlugin {
     /// Custom URL schemes to register in addition to the built-in
     /// `cef://localhost/`. Each carries a handler that services requests.
     pub custom_schemes: Vec<CefCustomScheme>,
+    /// Controls Chromium's OS-level sandbox. Defaults to the current per-platform
+    /// behavior; see [`SandboxMode`].
+    pub sandbox: SandboxMode,
 }
 
 impl Plugin for CefPlugin {
@@ -63,12 +69,41 @@ impl Plugin for CefPlugin {
         // CEF's OnRegisterCustomSchemes fires during initialize; schemes registered
         // afterward are silently ignored.
         bevy_cef_core::prelude::init_registered_schemes(self.custom_schemes.clone());
+
+        // Resolve the sandbox decision and compute the effective command line once.
+        let no_sandbox = resolve_no_sandbox(self.sandbox);
+        let strip_no_zygote = cfg!(target_os = "linux") && !no_sandbox;
+        let effective_config =
+            effective_command_line_config(&self.command_line_config, strip_no_zygote);
+
+        // Warn when any security-relaxing switch is active (based on the EFFECTIVE set).
+        let risky = switches::risky_present(&effective_config.switches);
+        if !risky.is_empty() {
+            warn!(
+                "bevy_cef: web-security relaxations active: {risky:?}. \
+                 Only enable these when loading fully trusted content."
+            );
+        }
+
+        // Warn when the sandbox is requested but its prerequisites are absent on macOS
+        // (the render process is not linked against cef_sandbox).
+        #[cfg(target_os = "macos")]
+        if self.sandbox == SandboxMode::Enabled {
+            warn!(
+                "bevy_cef: SandboxMode::Enabled requested on macOS, but the render \
+                 process is not linked against cef_sandbox / does not call \
+                 cef_sandbox_initialize(); the sandbox will not function and may abort. \
+                 See the plugin-configuration docs."
+            );
+        }
+
         app.add_plugins((
             LocalHostPlugin,
             MessageLoopPlugin {
-                config: self.command_line_config.clone(),
+                config: effective_config,
                 extensions: self.extensions.clone(),
                 root_cache_path: self.root_cache_path.clone(),
+                no_sandbox,
             },
             WebviewCoreComponentsPlugin,
             WebviewDpiPlugin,

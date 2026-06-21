@@ -17,6 +17,7 @@ pub struct MessageLoopPlugin {
     pub config: CommandLineConfig,
     pub extensions: CefExtensions,
     pub root_cache_path: Option<String>,
+    pub no_sandbox: bool,
 }
 
 impl Plugin for MessageLoopPlugin {
@@ -62,9 +63,10 @@ impl Plugin for MessageLoopPlugin {
             &mut cef_app,
             self.root_cache_path.as_deref(),
             render_process_binary.as_deref(),
+            self.no_sandbox,
         );
         #[cfg(target_os = "macos")]
-        cef_initialize(&args, &mut cef_app, self.root_cache_path.as_deref());
+        cef_initialize(&args, &mut cef_app, self.root_cache_path.as_deref(), self.no_sandbox);
 
         app.insert_non_send_resource(cef_app);
 
@@ -114,7 +116,7 @@ fn load_cef_library(app: &mut App) {
 }
 
 #[cfg(target_os = "macos")]
-fn cef_initialize(args: &Args, cef_app: &mut cef::App, root_cache_path: Option<&str>) {
+fn cef_initialize(args: &Args, cef_app: &mut cef::App, root_cache_path: Option<&str>, no_sandbox: bool) {
     // Ensure the cache directory exists before CEF tries to use it.
     // Empty/whitespace paths are valid (CEF treats them as "use default"), so skip those.
     if let Some(path) = root_cache_path.filter(|p| !p.trim().is_empty()) {
@@ -130,8 +132,7 @@ fn cef_initialize(args: &Args, cef_app: &mut cef::App, root_cache_path: Option<&
             .into(),
         #[cfg(feature = "debug")]
         browser_subprocess_path: debug_render_process_path().to_str().unwrap().into(),
-        #[cfg(feature = "debug")]
-        no_sandbox: true as _,
+        no_sandbox: no_sandbox as _,
         root_cache_path: root_cache_path.unwrap_or_default().into(),
         windowless_rendering_enabled: true as _,
         external_message_pump: true as _,
@@ -156,6 +157,7 @@ fn cef_initialize(
     cef_app: &mut cef::App,
     root_cache_path: Option<&str>,
     render_process_binary: Option<&std::path::Path>,
+    no_sandbox: bool,
 ) {
     // Ensure the cache directory exists before CEF tries to use it.
     // Empty/whitespace paths are valid (CEF treats them as "use default"), so skip those.
@@ -171,7 +173,7 @@ fn cef_initialize(
 
     let settings = Settings {
         browser_subprocess_path: subprocess_path.as_str().into(),
-        no_sandbox: true as _,
+        no_sandbox: no_sandbox as _,
         root_cache_path: root_cache_path.unwrap_or_default().into(),
         windowless_rendering_enabled: true as _,
         #[cfg(target_os = "windows")]
