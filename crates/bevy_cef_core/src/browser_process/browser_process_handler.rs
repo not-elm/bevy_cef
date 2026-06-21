@@ -1,4 +1,4 @@
-use crate::prelude::{CefExtensions, EXTENSIONS_SWITCH, MessageLoopTimer};
+use crate::prelude::{CefExtensions, CommandLineConfig, EXTENSIONS_SWITCH, MessageLoopTimer};
 use cef::rc::{Rc, RcImpl};
 use cef::*;
 use std::sync::mpsc::Sender;
@@ -9,17 +9,20 @@ use std::sync::mpsc::Sender;
 pub struct BrowserProcessHandlerBuilder {
     object: *mut RcImpl<cef_dll_sys::cef_browser_process_handler_t, Self>,
     message_loop_working_requester: Sender<MessageLoopTimer>,
+    config: CommandLineConfig,
     extensions: CefExtensions,
 }
 
 impl BrowserProcessHandlerBuilder {
     pub fn build(
         message_loop_working_requester: Sender<MessageLoopTimer>,
+        config: CommandLineConfig,
         extensions: CefExtensions,
     ) -> BrowserProcessHandler {
         BrowserProcessHandler::new(Self {
             object: core::ptr::null_mut(),
             message_loop_working_requester,
+            config,
             extensions,
         })
     }
@@ -51,6 +54,7 @@ impl Clone for BrowserProcessHandlerBuilder {
         Self {
             object,
             message_loop_working_requester: self.message_loop_working_requester.clone(),
+            config: self.config.clone(),
             extensions: self.extensions.clone(),
         }
     }
@@ -62,13 +66,14 @@ impl ImplBrowserProcessHandler for BrowserProcessHandlerBuilder {
             return;
         };
 
-        command_line.append_switch(Some(&"disable-web-security".into()));
-        command_line.append_switch(Some(&"allow-running-insecure-content".into()));
-        command_line.append_switch(Some(&"disable-session-crashed-bubble".into()));
-        command_line.append_switch(Some(&"ignore-certificate-errors".into()));
-        command_line.append_switch(Some(&"ignore-ssl-errors".into()));
-        command_line.append_switch(Some(&"enable-logging=stderr".into()));
-        command_line.append_switch(Some(&"disable-web-security".into()));
+        // Forward user-configured switches to every child process. Chromium enforces
+        // CORS / web-security in the network (utility) process under NetworkService,
+        // so forwarding to all children — not just the renderer — is required for an
+        // opt-in like `disable-web-security` to take effect.
+        for switch in &self.config.switches {
+            command_line.append_switch(Some(&(*switch).into()));
+        }
+
         // Pass extensions to the render process via command line.
         if !self.extensions.is_empty()
             && let Ok(json) = serde_json::to_string(&self.extensions.0)

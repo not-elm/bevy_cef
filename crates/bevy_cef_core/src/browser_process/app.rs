@@ -107,6 +107,7 @@ impl ImplApp for BrowserProcessAppBuilder {
     fn browser_process_handler(&self) -> Option<BrowserProcessHandler> {
         Some(BrowserProcessHandlerBuilder::build(
             self.message_loop_working_requester.clone(),
+            self.config.clone(),
             self.extensions.clone(),
         ))
     }
