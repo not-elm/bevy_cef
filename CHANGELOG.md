@@ -1,6 +1,7 @@
-## Unreleased
+## v0.11.0
 
 ### Security
+
 - **Breaking:** bevy_cef no longer enables `disable-web-security`,
   `ignore-certificate-errors`, `ignore-ssl-errors`, or
   `allow-running-insecure-content` by default. Apps that relied on these must opt in
