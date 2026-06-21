@@ -125,7 +125,7 @@ pub mod switches {
         switches
             .iter()
             .copied()
-            .filter(|s| RISKY_SWITCHES.iter().any(|&r| r == *s))
+            .filter(|s| RISKY_SWITCHES.contains(s))
             .collect()
     }
 }
