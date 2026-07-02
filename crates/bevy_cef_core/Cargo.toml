@@ -43,7 +43,7 @@ browser = [
     "bevy/bevy_sprite",
     "bevy/bevy_window",
     "bevy/picking",
-    "dep:metal",
+    "dep:objc2-metal",
     "dep:objc",
     "dep:objc2-core-foundation",
     "dep:objc2-io-surface",
@@ -54,11 +54,19 @@ browser = [
 # optional and activated by the `browser` feature — the render-process subprocess
 # binaries (default-features = false) must not pull the wgpu/Metal stack.
 [target.'cfg(target_os = "macos")'.dependencies]
-metal = { version = "0.32", optional = true }
 objc = { version = "0.2", optional = true }
 objc2-core-foundation = { version = "0.3", optional = true }
 objc2-io-surface = { version = "0.3", optional = true }
-wgpu = { version = "27", default-features = false, optional = true }
+objc2-metal = { version = "0.3", default-features = false, features = [
+    "std",
+    "MTLAllocation",
+    "MTLDevice",
+    "MTLPixelFormat",
+    "MTLResource",
+    "MTLTexture",
+    "objc2-io-surface",
+], optional = true }
+wgpu = { version = "29", default-features = false, optional = true }
 
 [lints]
 workspace = true

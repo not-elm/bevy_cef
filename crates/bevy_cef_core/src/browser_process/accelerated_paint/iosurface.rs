@@ -1,19 +1,25 @@
-//! IOSurface (CEF shared texture) → Metal MTLTexture → wgpu::Texture import for wgpu 27.
+//! IOSurface (CEF shared texture) → Metal MTLTexture → wgpu::Texture import for wgpu 29.
 //!
-//! # wgpu 27 vs wgpu 28 differences
-//! In wgpu-hal 27, `Device::raw_device()` returns `&parking_lot::Mutex<metal::Device>` (not
-//! `&metal::Device` as in wgpu 28). We must `.lock()` the mutex to obtain a
-//! `MutexGuard<metal::Device>`, then deref to `&DeviceRef` for the `msg_send!` call.
+//! # wgpu-hal 29 / objc2-metal
+//! wgpu-hal 29's Metal backend is built on `objc2-metal` (not `metal-rs`):
+//! `Device::raw_device()` returns `&Retained<ProtocolObject<dyn MTLDevice>>`
+//! directly (wgpu 27 returned `&Mutex<metal::Device>` — no lock is needed now),
+//! and `texture_from_raw` takes the `Retained` MTLTexture by value.
 //!
-//! # IOSurfaceRef compatibility
-//! `IOSurfaceRef` from `objc2-io-surface` 0.3 implements `objc2::RefEncode`, NOT `objc::Encode`
-//! (the older `objc` 0.2 crate trait used by `msg_send!`). We therefore pass the raw
-//! `*mut c_void` CEF handle directly — `*mut c_void` does implement `objc::Encode` ("^v").
-//! The Metal runtime accepts any opaque IOSurface pointer at this position.
+//! The import uses objc2-metal's native `newTextureWithDescriptor:iosurface:plane:`
+//! binding, so the old raw-`objc` `msg_send!` hack is gone. The raw CEF handle is
+//! reborrowed as `&IOSurfaceRef` (objc2-io-surface 0.3 — the same version line
+//! wgpu-hal 29 uses, so the type identities unify). All objc2 methods used here
+//! follow the `new` method family and return retained objects, so no
+//! autoreleasepool is required.
 
 use std::os::raw::c_void;
 
-use objc::{msg_send, sel, sel_impl};
+use objc2_io_surface::IOSurfaceRef;
+use objc2_metal::{
+    MTLDevice, MTLPixelFormat, MTLStorageMode, MTLTextureDescriptor, MTLTextureType,
+    MTLTextureUsage,
+};
 use wgpu::{Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages};
 
 /// Imports a CEF IOSurface handle into a wgpu texture (COPY_SRC | TEXTURE_BINDING).
@@ -21,7 +27,7 @@ use wgpu::{Extent3d, TextureDescriptor, TextureDimension, TextureFormat, Texture
 /// Returns `None` if:
 /// - `handle` is null or dimensions are zero
 /// - the `device` is not backed by the Metal API
-/// - any Metal API call returns null (allocation failure)
+/// - any Metal API call returns nil (allocation failure)
 ///
 /// # Safety
 /// `handle` must be a valid `IOSurfaceRef *` that remains alive for the duration of this
@@ -53,34 +59,30 @@ pub unsafe fn import_iosurface_to_wgpu(
         view_formats: &[],
     };
 
-    let metal_pixel_format = {
-        use metal::MTLPixelFormat;
-        // The sRGB variants MUST get their own arms: `texture_from_raw` is told
-        // `texture_desc.format` (the sRGB format) below, so the Metal texture's
-        // actual pixel format must agree, or `texture_from_raw`'s safety
-        // invariant is violated.
-        match format {
-            TextureFormat::Bgra8Unorm => MTLPixelFormat::BGRA8Unorm,
-            TextureFormat::Bgra8UnormSrgb => MTLPixelFormat::BGRA8Unorm_sRGB,
-            TextureFormat::Rgba8Unorm => MTLPixelFormat::RGBA8Unorm,
-            TextureFormat::Rgba8UnormSrgb => MTLPixelFormat::RGBA8Unorm_sRGB,
-            _ => return None,
-        }
+    // The sRGB variants MUST get their own arms: `texture_from_raw` is told
+    // `texture_desc.format` (the sRGB format) below, so the Metal texture's
+    // actual pixel format must agree, or `texture_from_raw`'s safety
+    // invariant is violated.
+    let metal_pixel_format = match format {
+        TextureFormat::Bgra8Unorm => MTLPixelFormat::BGRA8Unorm,
+        TextureFormat::Bgra8UnormSrgb => MTLPixelFormat::BGRA8Unorm_sRGB,
+        TextureFormat::Rgba8Unorm => MTLPixelFormat::RGBA8Unorm,
+        TextureFormat::Rgba8UnormSrgb => MTLPixelFormat::RGBA8Unorm_sRGB,
+        _ => return None,
     };
 
-    let hal_tex = objc::rc::autoreleasepool(|| unsafe {
-        use metal::foreign_types::ForeignType;
-        use metal::{MTLStorageMode, MTLTextureType, MTLTextureUsage};
+    let hal_tex = {
+        let hal_device = unsafe { device.as_hal::<wgpu::hal::api::Metal>() }?;
+        let raw_device = hal_device.raw_device();
 
-        let hal_device = device.as_hal::<wgpu::hal::api::Metal>()?;
-        let device_guard = hal_device.raw_device().lock();
-
-        let metal_desc = metal::TextureDescriptor::new();
-        metal_desc.set_width(width as u64);
-        metal_desc.set_height(height as u64);
-        metal_desc.set_texture_type(MTLTextureType::D2);
-        metal_desc.set_pixel_format(metal_pixel_format);
-        metal_desc.set_usage(MTLTextureUsage::ShaderRead);
+        let metal_desc = MTLTextureDescriptor::new();
+        unsafe {
+            metal_desc.setWidth(width as usize);
+            metal_desc.setHeight(height as usize);
+        }
+        metal_desc.setTextureType(MTLTextureType::Type2D);
+        metal_desc.setPixelFormat(metal_pixel_format);
+        metal_desc.setUsage(MTLTextureUsage::ShaderRead);
         // Storage mode must match the device's memory architecture: Shared
         // textures exist only on unified-memory (Apple-silicon) devices — on
         // Intel/AMD Macs `newTextureWithDescriptor:iosurface:plane:` rejects
@@ -89,35 +91,30 @@ pub unsafe fn import_iosurface_to_wgpu(
         // crate's reference importer use Managed there. On Apple silicon,
         // Shared is required: with Managed, GPU writes from CEF's process may
         // not propagate, giving black/stale content.
-        metal_desc.set_storage_mode(if device_guard.has_unified_memory() {
+        metal_desc.setStorageMode(if raw_device.hasUnifiedMemory() {
             MTLStorageMode::Shared
         } else {
             MTLStorageMode::Managed
         });
 
-        // `newTextureWithDescriptor:…` returns nil on failure (e.g. OOM or an
-        // invalid surface); null-check before wrapping in `metal::Texture`, or
-        // the blit would dereference nil later.
-        let raw: *mut objc::runtime::Object = msg_send![
-            &**device_guard,
-            newTextureWithDescriptor: metal_desc.as_ref()
-            iosurface: handle
-            plane: 0usize
-        ];
-        if raw.is_null() {
-            return None;
-        }
-        // The returned MTLTexture is +1-owned; `from_ptr` takes that ownership
-        // without an extra retain.
-        let mtl_texture = metal::Texture::from_ptr(raw.cast());
+        // SAFETY: `handle` is a valid IOSurfaceRef* for the duration of this
+        // call (see the function's safety contract); the reborrow does not
+        // extend its lifetime.
+        let iosurface: &IOSurfaceRef = unsafe { &*handle.cast::<IOSurfaceRef>() };
+        // Returns nil on failure (e.g. OOM, invalid surface, or a Shared
+        // texture requested on a non-unified-memory device) — `Option` return
+        // preserves the old nil-check semantics. (Safe method in this
+        // objc2-metal feature set — no `unsafe` block.)
+        let mtl_texture =
+            raw_device.newTextureWithDescriptor_iosurface_plane(&metal_desc, iosurface, 0)?;
 
-        Some(
-            // Safety: mtl_texture was just created from this device; format, type,
-            // and copy_size match texture_desc.
+        // Safety: mtl_texture was just created from this device; format, type,
+        // and copy_size match texture_desc.
+        unsafe {
             <wgpu::hal::api::Metal as wgpu::hal::Api>::Device::texture_from_raw(
                 mtl_texture,
                 texture_desc.format,
-                metal::MTLTextureType::D2,
+                MTLTextureType::Type2D,
                 1,
                 1,
                 wgpu::hal::CopyExtent {
@@ -125,9 +122,9 @@ pub unsafe fn import_iosurface_to_wgpu(
                     height,
                     depth: 1,
                 },
-            ),
-        )
-    })?;
+            )
+        }
+    };
 
     // Safety: hal_tex was created from this device and respects texture_desc.
     Some(unsafe { device.create_texture_from_hal::<wgpu::hal::api::Metal>(hal_tex, &texture_desc) })
