@@ -57,7 +57,7 @@ use crate::common::{WebviewIoSurface, WebviewSize, WebviewSource, WebviewTexture
 use crate::prelude::{WebviewExtendStandardMaterial, WebviewSurface};
 use crate::webview::texture_target::{WebviewGpuImageInjectSet, WebviewTextureSlot};
 use crate::webview::ui::WebviewUiMaterial;
-use bevy::asset::{AssetId, RenderAssetUsages};
+use bevy::asset::{Asset, AssetId, RenderAssetUsages};
 use bevy::platform::collections::{HashMap, HashSet};
 use bevy::prelude::*;
 use bevy::render::{
@@ -631,6 +631,18 @@ fn inject_webview_gpu_images(
     }
 }
 
+/// Force an `AssetEvent::Modified` for `id` without changing the asset.
+///
+/// Bevy 0.19's `Assets::get_mut` returns an `AssetMut` guard that only queues
+/// `Modified` if actually deref-mutated; a bare `let _ = assets.get_mut(id);`
+/// silently emits nothing. Every rebind-trick site below MUST go through this
+/// helper so the intent stays greppable and cannot silently regress.
+fn touch_asset<A: Asset>(assets: &mut Assets<A>, id: impl Into<AssetId<A>>) {
+    if let Some(asset) = assets.get_mut(id) {
+        let _ = asset.into_inner();
+    }
+}
+
 /// Main-world system: touch a mesh webview material of type `M` on rebind frames
 /// (see [`WebviewSurfaceRebind`]) so Bevy re-extracts and rebuilds its bind
 /// group, capturing the freshly injected owned-texture view rather than the
@@ -641,7 +653,7 @@ pub(crate) fn mark_webview_materials_changed_for<M: WebviewSurfaceSlot>(
     webviews: Query<&MeshMaterial3d<M>, (With<WebviewSource>, With<WebviewSurfaceRebind>)>,
 ) {
     for handle in webviews.iter() {
-        let _ = materials.get_mut(handle.id());
+        touch_asset(&mut materials, handle.id());
     }
 }
 
@@ -702,7 +714,7 @@ fn mark_webview_ui_materials_changed(
     mut materials: ResMut<Assets<WebviewUiMaterial>>,
 ) {
     for handle in webviews.iter() {
-        let _ = materials.get_mut(handle.id());
+        touch_asset(&mut materials, handle.id());
     }
 }
 
@@ -771,7 +783,7 @@ fn mark_sprite_webview_images_changed(
     mut images: ResMut<Assets<Image>>,
 ) {
     for surface in webviews.iter() {
-        let _ = images.get_mut(surface.0.id());
+        touch_asset(&mut images, surface.0.id());
     }
 }
 
@@ -795,7 +807,7 @@ fn mark_target_webview_images_changed(
     mut images: ResMut<Assets<Image>>,
 ) {
     for surface in webviews.iter() {
-        let _ = images.get_mut(surface.0.id());
+        touch_asset(&mut images, surface.0.id());
     }
 }
 
@@ -827,6 +839,6 @@ pub(crate) fn mark_target_materials_changed_for<M: WebviewTextureSlot>(
         .map(|(id, _)| id)
         .collect();
     for id in to_touch {
-        let _ = materials.get_mut(id);
+        touch_asset(&mut materials, id);
     }
 }
