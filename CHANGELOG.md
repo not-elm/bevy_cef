@@ -2,13 +2,13 @@
 
 ### Breaking
 
-- **Bevy 0.19** / wgpu 0.29 support. Targets Bevy 0.19; no longer compatible with
+- **Bevy 0.19** / wgpu 29 support. Targets Bevy 0.19; no longer compatible with
   Bevy 0.18.
 
 ### Changed
 
-- macOS: IOSurface import ported from `metal-rs` to `objc2-metal`, reducing
-  build-time and fixing interop with newer Bevy Metal versions.
+- macOS: IOSurface import ported from `metal-rs` to `objc2-metal`, matching
+  wgpu-hal 29's Metal backend; the raw `objc` `msg_send!` hack is gone.
 - macOS: `WebviewBlitNode` (a render-graph node) replaced by the `webview_blit`
   system in the `RenderGraph` schedule, aligning with Bevy 0.19's render-graph
   refactor (nodes are now systems in dedicated schedules).
