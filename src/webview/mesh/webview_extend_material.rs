@@ -101,7 +101,7 @@ fn render<E: MaterialExtension>(
                 images.get_mut(handle.id())
             }
         {
-            update_webview_image(texture, image);
+            update_webview_image(texture, image.into_inner());
         }
     }
 }
