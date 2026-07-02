@@ -125,7 +125,7 @@ mod tests {
 
         let mut state: SystemState<Query<(Option<&ChildOf>, Has<WebviewSource>)>> =
             SystemState::new(&mut world);
-        let parents = state.get(&world);
+        let parents = state.get(&world).unwrap();
 
         assert_eq!(find_webview_entity(parent, &parents), Some(parent));
         assert_eq!(find_webview_entity(child, &parents), Some(parent));
@@ -138,7 +138,7 @@ mod tests {
 
         let mut state: SystemState<Query<(Option<&ChildOf>, Has<WebviewSource>)>> =
             SystemState::new(&mut world);
-        let parents = state.get(&world);
+        let parents = state.get(&world).unwrap();
 
         assert_eq!(find_webview_entity(orphan, &parents), None);
     }

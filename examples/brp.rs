@@ -10,7 +10,7 @@ fn main() {
     App::new()
         .add_plugins((
             DefaultPlugins,
-            RemotePlugin::default().with_method("greet", greet),
+            RemotePlugin::default().with_method_main("greet", greet),
             CefPlugin::default(),
         ))
         .add_systems(

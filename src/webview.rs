@@ -141,7 +141,7 @@ impl Plugin for WebviewPlugin {
         // macOS/Linux: direct NonSend<Browsers>
         #[cfg(not(target_os = "windows"))]
         {
-            app.init_non_send_resource::<Browsers>()
+            app.init_non_send::<Browsers>()
                 .init_resource::<BeginFrameInterval>()
                 .add_plugins((MeshWebviewPlugin, UiWebviewPlugin))
                 .add_systems(Main, send_external_begin_frame)
@@ -215,7 +215,7 @@ impl Plugin for WebviewPlugin {
                 #[cfg(not(target_os = "windows"))]
                 {
                     let mut world = world;
-                    world.non_send_resource_mut::<Browsers>().close(&ctx.entity);
+                    world.non_send_mut::<Browsers>().close(&ctx.entity);
                 }
                 #[cfg(target_os = "windows")]
                 world.resource::<BrowsersProxy>().close(&ctx.entity);
