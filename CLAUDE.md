@@ -114,7 +114,7 @@ If the render process binary is not installed, call `bevy_cef::prelude::early_ex
 
 No automated tests. Testing done through examples:
 - `cargo test --workspace --all-features` (for any future tests)
-- Examples: simple, inline_html, js_emit, host_emit, brp, navigation, zoom_level, sprite, devtool, custom_material, preload_scripts, extensions, headless_texture
+- Examples: simple, inline_html, js_emit, host_emit, brp, navigation, zoom_level, sprite, devtool, custom_material, custom_scheme, preload_scripts, extensions, headless_texture, hidpi, resize, toolbar_drag, ui_webview
 
 ## Workspace Structure
 
@@ -126,13 +126,14 @@ No automated tests. Testing done through examples:
 
 ## Platform Notes
 
-- **macOS**: Full support. Uses `objc` crate for window handling. CEF framework at `$HOME/.local/share/cef/Chromium Embedded Framework.framework`. All webviews (mesh + bevy_ui + sprite) render via the GPU `OnAcceleratedPaint` + IOSurface path — a render-graph node (`WebviewBlitNode`) imports the IOSurface as a Metal texture and blits it into the Bevy texture each frame (no CPU readback; requires the Metal wgpu backend). `root_cache_path` must be set in `CefPlugin` to avoid `cef_initialize` failures from CEF's process-singleton lock. Known limitations: CEF popup widgets (`PET_POPUP`, e.g. `<select>` dropdowns) are not rendered yet, and sprite webviews' transparent regions still block lower pickable entities (sprite picking reads the CPU placeholder).
+- **macOS**: Full support. Uses `objc` crate for window handling. CEF framework at `$HOME/.local/share/cef/Chromium Embedded Framework.framework`. All webviews (mesh + bevy_ui + sprite) render via the GPU `OnAcceleratedPaint` + IOSurface path — a render-world system (`webview_blit`, `RenderGraph` schedule) imports the IOSurface as a Metal texture and blits it into the Bevy texture each frame (no CPU readback; requires the Metal wgpu backend). `root_cache_path` must be set in `CefPlugin` to avoid `cef_initialize` failures from CEF's process-singleton lock. Known limitations: CEF popup widgets (`PET_POPUP`, e.g. `<select>` dropdowns) are not rendered yet, and sprite webviews' transparent regions still block lower pickable entities (sprite picking reads the CPU placeholder).
 - **Windows**: Full support. CEF at `$USERPROFILE/.local/share/cef`, auto-copied by build.rs. Separate render process binary recommended
 - **Linux**: Supported. CEF at `$HOME/.local/share/cef`, auto-copied by `build.rs`. Run `make setup-linux` to install CEF + `bevy_cef_render_process`. `--no-zygote` is set in the default `CommandLineConfig` to avoid `chrome-sandbox` dependencies (combined with `no_sandbox: true`).
 
 ## Version Compatibility
 
-| Bevy   | bevy_cef  | CEF     |
-| ------ | --------- | ------- |
-| 0.18 ~ | 0.4.0-dev | 144.4.0 |
-| 0.16   | 0.1.0     | 139     |
+| Bevy   | bevy_cef  | CEF              |
+| ------ | --------- | ---------------- |
+| 0.19   | 0.12.0    | 145.6.1+145.0.28 |
+| 0.18 ~ | 0.5.0 ~   | 145.6.1+145.0.28 |
+| 0.16   | 0.1.0     | 139              |
