@@ -57,7 +57,8 @@ pub struct WebviewBrowser {
     pub popup_slot: SharedTexture,
     /// [macOS GPU OSR] Latest IOSurface retained by `on_accelerated_paint`
     /// (Approach 2). Drained by the main-world collect system for extraction
-    /// into the render world, where `WebviewBlitNode` imports + blits it.
+    /// into the render world, where the `webview_blit` render-graph-schedule
+    /// system imports + blits it.
     #[cfg(target_os = "macos")]
     pub latest_iosurface: crate::browser_process::accelerated_paint::SharedRetainedIoSurface,
 }
