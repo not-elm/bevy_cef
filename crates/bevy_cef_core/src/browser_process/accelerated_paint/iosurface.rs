@@ -9,9 +9,15 @@
 //! The import uses objc2-metal's native `newTextureWithDescriptor:iosurface:plane:`
 //! binding, so the old raw-`objc` `msg_send!` hack is gone. The raw CEF handle is
 //! reborrowed as `&IOSurfaceRef` (objc2-io-surface 0.3 — the same version line
-//! wgpu-hal 29 uses, so the type identities unify). All objc2 methods used here
-//! follow the `new` method family and return retained objects, so no
-//! autoreleasepool is required.
+//! wgpu-hal 29 uses, so the type identities unify).
+//!
+//! The Metal calls run inside an `autoreleasepool`: although every object we
+//! receive is `new`-family (+1 retained), Apple frameworks may autorelease
+//! internal temporaries while servicing the calls, and Bevy's pipelined render
+//! thread (a plain `std::thread`) has no ambient pool — without one, those
+//! temporaries would leak a little every frame. wgpu-hal 29 wraps its own
+//! structurally identical `MTLTextureDescriptor::new()` + create paths the
+//! same way.
 
 use std::os::raw::c_void;
 
@@ -71,7 +77,7 @@ pub unsafe fn import_iosurface_to_wgpu(
         _ => return None,
     };
 
-    let hal_tex = {
+    let hal_tex = objc2::rc::autoreleasepool(|_| {
         let hal_device = unsafe { device.as_hal::<wgpu::hal::api::Metal>() }?;
         let raw_device = hal_device.raw_device();
 
@@ -110,7 +116,7 @@ pub unsafe fn import_iosurface_to_wgpu(
 
         // Safety: mtl_texture was just created from this device; format, type,
         // and copy_size match texture_desc.
-        unsafe {
+        Some(unsafe {
             <wgpu::hal::api::Metal as wgpu::hal::Api>::Device::texture_from_raw(
                 mtl_texture,
                 texture_desc.format,
@@ -123,8 +129,8 @@ pub unsafe fn import_iosurface_to_wgpu(
                     depth: 1,
                 },
             )
-        }
-    };
+        })
+    })?;
 
     // Safety: hal_tex was created from this device and respects texture_desc.
     Some(unsafe { device.create_texture_from_hal::<wgpu::hal::api::Metal>(hal_tex, &texture_desc) })

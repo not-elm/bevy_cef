@@ -662,6 +662,7 @@ dependencies = [
  "cef",
  "cef-dll-sys",
  "objc",
+ "objc2 0.6.3",
  "objc2-core-foundation",
  "objc2-io-surface",
  "objc2-metal 0.3.2",

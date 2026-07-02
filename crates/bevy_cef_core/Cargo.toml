@@ -43,8 +43,9 @@ browser = [
     "bevy/bevy_sprite",
     "bevy/bevy_window",
     "bevy/picking",
-    "dep:objc2-metal",
     "dep:objc",
+    "dep:objc2",
+    "dep:objc2-metal",
     "dep:objc2-core-foundation",
     "dep:objc2-io-surface",
     "dep:wgpu",
@@ -55,6 +56,9 @@ browser = [
 # binaries (default-features = false) must not pull the wgpu/Metal stack.
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = { version = "0.2", optional = true }
+# Same 0.6 line objc2-metal itself depends on; needed for `objc2::rc::autoreleasepool`
+# around the per-frame IOSurface import (Bevy's render thread has no ambient pool).
+objc2 = { version = "0.6", optional = true }
 objc2-core-foundation = { version = "0.3", optional = true }
 objc2-io-surface = { version = "0.3", optional = true }
 objc2-metal = { version = "0.3", default-features = false, features = [

@@ -62,7 +62,7 @@ fn render_standard_materials(
                 images.get_mut(handle.id())
             }
         {
-            update_webview_image(texture, image.into_inner());
+            update_webview_image(texture, image);
         }
     }
 }

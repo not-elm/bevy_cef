@@ -22,7 +22,7 @@
 //!             && *id == my.target.id()
 //!         {
 //!             if let Some(material) = materials.get_mut(&my.material) {
-//!                 let _ = material.into_inner(); // force Modified → bind-group rebuild
+//!                 material.into_inner(); // force Modified → bind-group rebuild
 //!             }
 //!         }
 //!     }

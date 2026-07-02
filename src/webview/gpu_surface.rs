@@ -64,9 +64,7 @@ use bevy::render::{
     Extract, Render, RenderApp, RenderSystems,
     erased_render_asset::prepare_erased_assets,
     render_asset::{RenderAssets, prepare_assets},
-    render_resource::{
-        Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
-    },
+    render_resource::{Extent3d, TextureDescriptor, TextureFormat},
     renderer::{RenderContext, RenderDevice, RenderGraph, RenderGraphSystems},
     texture::{DefaultImageSampler, GpuImage},
 };
@@ -610,17 +608,18 @@ fn inject_webview_gpu_images(
             texture: surface.texture.clone(),
             texture_view: surface.view.clone(),
             sampler: sampler.clone(),
-            // Mirrors the descriptor `WebviewGpuSurface::new` used to create
-            // `surface.texture` (bevy_cef_core's
-            // accelerated_paint::WebviewGpuSurface::new).
+            // Derived from the live texture so this can never drift from the
+            // descriptor `WebviewGpuSurface::new` (bevy_cef_core) actually used.
+            // `label`/`view_formats` have no accessors and stay literal — the
+            // surface is created with no extra view formats.
             texture_descriptor: TextureDescriptor {
                 label: None,
                 size: surface.texture.size(),
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: TextureDimension::D2,
-                format: TextureFormat::Bgra8UnormSrgb,
-                usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
+                mip_level_count: surface.texture.mip_level_count(),
+                sample_count: surface.texture.sample_count(),
+                dimension: surface.texture.dimension(),
+                format: surface.texture.format(),
+                usage: surface.texture.usage(),
                 view_formats: &[],
             },
             texture_view_descriptor: None,
@@ -639,7 +638,7 @@ fn inject_webview_gpu_images(
 /// helper so the intent stays greppable and cannot silently regress.
 fn touch_asset<A: Asset>(assets: &mut Assets<A>, id: impl Into<AssetId<A>>) {
     if let Some(asset) = assets.get_mut(id) {
-        let _ = asset.into_inner();
+        asset.into_inner();
     }
 }
 
