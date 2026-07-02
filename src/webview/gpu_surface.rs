@@ -1,16 +1,16 @@
 //! [macOS GPU OSR — Approach 2] Import each webview's retained IOSurface and
-//! blit it into an owned GPU texture inside a Bevy render-graph node, then inject
-//! that owned texture into `RenderAssets<GpuImage>` so the webview mesh material
-//! samples the live page.
+//! blit it into an owned GPU texture via the `webview_blit` system (`RenderGraph`
+//! schedule), then inject that owned texture into `RenderAssets<GpuImage>` so the
+//! webview mesh material samples the live page.
 //!
-//! Why a render-graph node (not the `on_accelerated_paint` callback): Bevy owns
-//! ordered command submission — its render graph collects all GPU commands into
-//! one `RenderContext` and submits them once per frame, then presents. Doing an
-//! out-of-band `queue.submit` from the CEF callback (which runs in the `Main`
-//! schedule) races that ordered submit/present and corrupts rendering (the mesh
-//! goes black, no validation error). So the callback only *retains* the latest
-//! IOSurface; the import + blit is recorded into the frame's command encoder
-//! by the webview_blit system (RenderGraph schedule, Begin set), and Bevy
+//! Why deferred to the `webview_blit` system (not the `on_accelerated_paint`
+//! callback): Bevy owns ordered command submission — its render graph collects all
+//! GPU commands into one `RenderContext` and submits them once per frame, then
+//! presents. Doing an out-of-band `queue.submit` from the CEF callback (which runs
+//! in the `Main` schedule) races that ordered submit/present and corrupts rendering
+//! (the mesh goes black, no validation error). So the callback only *retains* the
+//! latest IOSurface; the import + blit is recorded into the frame's command encoder
+//! by the `webview_blit` system (`RenderGraph` schedule, Begin set), and Bevy
 //! submits it in order.
 //!
 //! Frame flow (macOS):
@@ -41,17 +41,17 @@
 //!    surfaces, get-or-creates the owned `WebviewGpuSurface` for each id (it must
 //!    exist before the material bind group is built), wraps each owned surface in a
 //!    `GpuImage`, and inserts it into `RenderAssets<GpuImage>` for the surface id.
-//! 5. RenderGraph schedule (`webview_blit`, `RenderGraphSystems::Begin`): import each
-//!    retained IOSurface into a transient wgpu texture and record a blit into the
-//!    frame's command encoder, filling the owned surface created in step 4. The
-//!    transient texture is dropped immediately — wgpu keeps recorded resources
-//!    (and, via the MTLTexture's own IOSurface reference, the surface) alive
-//!    until the submitted command buffer completes on the GPU.
+//! 5. `RenderGraph` schedule (`webview_blit` system, `RenderGraphSystems::Begin`):
+//!    import each retained IOSurface into a transient wgpu texture and record a blit
+//!    into the frame's command encoder, filling the owned surface created in step 4.
+//!    The transient texture is dropped immediately — wgpu keeps recorded resources
+//!    (and, via the MTLTexture's own IOSurface reference, the surface) alive until
+//!    the submitted command buffer completes on the GPU.
 //!
 //! The owned texture is a single stable buffer (MVP, no double-buffering): the
-//! node blits into the same texture each frame, and the injected `GpuImage`
-//! reuses the same `texture_view`, so the material bind group stays valid
-//! between rebind events.
+//! `webview_blit` system blits into the same texture each frame, and the injected
+//! `GpuImage` reuses the same `texture_view`, so the material bind group stays
+//! valid between rebind events.
 
 use crate::common::{WebviewIoSurface, WebviewSize, WebviewSource, WebviewTextureTarget};
 use crate::prelude::{WebviewExtendStandardMaterial, WebviewSurface};
@@ -108,9 +108,9 @@ pub(crate) enum WebviewSurfaceSet {
     MarkChanged,
 }
 
-/// [macOS GPU OSR] plugin: import each webview's retained IOSurface in a custom
-/// render-graph node and inject the owned GPU texture into the render world so
-/// the webview mesh renders the real page.
+/// [macOS GPU OSR] plugin: import each webview's retained IOSurface via the
+/// `webview_blit` system (`RenderGraph` schedule) and inject the owned GPU
+/// texture into the render world so the webview mesh renders the real page.
 pub struct WebviewGpuInjectPlugin;
 
 impl Plugin for WebviewGpuInjectPlugin {

@@ -1,3 +1,23 @@
+## v0.12.0
+
+### Breaking
+
+- **Bevy 0.19** / wgpu 0.29 support. Targets Bevy 0.19; no longer compatible with
+  Bevy 0.18.
+
+### Changed
+
+- macOS: IOSurface import ported from `metal-rs` to `objc2-metal`, reducing
+  build-time and fixing interop with newer Bevy Metal versions.
+- macOS: `WebviewBlitNode` (a render-graph node) replaced by the `webview_blit`
+  system in the `RenderGraph` schedule, aligning with Bevy 0.19's render-graph
+  refactor (nodes are now systems in dedicated schedules).
+- **Internal:** `Assets::get_mut` call sites audited for Bevy 0.19's lazy
+  `AssetEvent::Modified` semantics (asset mutations only queue Modified if the
+  asset is actually dereferenced as mutable). Introduced `touch_asset` helper
+  for intentional "no-op mutation" sites that must fire the event. Includes
+  Windows/Linux CPU-paint-path fixes for new event semantics.
+
 ## v0.11.0
 
 ### Security

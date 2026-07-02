@@ -29,8 +29,9 @@ pub type SharedRetainedIoSurface = std::rc::Rc<std::cell::RefCell<Option<Retaine
 /// returns. `IOSurfaceIncrementUseCount` is only an advisory purgeability hint
 /// and does **not** keep the object alive (verified: `IOSurfaceGetUseCount`
 /// aborts on the retained pointer after the callback returns). To keep it alive
-/// until the render-graph node imports + blits it, we hold a real CoreFoundation
-/// reference via [`CFRetained`] (`CFRetain` on construction, `CFRelease` on drop).
+/// until the `webview_blit` system (`RenderGraph` schedule) imports + blits it,
+/// we hold a real CoreFoundation reference via [`CFRetained`] (`CFRetain` on
+/// construction, `CFRelease` on drop).
 ///
 /// # Safety / lifetime
 /// `surface` owns a +1 CF reference to the IOSurface, so the object stays alive
@@ -44,13 +45,14 @@ pub type SharedRetainedIoSurface = std::rc::Rc<std::cell::RefCell<Option<Retaine
 ///   surface is always the freshest CEF produced, and at most one stale surface is
 ///   held at a time (no unbounded accumulation).
 /// - The main-world collect system *moves* the retain out of the slot into the
-///   render world (the wrapper is `Send`), where the render-graph node imports +
-///   blits it; the retain is released on the next frame's extract. The CF retain
-///   only needs to keep the surface alive **until the Metal import**: the
-///   `MTLTexture` created via `newTextureWithDescriptor:iosurface:plane:` holds
-///   its own reference to the IOSurface, and wgpu keeps the recorded texture
-///   alive until the submitted command buffer finishes on the GPU — so the blit
-///   source stays valid even after our retain drops.
+///   render world (the wrapper is `Send`), where the `webview_blit` system
+///   (`RenderGraph` schedule) imports + blits it; the retain is released on the
+///   next frame's extract. The CF retain only needs to keep the surface alive
+///   **until the Metal import**: the `MTLTexture` created via
+///   `newTextureWithDescriptor:iosurface:plane:` holds its own reference to the
+///   IOSurface, and wgpu keeps the recorded texture alive until the submitted
+///   command buffer finishes on the GPU — so the blit source stays valid even
+///   after our retain drops.
 /// - Net: balanced CFRetain/CFRelease per frame, bounded to ~1 in-flight surface;
 ///   measured RSS stays flat under a 60fps hue-cycling page (no IOSurface leak).
 ///
@@ -257,7 +259,7 @@ impl WebviewGpuSurface {
     /// failed (non-Metal backend or Metal allocation failure).
     ///
     /// This is the single place where raw `wgpu`/`metal`/IOSurface naming lives, so
-    /// the Bevy render-graph node (in the root crate) can call it using only Bevy
+    /// the `webview_blit` system (in the root crate) can call it using only Bevy
     /// types.
     ///
     /// Safe API: the `&RetainedIoSurface` borrow proves the +1 CF retain is alive
