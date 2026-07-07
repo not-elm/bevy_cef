@@ -72,6 +72,11 @@ bevy_cef = { path = ".", features = ["debug"] }
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = { version = "0.2" }
 
+# On Linux, `bevy_winit` needs a windowing backend selected explicitly because
+# Bevy's default features (which would pull in `x11`) are disabled workspace-wide.
+[target.'cfg(target_os = "linux")'.dependencies]
+bevy = { workspace = true, features = ["x11", "wayland"] }
+
 [lints]
 workspace = true
 

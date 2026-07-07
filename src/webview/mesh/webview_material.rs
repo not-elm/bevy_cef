@@ -76,10 +76,11 @@ fn send_render_textures_win(
 #[cfg(not(target_os = "macos"))]
 pub(crate) fn update_webview_image(texture: &RenderTextureMessage, mut image: AssetMut<'_, Image>) {
     let expected_len = (texture.width * texture.height * 4) as usize;
+    let dimensions_match = image.texture_descriptor.size.width == texture.width
+        && image.texture_descriptor.size.height == texture.height;
     if let Some(data) = image.data.as_mut()
+        && dimensions_match
         && data.len() == expected_len
-        && image.texture_descriptor.size.width == texture.width
-        && image.texture_descriptor.size.height == texture.height
     {
         data.copy_from_slice(&texture.buffer);
     } else {
