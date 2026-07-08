@@ -77,7 +77,7 @@ fn render_ui_surface(
 ) {
     for texture in er.read() {
         if let Ok(handle) = webviews.get(texture.webview)
-            && let Some(material) = materials.get_mut(handle.id())
+            && let Some(mut material) = materials.get_mut(handle.id())
             && let Some(image) = {
                 let image_handle = material
                     .surface

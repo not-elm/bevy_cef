@@ -5,8 +5,11 @@
 //! `WebviewTextureTarget` is (re)created — first frame, resize, handle swap —
 //! bevy_cef touches the target `Image` asset, firing
 //! `AssetEvent::Modified { id }`. A consumer that manages its own material can
-//! listen for that event and `get_mut` its material asset to rebuild the bind
-//! group:
+//! listen for that event and deref-mutate its material asset (via `get_mut`)
+//! to rebuild the bind group. Bevy 0.19's `Assets::get_mut` returns an
+//! `AssetMut` guard that only queues `Modified` if actually deref-mutated (or
+//! `into_inner()` is called) before it drops — a bare `let _ = get_mut(..)`
+//! silently does nothing:
 //!
 //! ```ignore
 //! fn rebuild_on_webview_rebind(
@@ -18,7 +21,9 @@
 //!         if let AssetEvent::Modified { id } = event
 //!             && *id == my.target.id()
 //!         {
-//!             let _ = materials.get_mut(&my.material);
+//!             if let Some(material) = materials.get_mut(&my.material) {
+//!                 material.into_inner(); // force Modified → bind-group rebuild
+//!             }
 //!         }
 //!     }
 //! }

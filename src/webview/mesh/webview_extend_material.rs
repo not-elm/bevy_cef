@@ -89,7 +89,7 @@ fn render<E: MaterialExtension>(
 ) {
     for texture in er.read() {
         if let Ok(handle) = webviews.get(texture.webview)
-            && let Some(material) = materials.get_mut(handle.id())
+            && let Some(mut material) = materials.get_mut(handle.id())
             && let Some(image) = {
                 let handle = material
                     .base

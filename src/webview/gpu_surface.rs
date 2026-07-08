@@ -1,16 +1,17 @@
 //! [macOS GPU OSR — Approach 2] Import each webview's retained IOSurface and
-//! blit it into an owned GPU texture inside a Bevy render-graph node, then inject
-//! that owned texture into `RenderAssets<GpuImage>` so the webview mesh material
-//! samples the live page.
+//! blit it into an owned GPU texture via the `webview_blit` system (`RenderGraph`
+//! schedule), then inject that owned texture into `RenderAssets<GpuImage>` so the
+//! webview mesh material samples the live page.
 //!
-//! Why a render-graph node (not the `on_accelerated_paint` callback): Bevy owns
-//! ordered command submission — its render graph collects all GPU commands into
-//! one `RenderContext` and submits them once per frame, then presents. Doing an
-//! out-of-band `queue.submit` from the CEF callback (which runs in the `Main`
-//! schedule) races that ordered submit/present and corrupts rendering (the mesh
-//! goes black, no validation error). So the callback only *retains* the latest
-//! IOSurface; the import + blit is recorded into the frame's command encoder by
-//! `WebviewBlitNode`, and Bevy submits it in order.
+//! Why deferred to the `webview_blit` system (not the `on_accelerated_paint`
+//! callback): Bevy owns ordered command submission — its render graph collects all
+//! GPU commands into one `RenderContext` and submits them once per frame, then
+//! presents. Doing an out-of-band `queue.submit` from the CEF callback (which runs
+//! in the `Main` schedule) races that ordered submit/present and corrupts rendering
+//! (the mesh goes black, no validation error). So the callback only *retains* the
+//! latest IOSurface; the import + blit is recorded into the frame's command encoder
+//! by the `webview_blit` system (`RenderGraph` schedule, Begin set), and Bevy
+//! submits it in order.
 //!
 //! Frame flow (macOS):
 //! 1. Main world (`Update`): `allocate_webview_surfaces_for::<M>` (mesh, per
@@ -40,32 +41,31 @@
 //!    surfaces, get-or-creates the owned `WebviewGpuSurface` for each id (it must
 //!    exist before the material bind group is built), wraps each owned surface in a
 //!    `GpuImage`, and inserts it into `RenderAssets<GpuImage>` for the surface id.
-//! 5. Render graph (`WebviewBlitNode`, before `CameraDriverLabel`): import each
-//!    retained IOSurface into a transient wgpu texture and record a blit into the
-//!    frame's command encoder, filling the owned surface created in step 4. The
-//!    transient texture is dropped immediately — wgpu keeps recorded resources
-//!    (and, via the MTLTexture's own IOSurface reference, the surface) alive
-//!    until the submitted command buffer completes on the GPU.
+//! 5. `RenderGraph` schedule (`webview_blit` system, `RenderGraphSystems::Begin`):
+//!    import each retained IOSurface into a transient wgpu texture and record a blit
+//!    into the frame's command encoder, filling the owned surface created in step 4.
+//!    The transient texture is dropped immediately — wgpu keeps recorded resources
+//!    (and, via the MTLTexture's own IOSurface reference, the surface) alive until
+//!    the submitted command buffer completes on the GPU.
 //!
 //! The owned texture is a single stable buffer (MVP, no double-buffering): the
-//! node blits into the same texture each frame, and the injected `GpuImage`
-//! reuses the same `texture_view`, so the material bind group stays valid
-//! between rebind events.
+//! `webview_blit` system blits into the same texture each frame, and the injected
+//! `GpuImage` reuses the same `texture_view`, so the material bind group stays
+//! valid between rebind events.
 
 use crate::common::{WebviewIoSurface, WebviewSize, WebviewSource, WebviewTextureTarget};
 use crate::prelude::{WebviewExtendStandardMaterial, WebviewSurface};
 use crate::webview::texture_target::{WebviewGpuImageInjectSet, WebviewTextureSlot};
 use crate::webview::ui::WebviewUiMaterial;
-use bevy::asset::{AssetId, RenderAssetUsages};
+use bevy::asset::{Asset, AssetId, RenderAssetUsages};
 use bevy::platform::collections::{HashMap, HashSet};
 use bevy::prelude::*;
 use bevy::render::{
     Extract, Render, RenderApp, RenderSystems,
     erased_render_asset::prepare_erased_assets,
     render_asset::{RenderAssets, prepare_assets},
-    render_graph::{Node, NodeRunError, RenderGraph, RenderGraphContext, RenderLabel},
-    render_resource::{Extent3d, TextureFormat},
-    renderer::{RenderContext, RenderDevice},
+    render_resource::{Extent3d, TextureDescriptor, TextureFormat},
+    renderer::{RenderContext, RenderDevice, RenderGraph, RenderGraphSystems},
     texture::{DefaultImageSampler, GpuImage},
 };
 use bevy::ui_render::PreparedUiMaterial;
@@ -106,13 +106,9 @@ pub(crate) enum WebviewSurfaceSet {
     MarkChanged,
 }
 
-/// Render-graph label for the webview IOSurface import + blit node.
-#[derive(Debug, Hash, PartialEq, Eq, Clone, RenderLabel)]
-struct WebviewBlitLabel;
-
-/// [macOS GPU OSR] plugin: import each webview's retained IOSurface in a custom
-/// render-graph node and inject the owned GPU texture into the render world so
-/// the webview mesh renders the real page.
+/// [macOS GPU OSR] plugin: import each webview's retained IOSurface via the
+/// `webview_blit` system (`RenderGraph` schedule) and inject the owned GPU
+/// texture into the render world so the webview mesh renders the real page.
 pub struct WebviewGpuInjectPlugin;
 
 impl Plugin for WebviewGpuInjectPlugin {
@@ -188,10 +184,12 @@ impl Plugin for WebviewGpuInjectPlugin {
                     .before(prepare_assets::<PreparedUiMaterial<WebviewUiMaterial>>),
             );
 
-        // Before the camera driver, so the main passes sample the updated texture.
-        let mut render_graph = render_app.world_mut().resource_mut::<RenderGraph>();
-        render_graph.add_node(WebviewBlitLabel, WebviewBlitNode);
-        render_graph.add_node_edge(WebviewBlitLabel, bevy::render::graph::CameraDriverLabel);
+        // `RenderGraphSystems::Begin` is chained before `Render` (where
+        // `camera_driver` runs), and encoder recording order == submission
+        // order, so the blit lands before every camera pass samples the
+        // texture. Ordering against the concrete `camera_driver` fn would work
+        // too but couples us to bevy_core_pipeline internals (spec §3).
+        render_app.add_systems(RenderGraph, webview_blit.in_set(RenderGraphSystems::Begin));
     }
 }
 
@@ -200,7 +198,7 @@ impl Plugin for WebviewGpuInjectPlugin {
 /// The `surface` carries an owned +1 IOSurface use-count (a `RetainedIoSurface`,
 /// which is `Send`/`Sync`), so it stays valid across the main→render world
 /// handoff under pipelined rendering. Ownership flows: `Browsers` (drained) →
-/// main world → render world → `WebviewBlitNode` (import), then released on the
+/// main world → render world → `webview_blit` (import), then released on the
 /// next frame's extract (the Metal texture keeps its own IOSurface reference
 /// until the submitted commands complete).
 struct PendingIoSurface {
@@ -314,13 +312,13 @@ pub(crate) fn allocate_webview_surfaces_for<M: WebviewSurfaceSlot>(
                 commands.entity(entity).try_insert(WebviewSurface(handle));
             }
             (None, Some(surface)) => {
-                if let Some(material) = materials.get_mut(material_handle.id()) {
+                if let Some(mut material) = materials.get_mut(material_handle.id()) {
                     *material.webview_surface_slot_mut() = Some(surface.0.clone());
                 }
             }
             (None, None) => {
                 let handle = images.add(placeholder_surface_image(UVec2::ONE));
-                if let Some(material) = materials.get_mut(material_handle.id()) {
+                if let Some(mut material) = materials.get_mut(material_handle.id()) {
                     *material.webview_surface_slot_mut() = Some(handle.clone());
                 }
                 commands.entity(entity).try_insert(WebviewSurface(handle));
@@ -525,42 +523,34 @@ fn extract_live_webview_surface_ids(
     live.0.extend(surfaces.iter().map(|s| s.0.id()));
 }
 
-/// Render-graph node: import each retained IOSurface into a transient wgpu texture
-/// and record a blit into the frame's command encoder, targeting the owned
-/// destination surface. Records only — Bevy submits the encoder once at frame end.
-struct WebviewBlitNode;
+/// Render-graph-schedule system (`RenderGraphSystems::Begin`): import each
+/// retained IOSurface into a transient wgpu texture and record a blit into the
+/// frame's command encoder, targeting the owned destination surface. Records
+/// only — Bevy submits the recorded commands in `RenderGraphSystems::Submit`.
+fn webview_blit(
+    mut render_context: RenderContext,
+    extracted: Res<ExtractedWebviewIoSurfaces>,
+    surfaces: Res<WebviewGpuSurfaces>,
+) {
+    if extracted.0.is_empty() {
+        return;
+    }
 
-impl Node for WebviewBlitNode {
-    fn run<'w>(
-        &self,
-        _graph: &mut RenderGraphContext,
-        render_context: &mut RenderContext<'w>,
-        world: &'w World,
-    ) -> Result<(), NodeRunError> {
-        let extracted = world.resource::<ExtractedWebviewIoSurfaces>();
-        if extracted.0.is_empty() {
-            return Ok(());
+    let render_device = render_context.render_device().clone();
+    let encoder = render_context.command_encoder();
+
+    for entry in &extracted.0 {
+        let Some(surface) = surfaces.0.get(&entry.id) else {
+            continue;
+        };
+        if !surface.import_and_blit(&render_device, encoder, &entry.surface) {
+            bevy::log::error_once!(
+                "[macos-gpu-osr] IOSurface import failed ({}x{}); webview textures will \
+                 not update (the macOS GPU OSR path requires the Metal wgpu backend)",
+                entry.surface.width,
+                entry.surface.height
+            );
         }
-        let surfaces = world.resource::<WebviewGpuSurfaces>();
-
-        let render_device = render_context.render_device().clone();
-        let encoder = render_context.command_encoder();
-
-        for entry in &extracted.0 {
-            let Some(surface) = surfaces.0.get(&entry.id) else {
-                continue;
-            };
-            if !surface.import_and_blit(&render_device, encoder, &entry.surface) {
-                bevy::log::error_once!(
-                    "[macos-gpu-osr] IOSurface import failed ({}x{}); webview textures will \
-                     not update (the macOS GPU OSR path requires the Metal wgpu backend)",
-                    entry.surface.width,
-                    entry.surface.height
-                );
-            }
-        }
-
-        Ok(())
     }
 }
 
@@ -570,8 +560,9 @@ impl Node for WebviewBlitNode {
 /// `GpuImage`, and overwrite the `RenderAssets<GpuImage>` entry for that id.
 ///
 /// The owned texture is created here (not later in the frame) because it must
-/// exist before the material bind group is built. The `WebviewBlitNode` (render
-/// graph) fills this same texture's contents from the IOSurface each frame.
+/// exist before the material bind group is built. The `webview_blit`
+/// render-graph-schedule system fills this same texture's contents from the
+/// IOSurface each frame.
 fn inject_webview_gpu_images(
     mut surfaces: ResMut<WebviewGpuSurfaces>,
     mut gpu_images: ResMut<RenderAssets<GpuImage>>,
@@ -616,15 +607,38 @@ fn inject_webview_gpu_images(
         let gpu_image = GpuImage {
             texture: surface.texture.clone(),
             texture_view: surface.view.clone(),
-            texture_format: TextureFormat::Bgra8UnormSrgb,
-            texture_view_format: None,
             sampler: sampler.clone(),
-            size: surface.texture.size(),
-            mip_level_count: 1,
+            // Derived from the live texture so this can never drift from the
+            // descriptor `WebviewGpuSurface::new` (bevy_cef_core) actually used.
+            // `label`/`view_formats` have no accessors and stay literal — the
+            // surface is created with no extra view formats.
+            texture_descriptor: TextureDescriptor {
+                label: None,
+                size: surface.texture.size(),
+                mip_level_count: surface.texture.mip_level_count(),
+                sample_count: surface.texture.sample_count(),
+                dimension: surface.texture.dimension(),
+                format: surface.texture.format(),
+                usage: surface.texture.usage(),
+                view_formats: &[],
+            },
+            texture_view_descriptor: None,
             had_data: true,
         };
 
         gpu_images.insert(*id, gpu_image);
+    }
+}
+
+/// Force an `AssetEvent::Modified` for `id` without changing the asset.
+///
+/// Bevy 0.19's `Assets::get_mut` returns an `AssetMut` guard that only queues
+/// `Modified` if actually deref-mutated; a bare `let _ = assets.get_mut(id);`
+/// silently emits nothing. Every rebind-trick site below MUST go through this
+/// helper so the intent stays greppable and cannot silently regress.
+fn touch_asset<A: Asset>(assets: &mut Assets<A>, id: impl Into<AssetId<A>>) {
+    if let Some(asset) = assets.get_mut(id) {
+        asset.into_inner();
     }
 }
 
@@ -638,7 +652,7 @@ pub(crate) fn mark_webview_materials_changed_for<M: WebviewSurfaceSlot>(
     webviews: Query<&MeshMaterial3d<M>, (With<WebviewSource>, With<WebviewSurfaceRebind>)>,
 ) {
     for handle in webviews.iter() {
-        let _ = materials.get_mut(handle.id());
+        touch_asset(&mut materials, handle.id());
     }
 }
 
@@ -673,13 +687,13 @@ fn allocate_ui_webview_surfaces(
                 commands.entity(entity).try_insert(WebviewSurface(handle));
             }
             (None, Some(surface)) => {
-                if let Some(material) = materials.get_mut(material_handle.id()) {
+                if let Some(mut material) = materials.get_mut(material_handle.id()) {
                     material.surface = Some(surface.0.clone());
                 }
             }
             (None, None) => {
                 let handle = images.add(placeholder_surface_image(UVec2::ONE));
-                if let Some(material) = materials.get_mut(material_handle.id()) {
+                if let Some(mut material) = materials.get_mut(material_handle.id()) {
                     material.surface = Some(handle.clone());
                 }
                 commands.entity(entity).try_insert(WebviewSurface(handle));
@@ -699,7 +713,7 @@ fn mark_webview_ui_materials_changed(
     mut materials: ResMut<Assets<WebviewUiMaterial>>,
 ) {
     for handle in webviews.iter() {
-        let _ = materials.get_mut(handle.id());
+        touch_asset(&mut materials, handle.id());
     }
 }
 
@@ -768,7 +782,7 @@ fn mark_sprite_webview_images_changed(
     mut images: ResMut<Assets<Image>>,
 ) {
     for surface in webviews.iter() {
-        let _ = images.get_mut(surface.0.id());
+        touch_asset(&mut images, surface.0.id());
     }
 }
 
@@ -792,7 +806,7 @@ fn mark_target_webview_images_changed(
     mut images: ResMut<Assets<Image>>,
 ) {
     for surface in webviews.iter() {
-        let _ = images.get_mut(surface.0.id());
+        touch_asset(&mut images, surface.0.id());
     }
 }
 
@@ -824,6 +838,6 @@ pub(crate) fn mark_target_materials_changed_for<M: WebviewTextureSlot>(
         .map(|(id, _)| id)
         .collect();
     for id in to_touch {
-        let _ = materials.get_mut(id);
+        touch_asset(&mut materials, id);
     }
 }

@@ -68,13 +68,19 @@ fn send_render_textures_win(
 
 /// Copies a CPU `OnPaint` frame into an `Image`. Used only by the CPU-path
 /// consumers (Linux/Windows); macOS injects pixels directly via the GPU path.
+///
+/// Takes the `AssetMut<Image>` guard straight from `Assets::get_mut` so the
+/// unwrap required by Bevy 0.19's deref-mutation change tracking lives here
+/// once instead of at every CPU-path render system (deref-mutating the guard
+/// is what queues `AssetEvent::Modified` → the `GpuImage` re-upload).
 #[cfg(not(target_os = "macos"))]
-pub(crate) fn update_webview_image(texture: &RenderTextureMessage, image: &mut Image) {
+pub(crate) fn update_webview_image(texture: &RenderTextureMessage, mut image: AssetMut<'_, Image>) {
     let expected_len = (texture.width * texture.height * 4) as usize;
+    let dimensions_match = image.texture_descriptor.size.width == texture.width
+        && image.texture_descriptor.size.height == texture.height;
     if let Some(data) = image.data.as_mut()
+        && dimensions_match
         && data.len() == expected_len
-        && image.texture_descriptor.size.width == texture.width
-        && image.texture_descriptor.size.height == texture.height
     {
         data.copy_from_slice(&texture.buffer);
     } else {

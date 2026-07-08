@@ -76,9 +76,9 @@ pub struct RenderHandlerBuilder {
     /// Latest retained IOSurface for this webview's main view (Approach 2).
     ///
     /// `on_accelerated_paint` does no GPU work here — it only retains the latest
-    /// IOSurface into this slot. The render-graph node (`WebviewBlitNode`) imports
-    /// and blits it using the render-world device, so no `RenderDevice`/`RenderQueue`
-    /// is needed in the callback path.
+    /// IOSurface into this slot. The `webview_blit` render-graph-schedule system
+    /// imports and blits it using the render-world device, so no
+    /// `RenderDevice`/`RenderQueue` is needed in the callback path.
     #[cfg(target_os = "macos")]
     latest_iosurface: crate::browser_process::accelerated_paint::SharedRetainedIoSurface,
 }
@@ -270,8 +270,9 @@ impl ImplRenderHandler for RenderHandlerBuilder {
         // out-of-band `queue.submit` from this callback (which runs in the Main
         // schedule via `cef_do_message_loop_work`) corrupts rendering. So we only
         // *retain* the freshly delivered IOSurface and publish it to the latest-
-        // frame slot. The actual import + blit happens in a Bevy render-graph node
-        // (`WebviewBlitNode`) that records into the frame's command encoder.
+        // frame slot. The actual import + blit happens in the `webview_blit`
+        // render-graph-schedule system that records into the frame's command
+        // encoder.
         if !matches!(type_.as_ref(), cef_paint_element_type_t::PET_VIEW) {
             return;
         }

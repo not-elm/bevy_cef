@@ -16,7 +16,7 @@ resolver = "2"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.11.0"
+version = "0.12.0"
 edition = "2024"
 license = "Apache-2.0 OR MIT"
 authors = ["notelm"]
@@ -39,12 +39,12 @@ unexpected_cfgs = { level = "warn", check-cfg = [
 # Bare minimum. Each member crate enables exactly the bevy features it uses.
 # The render-process binaries only need `bevy::platform` (always available).
 # The browser-side library and top-level crate light up renderer features.
-bevy = { version = "0.18", default-features = false }
-bevy_remote = "0.18"
+bevy = { version = "0.19", default-features = false }
+bevy_remote = "0.19"
 cef = { version = "145.6.1+145.0.28" }
 cef-dll-sys = { version = "145.6.1+145.0.28", features = ["sandbox"] }
-bevy_cef = { path = ".", version = "0.11.0" }
-bevy_cef_core = { path = "crates/bevy_cef_core", version = "0.11.0", default-features = false }
+bevy_cef = { path = ".", version = "0.12.0" }
+bevy_cef_core = { path = "crates/bevy_cef_core", version = "0.12.0", default-features = false }
 async-channel = { version = "2.5" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1" }
@@ -71,6 +71,11 @@ bevy_cef = { path = ".", features = ["debug"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = { version = "0.2" }
+
+# On Linux, `bevy_winit` needs a windowing backend selected explicitly because
+# Bevy's default features (which would pull in `x11`) are disabled workspace-wide.
+[target.'cfg(target_os = "linux")'.dependencies]
+bevy = { workspace = true, features = ["x11", "wayland"] }
 
 [lints]
 workspace = true

@@ -73,7 +73,7 @@ impl Plugin for MessageLoopPlugin {
             self.no_sandbox,
         );
 
-        app.insert_non_send_resource(cef_app);
+        app.insert_non_send(cef_app);
 
         // On Windows, CEF runs its own message loop thread (multi_threaded_message_loop).
         // We insert a BrowsersProxy and CommandChannelReceiver instead of the
@@ -94,7 +94,7 @@ impl Plugin for MessageLoopPlugin {
         // On non-Windows platforms, use the external message pump.
         #[cfg(not(target_os = "windows"))]
         {
-            app.insert_non_send_resource(MessageLoopWorkingReceiver(rx));
+            app.insert_non_send(MessageLoopWorkingReceiver(rx));
             app.add_systems(Main, cef_do_message_loop_work);
 
             #[cfg(all(target_os = "macos", feature = "debug"))]
@@ -104,7 +104,7 @@ impl Plugin for MessageLoopPlugin {
             );
         }
 
-        app.insert_non_send_resource(RunOnMainThread)
+        app.insert_non_send(RunOnMainThread)
             .add_systems(Update, cef_shutdown.run_if(on_message::<AppExit>));
     }
 }
@@ -117,7 +117,7 @@ fn load_cef_library(app: &mut App) {
     #[cfg(all(target_os = "macos", not(feature = "debug")))]
     let loader = cef::library_loader::LibraryLoader::new(&std::env::current_exe().unwrap(), false);
     assert!(loader.load());
-    app.insert_non_send_resource(loader);
+    app.insert_non_send(loader);
 }
 
 #[cfg(target_os = "macos")]
