@@ -41,8 +41,8 @@ unexpected_cfgs = { level = "warn", check-cfg = [
 # The browser-side library and top-level crate light up renderer features.
 bevy = { version = "0.19", default-features = false }
 bevy_remote = "0.19"
-cef = { version = "145.6.1+145.0.28" }
-cef-dll-sys = { version = "145.6.1+145.0.28", features = ["sandbox"] }
+cef = { version = "149.3.0+149.0.6" }
+cef-dll-sys = { version = "149.3.0+149.0.6", features = ["sandbox"] }
 bevy_cef = { path = ".", version = "0.12.0" }
 bevy_cef_core = { path = "crates/bevy_cef_core", version = "0.12.0", default-features = false }
 async-channel = { version = "2.5" }
