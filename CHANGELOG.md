@@ -1,9 +1,10 @@
 ## v0.12.0
 
-### Breaking
+### Breaking Changes
 
-- **Bevy 0.19** / wgpu 29 support. Targets Bevy 0.19; no longer compatible with
-  Bevy 0.18.
+- Bevy 0.19 / wgpu 29 support. 
+- Update cef_rs version to 149.3.0+149.0.6
+  - Please update the CEF framework version using the Makefile setup command. 
 
 ### Changed
 
