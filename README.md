@@ -68,7 +68,7 @@ Please run the following command to install the CEF framework to local.
 When you build the project, the libraries will be automatically copied to the executable's directory.
 
 ```powershell
-> cargo install export-cef-dir@145.6.1+145.0.28 --force
+> cargo install export-cef-dir@149.3.0+149.0.6 --force
 > export-cef-dir --force "$HOME/.local/share/cef"
 ```
 
@@ -157,7 +157,7 @@ We welcome contributions! Here's how you can help:
 
 | Bevy   | bevy_cef       | CEF              |
 | ------ | -------------- | ---------------- |
-| 0.19   | 0.12.0         | 145.6.1+145.0.28 |
+| 0.19   | 0.12.0         | 149.3.0+149.0.6 |
 | 0.18   | 0.5.0 – 0.11.0 | 145.6.1+145.0.28 |
 | 0.18   | 0.2.0          | 144.4.0          |
 | 0.16   | 0.1.0          | 139              |
