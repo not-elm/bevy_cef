@@ -1,3 +1,17 @@
+## v0.13.0
+
+### Breaking Changes
+
+- Update cef_rs version to 152.3.0+152.0.6 (Chromium 152.0.7977.83)
+  - Please update the CEF framework version using the Makefile setup command.
+
+### Changed
+
+- **Internal:** removed a redundant `common::*` glob re-export from
+  `bevy_cef::prelude`. The same items already reach the prelude through
+  `webview::prelude::*` (which re-exports `crate::common::*` via
+  `webview::mesh`), so the public API is unchanged.
+
 ## v0.12.0
 
 ### Breaking Changes
