@@ -17,7 +17,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```
 CefPlugin (root — accepts CommandLineConfig, CefExtensions, root_cache_path)
 ├── LocalHostPlugin (cef://localhost/ scheme for local assets)
-├── MessageLoopPlugin (CEF init + per-frame cef_do_message_loop_work())
+├── MessageLoopPlugin (CEF init + cef_do_message_loop_work() pump)
 ├── WebviewCoreComponentsPlugin (component registration)
 ├── WebviewPlugin → MeshWebviewPlugin (lifecycle, materials, DevTools)
 ├── IpcPlugin (IpcRawEventPlugin + HostEmitPlugin)
@@ -42,7 +42,7 @@ CefPlugin (root — accepts CommandLineConfig, CefExtensions, root_cache_path)
 1. User adds `WebviewSource` component → auto-requires `WebviewSize`, `ZoomLevel`, `AudioMuted`, `PreloadScripts`
 2. System resolves `WebviewSource` → internal `ResolvedWebviewUri` (lazy, change detection); runtime changes trigger navigation without browser recreation
 3. `WebviewPlugin` detects new `ResolvedWebviewUri` → calls `Browsers::create_browser()`
-4. CEF renders offscreen → `TextureSender` delivers texture to Bevy
+4. CEF renders offscreen → the frame reaches Bevy through a latest-frame-wins `Rc<Cell>` texture slot (CPU `OnPaint`, Windows/Linux) or a retained IOSurface (macOS GPU path)
 5. `WebviewMaterialPlugin` applies texture to mesh/sprite material
 6. User input (mouse/keyboard) → observers → `Browsers` methods forward to CEF
 

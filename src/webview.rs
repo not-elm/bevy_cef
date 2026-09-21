@@ -92,8 +92,8 @@ pub struct RequestCloseDevtool {
 ///     .insert_resource(BeginFrameInterval(core::time::Duration::from_millis(1000 / 60)));
 /// ```
 ///
-/// Has no effect on Windows: there CEF drives compositing itself at 60 Hz
-/// (see `EXTERNAL_BEGIN_FRAME`), so no external begin frames are sent.
+/// Has no effect on Windows: there CEF drives compositing itself at 60 Hz, so no
+/// external begin frames are sent.
 #[derive(Resource)]
 pub struct BeginFrameInterval(pub Duration);
 
