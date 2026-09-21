@@ -212,8 +212,10 @@ No new error paths. `cef_initialize`'s existing assertion covers initialization 
   pins → `0.13.0`; `Cargo.lock` updated accordingly.
 - `CLAUDE.md`: Multi-Process Design / message loop bullets, Key Non-Obvious Patterns, Platform
   Notes (Windows), Version Compatibility table.
-- Version compatibility tables: `README.md`, `docs/website/docs/intro.md`,
-  `docs/website/docs/reference/version-compatibility.md`.
+- Version compatibility tables: `README.md` and `CLAUDE.md`. The website tables
+  (`docs/website/docs/intro.md`, `reference/version-compatibility.md`) are already stale
+  independently of this change (they list `0.4.0-dev`) and are left alone.
+- `docs/website/docs/concepts.md`: the "called once per Bevy frame" sentence.
 - In-code comments: the plugin doc and inline comments in `src/common/message_loop.rs`, the
   Windows comment block in `src/webview.rs`, and the `renderer_handler.rs` comments.
   (No `.md` file outside the changelog mentions MTML or `BrowsersProxy` today.)
