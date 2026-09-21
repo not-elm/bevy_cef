@@ -53,7 +53,7 @@
 - [ ] **Step 1: Record the baseline**
 
 Run: `cargo test -p bevy_cef_core --all-features 2>&1 | tail -5`
-Expected: `test result: ok.` Note the passed count so you can compare in Step 8.
+Expected: `test result: ok.` Note the passed count. It may legitimately drop in Step 8 by exactly the number of `#[test]` functions inside the two files you delete (`grep -c '#\[test\]' crates/bevy_cef_core/src/browser_process/cef_command.rs crates/bevy_cef_core/src/browser_process/cef_thread.rs`).
 
 - [ ] **Step 2: Remove the Windows-only modules and their exports**
 
@@ -125,7 +125,7 @@ pub type SharedDpr = std::rc::Rc<std::cell::Cell<f32>>;
 
 - [ ] **Step 4: `browsers.rs` — drop the Windows gates**
 
-1. Delete every `#[cfg(not(target_os = "windows"))]` attribute line in this file (imports at the top, `create_browser`, `request_context`, `client_handler`, `create_extra_info`). Where the attribute is followed by `#[allow(deprecated)]` or `#[allow(clippy::too_many_arguments)]`, keep the `allow`.
+1. Delete the `#[cfg(not(target_os = "windows"))]` attribute line above each import at the top of the file and above `create_browser`, `request_context`, `client_handler`, `create_extra_info`. Where the attribute is followed by `#[allow(deprecated)]` or `#[allow(clippy::too_many_arguments)]`, keep the `allow`. (The two remaining `not(windows)` attributes, inside `resize` and `set_dpr`, are handled by item 6 together with their Windows arms — do not strip them on their own.)
 2. Replace every `#[cfg(target_os = "linux")]` in this file with `#[cfg(not(target_os = "macos"))]` — including the inline parameter attributes in `client_handler` (`#[cfg(target_os = "linux")] view_slot: SharedTexture,` → `#[cfg(not(target_os = "macos"))] view_slot: SharedTexture,`), the `WebviewBrowser` fields, the locals/arguments in `create_browser`, the `RenderHandlerBuilder::build` call in `client_handler`, and `try_receive_textures`.
    **Exception:** the `parent_window` line in `create_browser` (next item).
 3. In `create_browser`, replace
@@ -165,7 +165,7 @@ pub type SharedDpr = std::rc::Rc<std::cell::Cell<f32>>;
 pub const EXTERNAL_BEGIN_FRAME: bool = !cfg!(target_os = "windows");
 ```
 
-6. `resize`: replace the cfg'd pair with `browser.size.set(size);`. `set_dpr`: replace the cfg'd pair with `browser.dpr.set(dpr);`.
+6. `resize`: delete the `#[cfg(not(target_os = "windows"))]` line above `browser.size.set(size);` AND the whole `#[cfg(target_os = "windows")] { *browser.size.lock().unwrap() = size; }` block, leaving the single statement `browser.size.set(size);`. `set_dpr`: same, leaving `browser.dpr.set(dpr);`.
 7. Update the `try_receive_textures` doc line `/// Linux-only: the CPU `OnPaint` path. macOS uses the GPU IOSurface path.` → `/// Non-macOS only: the CPU `OnPaint` path. macOS uses the GPU IOSurface path.`
 
 - [ ] **Step 5: Check the core crate compiles**
@@ -182,9 +182,14 @@ Expected: `Finished` with no warnings.
 
 Run:
 ```bash
-grep -rnE "BrowsersProxy|BrowsersCefSide|CefCommand|SendRawWindowHandle|drain_commands|init_cef_browsers|TextureSender|Arc<Mutex|not\(target_os = \"windows\"\)" crates/bevy_cef_core/src
+grep -rnE "BrowsersProxy|BrowsersCefSide|CefCommand|SendRawWindowHandle|drain_commands|init_cef_browsers|TextureSender" crates/bevy_cef_core/src
+grep -nE "Arc<Mutex|not\(target_os = \"windows\"\)|target_os = \"linux\"" crates/bevy_cef_core/src/browser_process/renderer_handler.rs
+grep -nE "Arc<Mutex|not\(target_os = \"windows\"\)" crates/bevy_cef_core/src/browser_process/browsers.rs
 ```
-Expected: no output.
+Expected: no output from any of the three. (`Arc<Mutex` and `not(windows)` legitimately remain in other core files such as `localhost.rs`, `custom_scheme.rs`, `util.rs` — leave those alone.)
+
+Run: `grep -n 'target_os = "linux"' crates/bevy_cef_core/src/browser_process/browsers.rs`
+Expected: exactly one hit — the `parent_window: 0` arm.
 
 Run: `grep -rn 'target_os = "windows"' crates/bevy_cef_core/src/browser_process/browsers.rs crates/bevy_cef_core/src/browser_process/renderer_handler.rs`
 Expected: exactly two hits, both in `browsers.rs`: the `#[cfg(target_os = "windows")] parent_window` arm and the `EXTERNAL_BEGIN_FRAME` const.
@@ -192,7 +197,7 @@ Expected: exactly two hits, both in `browsers.rs`: the `#[cfg(target_os = "windo
 - [ ] **Step 8: Run the core tests**
 
 Run: `cargo test -p bevy_cef_core --all-features 2>&1 | tail -5`
-Expected: `test result: ok.` with the same passed count as Step 1.
+Expected: `test result: ok.`, and the passed count equals Step 1's count minus the tests that lived in the two deleted files.
 
 - [ ] **Step 9: Commit**
 
@@ -364,47 +369,49 @@ with
         app.add_systems(Update, send_render_textures);
 ```
 
-Change the gate on `fn send_render_textures` from `#[cfg(target_os = "linux")]` to `#[cfg(not(target_os = "macos"))]`, and delete `send_render_textures_win` entirely. If a `use bevy_cef_core::prelude::Browsers`-style import in this file is gated on `linux`, widen it to `not(target_os = "macos")` the same way.
+Change the gate on `fn send_render_textures` from `#[cfg(target_os = "linux")]` to `#[cfg(not(target_os = "macos"))]`, and delete `send_render_textures_win` entirely. The imports in this file are already gated `not(target_os = "macos")`; leave them.
 
 - [ ] **Step 4: Apply the collapse recipe to the input observers**
 
-- `src/webview/mesh.rs`: delete `setup_observers_win`, `on_pointer_move_win`, `on_pointer_pressed_win`, `on_pointer_released_win`, `on_mouse_wheel_win`, the Windows `use`, and the Windows registration in the plugin `build`; un-gate the twins.
+- `src/webview/mesh.rs`: delete `setup_observers_win`, `on_pointer_move_win`, `on_pointer_pressed_win`, `on_pointer_released_win`, `on_mouse_wheel_win`, and the Windows registration in the plugin `build`; un-gate the twins. (This file imports `bevy_cef_core::prelude::*` ungated — there is no Windows `use` to delete.)
 - `src/webview/webview_sprite.rs`: delete `setup_observers_win`, `apply_on_pointer_move_win`, `apply_on_pointer_pressed_win`, `apply_on_pointer_released_win`, `on_mouse_wheel_win`, the Windows `use`, and the Windows registration; un-gate the twins. The `WebviewIoSurface` / `sprite_pos_transparent` pieces are macOS-gated — leave them.
-- `src/webview/ui/input.rs`: delete the four `#[cfg(target_os = "windows")]` functions (`on_ui_pointer_move`, `on_ui_pointer_pressed`, `on_ui_pointer_released`, `on_ui_pointer_scroll` — the second definition of each, the ones taking `proxy: Res<BrowsersProxy>`) and the Windows `use`; un-gate the first definitions and `resolve_ui_pos`. `resolve_ui_pos` already contains the `#[cfg(not(target_os = "macos"))]` branch Windows will use. Also fix the now-stale sentence in the `setup_ui_observers` doc comment: replace "The platform split lives in the observer functions, not here." with "The macOS alpha hit-test split lives in `resolve_ui_pos`, not here."
+- `src/webview/ui/input.rs`: delete the four `#[cfg(target_os = "windows")]` functions (`on_ui_pointer_move`, `on_ui_pointer_pressed`, `on_ui_pointer_released`, `on_ui_pointer_scroll` — the second definition of each, the ones taking `proxy: Res<BrowsersProxy>`) and the Windows `use`; un-gate the first definitions and `resolve_ui_pos`. `resolve_ui_pos` already contains the `#[cfg(not(target_os = "macos"))]` branch Windows will use. Also fix the now-stale sentence in the `setup_ui_observers` doc comment. It is wrapped across two `///` lines (`… exactly once. The` / `/// platform split lives in the observer functions, not here.`); rewrite it so it reads "The macOS alpha hit-test split lives in `resolve_ui_pos`, not here."
 
 - [ ] **Step 5: Apply the collapse recipe to the identical pairs**
 
 - `src/keyboard.rs`: delete `send_key_event_win`, `ime_event_win`, the Windows `use`, and the `#[cfg(target_os = "windows")] app.add_systems(…)` block in `KeyboardPlugin::build`; un-gate the twin registration, `send_key_event`, and `ime_event`. Keep `#[cfg(target_os = "macos")]` inside `send_key_event` and the `#[cfg_attr(not(target_os = "macos"), allow(dead_code))]` near line 364.
 - `src/focus.rs`: delete `apply_webview_focus_win` + Windows `use` + Windows registration; un-gate the twins. In the surviving `apply_webview_focus`, keep the long `// NOTE:` comment.
-- `src/zoom.rs`: delete `sync_zoom_win`; `src/mute.rs`: delete `sync_audio_mute_win`; `src/common/dpi.rs`: delete `commit_webview_dpr_system_win`; `src/common/ipc/host_emit.rs`: delete `host_emit_win`; `src/common/localhost/responser.rs`: delete `hot_reload_win`. In each, also delete the Windows `use` and Windows registration, and un-gate the twins.
+- `src/zoom.rs`: delete `sync_zoom_win`; `src/mute.rs`: delete `sync_audio_mute_win`; `src/common/dpi.rs`: delete `commit_webview_dpr_system_win`; `src/common/ipc/host_emit.rs`: delete `host_emit_win`; `src/common/localhost/responser.rs`: delete `hot_reload_win`. In each, also delete the Windows registration and un-gate the twins. A cfg'd `use` pair exists in `zoom.rs`, `common/dpi.rs` and `common/ipc/host_emit.rs` (delete the Windows `use`, un-gate the other); `mute.rs` and `responser.rs` have none.
 - `src/navigation.rs`: delete the four `#[cfg(target_os = "windows")]` observers (`apply_request_go_back`, `apply_request_go_forward`, `apply_request_navigate`, `apply_request_reload` — the ones taking `proxy: Res<BrowsersProxy>`) and the Windows `use`; un-gate the first definitions.
 
 - [ ] **Step 6: `src/drag.rs` and `src/resize/plugin.rs` — cfg'd parameters and call blocks**
 
-In both files each affected system has a parameter pair and one or more call-site pairs. Apply recipe item 3 to the parameters. For each call-site pair keep the non-Windows form. Example from `src/drag.rs` — replace
+In both files each affected system has a parameter pair and one or more call-site pairs. Apply recipe item 3 to the parameters. The call-site pairs look like this (real shape, `src/drag.rs`):
 
 ```rust
     #[cfg(not(target_os = "windows"))]
-    browsers.send_mouse_move(/* … */ input.get_pressed(), /* … */);
+    browsers.send_mouse_move(
+        &webview,
+        std::iter::empty::<&MouseButton>(),
+        pixel_pos,
+        true,
+    );
     #[cfg(target_os = "windows")]
-    {
-        let buttons: Vec<MouseButton> = input.get_pressed().copied().collect();
-        browsers.send_mouse_move(/* … */ &buttons, /* … */);
-    }
+    browsers.send_mouse_move(&webview, &[], pixel_pos, true);
 ```
 
-with just the first call (without its attribute), keeping its actual arguments exactly as they are in the file. Sites: `src/drag.rs` around lines 155-156, 203-215, 285-286, 298-301; `src/resize/plugin.rs` around lines 71-72, 135-148, 175-188.
+For each pair: delete the `#[cfg(target_os = "windows")]` line together with the single `send_mouse_move(…, &[], …);` statement under it, and delete the `#[cfg(not(target_os = "windows"))]` line above the surviving call. Keep the surviving call's arguments exactly as they are. Sites: `src/drag.rs` lines 155-156 (params), 203-211, 285-286 (params), 298-301; `src/resize/plugin.rs` lines 71-72 (params), 135-143, 175-183. `grep -n "&\[\]," src/drag.rs src/resize/plugin.rs` must print nothing afterwards.
 
 - [ ] **Step 7: Compile the workspace**
 
 Run: `cargo check --workspace --all-features --all-targets --message-format=short 2>&1 | grep -E "^error|error\[|^warning|Finished"`
-Expected: `Finished`. One warning is pre-existing and out of scope: `unused import: common::*` at `src/lib.rs:40` (it exists at the pipeline start commit `b97db28`). Fix every other warning. Typical fallout: an import that was only used by a deleted `_win` function (remove it), or `MouseButton` no longer needed in a file (remove it).
+Expected: `Finished`. One warning was present on Windows at the pipeline start commit `b97db28`: `unused import: common::*` at `src/lib.rs:40`. Windows now compiles the same item set as Linux (which CI lints with `-Dwarnings`), so it is expected to disappear; if it is still there, it is out of scope — do not edit `src/lib.rs`. Fix every other warning. Typical fallout: an import that was only used by a deleted `_win` function (remove it).
 
 - [ ] **Step 8: Residue greps**
 
 Run:
 ```bash
-grep -rnE "BrowsersProxy|CefCommand|drain_commands|init_cef_browsers|CommandChannelReceiver|TextureReceiverRes|TextureSenderRes|TextureSender|multi_threaded_message_loop" src crates examples
+grep -rnE "BrowsersProxy|CefCommand|drain_commands|init_cef_browsers|CommandChannelReceiver|TextureReceiverRes|TextureSenderRes|TextureSender|multi_threaded_message_loop: true" src crates examples
 grep -rnE "fn \w+_win\b" src crates
 grep -rn 'target_os = "windows"' src
 ```
@@ -426,7 +433,7 @@ Expected: no output.
 ```bash
 cargo build --example simple --message-format=short 2>&1 | grep -E "^error|Finished"
 ./target/debug/examples/simple.exe > /tmp/simple_smoke.log 2>&1 & pid=$!; sleep 9
-kill -0 $pid && echo ALIVE; powershell -NoProfile -Command "Stop-Process -Name simple -Force -ErrorAction SilentlyContinue"
+kill -0 $pid && echo ALIVE; taskkill //F //T //IM simple.exe > /dev/null 2>&1; wait $pid 2>/dev/null
 grep -ci panicked /tmp/simple_smoke.log
 ```
 Expected: `Finished`, `ALIVE`, and `0`.
@@ -530,9 +537,13 @@ Do NOT edit `docs/website/docs/intro.md` or `docs/website/docs/reference/version
 
 `docs/website/docs/concepts.md` line 22: replace the sentence "Instead, `cef_do_message_loop_work()` is called once per Bevy frame in the `Main` schedule." with "Instead, on every platform `cef_do_message_loop_work()` runs from a system in the `Main` schedule whenever CEF requests work (throttled to a 4 ms minimum interval, with a 30 Hz fallback)."
 
+Same file, next paragraph (line 24): replace "Each Bevy frame, the message loop plugin gives CEF a chance to process pending work" with "When CEF has pending work, the message loop plugin lets it run during the Bevy frame". Line 26: replace "handles initialization and per-frame pumping" with "handles initialization and pumping". Line 108 (plugin tree): replace `(CEF init + per-frame cef_do_message_loop_work())` with `(CEF init + cef_do_message_loop_work() pump)`.
+
+`CLAUDE.md`'s "Multi-Process Design" section makes no threading-model statement, so it needs no edit.
+
 - [ ] **Step 5: Verify and commit**
 
-Run: `grep -rnE "BrowsersProxy|multi_threaded|MTML" --include=*.md . | grep -v "^./CHANGELOG.md\|^./docs/superpowers/\|^./target"`
+Run: `grep -rnE "BrowsersProxy|MTML|multi_threaded_message_loop: true" --include=*.md . | grep -v "^./CHANGELOG.md\|^./docs/superpowers/\|^./target\|^./.superpowers/"`
 Expected: no output.
 
 Run: `cargo fmt --all --check && cargo check --workspace --locked --message-format=short 2>&1 | grep -E "^error|Finished"`
@@ -569,15 +580,19 @@ Expected: first two print nothing. The third prints exactly these files:
 - [ ] **Step 2: Build every example individually and smoke-run the windowed ones**
 
 ```bash
-for ex in $(ls examples/*.rs | xargs -n1 basename | sed 's/\.rs$//'); do
+for f in examples/*.rs; do
+  ex=$(basename "$f" .rs)
   r=$(cargo build --example $ex --message-format=short 2>&1 | grep -E "^error|Finished" | head -1)
+  [[ $r == *Finished* ]] || { echo "$ex | BUILD FAILED: $r"; continue; }
   ./target/debug/examples/$ex.exe > /tmp/smoke_$ex.log 2>&1 & pid=$!; sleep 9
   alive=no; kill -0 $pid 2>/dev/null && alive=yes
-  powershell -NoProfile -Command "Stop-Process -Name $ex -Force -ErrorAction SilentlyContinue"; wait $pid 2>/dev/null
-  echo "$ex | ${r:0:12} | alive=$alive | panics=$(grep -ci panicked /tmp/smoke_$ex.log)"
+  taskkill //F //T //IM $ex.exe > /dev/null 2>&1; wait $pid 2>/dev/null
+  echo "$ex | alive=$alive | panics=$(grep -ci panicked /tmp/smoke_$ex.log)"
 done
 ```
-Expected: every line shows `Finished`, `alive=yes`, `panics=0`. (`spike_probe` must not be in `examples/` yet for this step.)
+`taskkill //T` also ends the CEF child processes, so the next example does not collide on CEF's cache lock. Make sure no unrelated program with an example's name (e.g. `simple.exe`) is running.
+
+Expected: no `BUILD FAILED` line; every line shows `alive=yes`, `panics=0`. (`spike_probe` must not be in `examples/` yet for this step.)
 
 - [ ] **Step 3: Probe run**
 
