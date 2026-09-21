@@ -1,59 +1,56 @@
-#[cfg(not(target_os = "windows"))]
 use crate::browser_process::BrpHandler;
-#[cfg(not(target_os = "windows"))]
 use crate::browser_process::ClientHandlerBuilder;
-#[cfg(not(target_os = "windows"))]
 use crate::browser_process::client_handler::{IpcEventRaw, JsEmitEventHandler};
 use crate::prelude::IntoString;
 use crate::prelude::*;
-#[cfg(not(target_os = "windows"))]
 use async_channel::Sender;
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
-#[cfg(not(target_os = "windows"))]
 use bevy_remote::BrpMessage;
 use cef::{
     Browser, BrowserHost, BrowserSettings, CompositionUnderline, ImplBrowser, ImplBrowserHost,
     ImplFrame, ImplListValue, ImplProcessMessage, MouseButtonType, ProcessId, Range, WindowInfo,
     process_message_create,
 };
-#[cfg(not(target_os = "windows"))]
 use cef::{
     CefString, Client, DictionaryValue, ImplDictionaryValue, ImplRequestContext, RequestContext,
     RequestContextSettings, browser_host_create_browser_sync, dictionary_value_create,
 };
 use cef_dll_sys::{cef_event_flags_t, cef_mouse_button_type_t};
-#[cfg(not(target_os = "windows"))]
 #[allow(deprecated)]
 use raw_window_handle::RawWindowHandle;
-#[cfg(not(target_os = "windows"))]
 use std::cell::Cell;
-#[cfg(not(target_os = "windows"))]
 use std::rc::Rc;
 
 pub(crate) mod devtool_render_handler;
 mod keyboard;
 
 use crate::browser_process::browsers::devtool_render_handler::DevToolRenderHandlerBuilder;
-#[cfg(not(target_os = "windows"))]
 use crate::browser_process::display_handler::{
     AddressChangedSenderInner, DisplayHandlerBuilder, SystemCursorIconSenderInner,
     TitleChangedSenderInner,
 };
-#[cfg(not(target_os = "windows"))]
 use crate::browser_process::drag_handler::{DragHandlerBuilder, DraggableRegionSenderInner};
-#[cfg(not(target_os = "windows"))]
 use crate::browser_process::load_handler::{LoadHandlerBuilder, LoadHandlerSenderInner};
 pub use keyboard::*;
+
+/// Whether bevy_cef drives CEF compositing with `SendExternalBeginFrame`.
+///
+/// `false` on Windows: CEF composites on its own at `windowless_frame_rate`. With
+/// externally driven begin frames, opening DevTools on Windows permanently stops the
+/// inspected webview's rAF and painting. This one flag decides both
+/// `WindowInfo::external_begin_frame_enabled` and whether the `send_external_begin_frame`
+/// system is scheduled, so the two can never disagree.
+pub const EXTERNAL_BEGIN_FRAME: bool = !cfg!(target_os = "windows");
 
 pub struct WebviewBrowser {
     pub client: Browser,
     pub host: BrowserHost,
     pub size: SharedViewSize,
     pub dpr: SharedDpr,
-    #[cfg(target_os = "linux")]
+    #[cfg(not(target_os = "macos"))]
     pub view_slot: SharedTexture,
-    #[cfg(target_os = "linux")]
+    #[cfg(not(target_os = "macos"))]
     pub popup_slot: SharedTexture,
     /// [macOS GPU OSR] Latest IOSurface retained by `on_accelerated_paint`
     /// (Approach 2). Drained by the main-world collect system for extraction
@@ -85,7 +82,6 @@ pub struct Browsers {
 }
 
 impl Browsers {
-    #[cfg(not(target_os = "windows"))]
     #[allow(clippy::too_many_arguments)]
     pub fn create_browser(
         &mut self,
@@ -107,9 +103,9 @@ impl Browsers {
         let mut context = Self::request_context(requester);
         let size: SharedViewSize = Rc::new(Cell::new(webview_size));
         let dpr: SharedDpr = Rc::new(Cell::new(initial_dpr));
-        #[cfg(target_os = "linux")]
+        #[cfg(not(target_os = "macos"))]
         let view_slot: SharedTexture = Rc::new(Cell::new(None));
-        #[cfg(target_os = "linux")]
+        #[cfg(not(target_os = "macos"))]
         let popup_slot: SharedTexture = Rc::new(Cell::new(None));
         #[cfg(target_os = "macos")]
         let latest_iosurface: crate::browser_process::accelerated_paint::SharedRetainedIoSurface =
@@ -117,7 +113,7 @@ impl Browsers {
         let browser = browser_host_create_browser_sync(
             Some(&WindowInfo {
                 windowless_rendering_enabled: true as _,
-                external_begin_frame_enabled: true as _,
+                external_begin_frame_enabled: EXTERNAL_BEGIN_FRAME as _,
                 // macOS GPU OSR: ask CEF to deliver GPU shared textures (IOSurface)
                 // via on_accelerated_paint instead of CPU buffers via on_paint.
                 #[cfg(target_os = "macos")]
@@ -130,14 +126,21 @@ impl Browsers {
                 // Windowless rendering does not require a parent window handle on Linux.
                 #[cfg(target_os = "linux")]
                 parent_window: 0,
+                #[cfg(target_os = "windows")]
+                parent_window: match _window_handle {
+                    Some(RawWindowHandle::Win32(handle)) => {
+                        cef_dll_sys::HWND(handle.hwnd.get() as _)
+                    }
+                    _ => cef_dll_sys::HWND(std::ptr::null_mut()),
+                },
                 ..Default::default()
             }),
             Some(&mut self.client_handler(
                 webview,
                 size.clone(),
-                #[cfg(target_os = "linux")]
+                #[cfg(not(target_os = "macos"))]
                 view_slot.clone(),
-                #[cfg(target_os = "linux")]
+                #[cfg(not(target_os = "macos"))]
                 popup_slot.clone(),
                 dpr.clone(),
                 ipc_event_sender,
@@ -165,9 +168,9 @@ impl Browsers {
             client: browser,
             size,
             dpr,
-            #[cfg(target_os = "linux")]
+            #[cfg(not(target_os = "macos"))]
             view_slot,
-            #[cfg(target_os = "linux")]
+            #[cfg(not(target_os = "macos"))]
             popup_slot,
             #[cfg(target_os = "macos")]
             latest_iosurface,
@@ -348,12 +351,7 @@ impl Browsers {
 
     pub fn resize(&self, webview: &Entity, size: Vec2) {
         if let Some(browser) = self.browsers.get(webview) {
-            #[cfg(not(target_os = "windows"))]
             browser.size.set(size);
-            #[cfg(target_os = "windows")]
-            {
-                *browser.size.lock().unwrap() = size;
-            }
             browser.host.was_resized();
         }
     }
@@ -364,12 +362,7 @@ impl Browsers {
     /// CEF re-queries `GetScreenInfo` with the stale value.
     pub fn set_dpr(&self, webview: &Entity, dpr: f32) {
         if let Some(browser) = self.browsers.get(webview) {
-            #[cfg(not(target_os = "windows"))]
             browser.dpr.set(dpr);
-            #[cfg(target_os = "windows")]
-            {
-                *browser.dpr.lock().unwrap() = dpr;
-            }
         }
     }
 
@@ -401,8 +394,8 @@ impl Browsers {
 
     /// Drains the latest texture from each webview's view and popup slots.
     ///
-    /// Linux-only: the CPU `OnPaint` path. macOS uses the GPU IOSurface path.
-    #[cfg(target_os = "linux")]
+    /// Non-macOS only: the CPU `OnPaint` path. macOS uses the GPU IOSurface path.
+    #[cfg(not(target_os = "macos"))]
     pub fn try_receive_textures(&self) -> impl Iterator<Item = RenderTextureMessage> + '_ {
         self.browsers.values().flat_map(|b| {
             [b.view_slot.take(), b.popup_slot.take()]
@@ -610,7 +603,6 @@ impl Browsers {
         }
     }
 
-    #[cfg(not(target_os = "windows"))]
     fn request_context(requester: Requester) -> Option<RequestContext> {
         let mut context = cef::request_context_create_context(
             Some(&RequestContextSettings::default()),
@@ -627,14 +619,13 @@ impl Browsers {
         context
     }
 
-    #[cfg(not(target_os = "windows"))]
     #[allow(clippy::too_many_arguments)]
     fn client_handler(
         &self,
         webview: Entity,
         size: SharedViewSize,
-        #[cfg(target_os = "linux")] view_slot: SharedTexture,
-        #[cfg(target_os = "linux")] popup_slot: SharedTexture,
+        #[cfg(not(target_os = "macos"))] view_slot: SharedTexture,
+        #[cfg(not(target_os = "macos"))] popup_slot: SharedTexture,
         dpr: SharedDpr,
         ipc_event_sender: Sender<IpcEventRaw>,
         brp_sender: Sender<BrpMessage>,
@@ -649,7 +640,7 @@ impl Browsers {
         #[cfg(target_os = "macos")]
         let render_handler =
             RenderHandlerBuilder::build(webview, size.clone(), dpr, latest_iosurface);
-        #[cfg(target_os = "linux")]
+        #[cfg(not(target_os = "macos"))]
         let render_handler =
             RenderHandlerBuilder::build(webview, view_slot, popup_slot, size.clone(), dpr);
         ClientHandlerBuilder::new(render_handler)
@@ -682,7 +673,6 @@ impl Browsers {
             .and_then(|b| b.client.focused_frame().is_some().then_some(b))
     }
 
-    #[cfg(not(target_os = "windows"))]
     fn create_extra_info(scripts: &[String]) -> Option<DictionaryValue> {
         if scripts.is_empty() {
             return None;

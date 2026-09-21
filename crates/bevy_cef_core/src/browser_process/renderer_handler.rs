@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use cef::rc::{Rc, RcImpl};
 use cef::*;
 use cef_dll_sys::cef_paint_element_type_t;
-#[cfg(target_os = "linux")]
+#[cfg(not(target_os = "macos"))]
 use std::cell::Cell;
 use std::os::raw::c_int;
 
@@ -13,13 +13,10 @@ use std::os::raw::c_int;
 /// Bevy main thread under `external_message_pump` mode). This eliminates all
 /// synchronization overhead and naturally provides "latest frame wins" semantics.
 ///
-/// Linux-only: the CPU `OnPaint` path. macOS uses the GPU IOSurface accelerated-paint
-/// path (no slots); Windows uses `TextureSender`.
-#[cfg(target_os = "linux")]
+/// Non-macOS only: the CPU `OnPaint` path (Linux and Windows). macOS uses the GPU
+/// IOSurface accelerated-paint path (no slots).
+#[cfg(not(target_os = "macos"))]
 pub type SharedTexture = std::rc::Rc<Cell<Option<RenderTextureMessage>>>;
-
-#[cfg(target_os = "windows")]
-pub type TextureSender = async_channel::Sender<RenderTextureMessage>;
 
 /// The texture structure passed from [`CefRenderHandler::OnPaint`](https://cef-builds.spotifycdn.com/docs/106.1/classCefRenderHandler.html#a6547d5c9dd472e6b84706dc81d3f1741).
 #[derive(Debug, Clone, PartialEq, Message)]
@@ -44,20 +41,13 @@ pub enum RenderPaintElementType {
     Popup,
 }
 
-#[cfg(not(target_os = "windows"))]
 pub type SharedViewSize = std::rc::Rc<std::cell::Cell<Vec2>>;
-#[cfg(target_os = "windows")]
-pub type SharedViewSize = std::sync::Arc<std::sync::Mutex<Vec2>>;
 
-/// Thread-safe slot for a webview's current `device_scale_factor`.
+/// Slot for a webview's current `device_scale_factor`.
 ///
-/// Mirrors `SharedViewSize`'s platform split: on non-Windows the CEF UI
-/// thread is the Bevy main thread, so no locking is needed; on Windows the
-/// CEF UI thread is separate, so an `Arc<Mutex<_>>` is required.
-#[cfg(not(target_os = "windows"))]
+/// The CEF UI thread is the Bevy main thread on every platform
+/// (`external_message_pump`), so no locking is needed.
 pub type SharedDpr = std::rc::Rc<std::cell::Cell<f32>>;
-#[cfg(target_os = "windows")]
-pub type SharedDpr = std::sync::Arc<std::sync::Mutex<f32>>;
 
 /// ## Reference
 ///
@@ -65,12 +55,10 @@ pub type SharedDpr = std::sync::Arc<std::sync::Mutex<f32>>;
 pub struct RenderHandlerBuilder {
     object: *mut RcImpl<sys::cef_render_handler_t, Self>,
     webview: Entity,
-    #[cfg(target_os = "linux")]
+    #[cfg(not(target_os = "macos"))]
     view_slot: SharedTexture,
-    #[cfg(target_os = "linux")]
+    #[cfg(not(target_os = "macos"))]
     popup_slot: SharedTexture,
-    #[cfg(target_os = "windows")]
-    texture_sender: TextureSender,
     size: SharedViewSize,
     dpr: SharedDpr,
     /// Latest retained IOSurface for this webview's main view (Approach 2).
@@ -100,7 +88,7 @@ impl RenderHandlerBuilder {
         })
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(not(target_os = "macos"))]
     pub fn build(
         webview: Entity,
         view_slot: SharedTexture,
@@ -113,22 +101,6 @@ impl RenderHandlerBuilder {
             webview,
             view_slot,
             popup_slot,
-            size,
-            dpr,
-        })
-    }
-
-    #[cfg(target_os = "windows")]
-    pub fn build(
-        webview: Entity,
-        texture_sender: TextureSender,
-        size: SharedViewSize,
-        dpr: SharedDpr,
-    ) -> RenderHandler {
-        RenderHandler::new(Self {
-            object: std::ptr::null_mut(),
-            webview,
-            texture_sender,
             size,
             dpr,
         })
@@ -160,12 +132,10 @@ impl Clone for RenderHandlerBuilder {
         Self {
             object,
             webview: self.webview,
-            #[cfg(target_os = "linux")]
+            #[cfg(not(target_os = "macos"))]
             view_slot: self.view_slot.clone(),
-            #[cfg(target_os = "linux")]
+            #[cfg(not(target_os = "macos"))]
             popup_slot: self.popup_slot.clone(),
-            #[cfg(target_os = "windows")]
-            texture_sender: self.texture_sender.clone(),
             size: self.size.clone(),
             dpr: self.dpr.clone(),
             #[cfg(target_os = "macos")]
@@ -177,10 +147,7 @@ impl Clone for RenderHandlerBuilder {
 impl ImplRenderHandler for RenderHandlerBuilder {
     fn view_rect(&self, _browser: Option<&mut Browser>, rect: Option<&mut cef::Rect>) {
         if let Some(rect) = rect {
-            #[cfg(not(target_os = "windows"))]
             let size = self.size.get();
-            #[cfg(target_os = "windows")]
-            let size = *self.size.lock().unwrap();
             rect.width = size.x as _;
             rect.height = size.y as _;
         }
@@ -193,10 +160,7 @@ impl ImplRenderHandler for RenderHandlerBuilder {
     ) -> c_int {
         let Some(info) = screen_info else { return 0 };
 
-        #[cfg(not(target_os = "windows"))]
         let dpr = self.dpr.get();
-        #[cfg(target_os = "windows")]
-        let dpr = *self.dpr.lock().unwrap();
 
         info.device_scale_factor = dpr;
         info.depth = 24;
@@ -238,19 +202,11 @@ impl ImplRenderHandler for RenderHandlerBuilder {
             },
         };
 
-        #[cfg(not(target_os = "windows"))]
-        {
-            let slot = match ty {
-                RenderPaintElementType::Popup => &self.popup_slot,
-                RenderPaintElementType::View => &self.view_slot,
-            };
-            slot.set(Some(texture));
-        }
-
-        #[cfg(target_os = "windows")]
-        {
-            let _ = self.texture_sender.send_blocking(texture);
-        }
+        let slot = match ty {
+            RenderPaintElementType::Popup => &self.popup_slot,
+            RenderPaintElementType::View => &self.view_slot,
+        };
+        slot.set(Some(texture));
     }
 
     #[cfg(target_os = "macos")]
