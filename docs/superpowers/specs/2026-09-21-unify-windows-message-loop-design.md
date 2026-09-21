@@ -38,9 +38,10 @@ the webview pipeline is "macOS (GPU / IOSurface) vs. everything else (CPU paint)
   uncapped frame rate) was fixed four days later by PR #39 (4 ms minimum pump interval,
   30 Hz max-delay timer) — on the non-Windows path only.
 - Spike result (Windows 11, debug build, same probe on both builds). Note: the machine's
-  CEF runtime was 152.0.6 (the crate pins the 145.6.1 bindings), so these numbers and the
-  DevTools begin-frame stall below were observed on 152.0.6, not 145.6.1. The MTML-vs-pump
-  comparison is still like-for-like:
+  CEF runtime was 152.0.6 while this branch still pinned the 145.6.1 bindings, so these
+  numbers and the DevTools begin-frame stall below were observed on 152.0.6. The branch was
+  later rebased onto `main`, which pins 152.3.0+152.0.6, and re-probed with the same results.
+  The MTML-vs-pump comparison is like-for-like:
 
   | Metric | MTML (current) | external pump |
   |---|---|---|
