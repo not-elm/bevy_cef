@@ -13,7 +13,8 @@ run it with `external_message_pump`.
 Today that one difference produces:
 
 - 132 `target_os = "windows"` cfg branches across 16 files in `src/`, including 24 `*_win`
-  duplicate functions and 4 same-name cfg'd function pairs. Every one exists only because the
+  duplicate functions and 8 same-name cfg'd function pairs (4 in `webview/ui/input.rs`, 4 in
+  `navigation.rs`). Every one exists only because the
   system parameter is `Res<BrowsersProxy>` on Windows and `NonSend<Browsers>` elsewhere.
 - 974 lines of Windows-only core code (`cef_command.rs` 376 + `cef_thread.rs` 598).
   `BrowsersCefSide` in `cef_thread.rs` is a near line-for-line copy of `Browsers`.
@@ -30,7 +31,7 @@ the webview pipeline is "macOS (GPU / IOSurface) vs. everything else (CPU paint)
   macOS cannot use it, so `external_message_pump` is the only mode all platforms share.
 - `external_message_pump` has no platform restriction; CEF ships
   `main_message_loop_external_pump_win.cc` in cefclient.
-- bevy_cef shipped Windows on `external_message_pump` from v0.4.x through v0.5.3. PR #40
+- bevy_cef shipped Windows on `external_message_pump` from v0.3.0 through v0.5.3. PR #40
   (2026-04-05) switched Windows to MTML with the rationale that calling
   `cef_do_message_loop_work()` each frame "blocks Bevy's render loop". The CEF header for that
   function states "This function will not block.", and the actual cost concern (pumping at an
@@ -58,8 +59,8 @@ the webview pipeline is "macOS (GPU / IOSurface) vs. everything else (CPU paint)
    registered on every platform.
 3. `Browsers` is the only CEF-calling implementation and is a `NonSend` resource on every
    platform. `cef_command.rs` and `cef_thread.rs` are deleted.
-4. **Windows keeps `external_begin_frame_enabled: false`** and does not register the
-   `send_external_begin_frame` system; CEF drives compositing at `windowless_frame_rate: 60`.
+4. **Windows keeps `external_begin_frame_enabled: false`** and does not schedule the
+   `send_external_begin_frame` system (both driven by one `EXTERNAL_BEGIN_FRAME` const); CEF drives compositing at `windowless_frame_rate: 60`.
    macOS and Linux keep `external_begin_frame_enabled: true` unchanged.
    Rationale: the spike showed that with `true` on Windows, opening DevTools permanently stops
    the inspected webview's rAF and painting (JS keeps running, so it looks like dead input).
@@ -79,8 +80,8 @@ the webview pipeline is "macOS (GPU / IOSurface) vs. everything else (CPU paint)
 |---|---|---|
 | How to unify | Remove the threading-model difference (approach E) instead of hiding it behind a facade (`CefAccess` SystemParam), a trait (`CefOps`), an event bus, or an all-platform command queue | A facade leaves the 974-line duplicate implementation and the drift; an all-platform queue makes macOS/Linux worse (deferred calls, no return values, IOSurface pull cannot be a command); an event bus does not remove the cfg at the consuming end. Removing the cause deletes both the call-site branches and the duplicate implementation. |
 | Begin-frame driving on Windows | CEF-driven (`external_begin_frame_enabled: false`) | Verified on hardware: externally driven begin frames stall when DevTools opens. This is also what Windows does today, so Windows rendering cadence is unchanged. Costs one remaining cfg pair. |
-| Expressing the begin-frame split | `external_begin_frame_enabled: (!cfg!(target_os = "windows")) as _` in `create_browser`, and `#[cfg(not(target_os = "windows"))]` on the `send_external_begin_frame` system + its registration | Keeps the split to the two places that must agree, with a comment in each pointing at the other. |
-| `BeginFrameInterval` on Windows | Resource still exists on all platforms (so user code compiles everywhere) but is documented as having no effect on Windows | Avoids a cfg in user code; honest docs. |
+| Expressing the begin-frame split | One `pub const EXTERNAL_BEGIN_FRAME: bool = !cfg!(target_os = "windows");` in `bevy_cef_core` (exported via the prelude). `create_browser` sets `external_begin_frame_enabled: EXTERNAL_BEGIN_FRAME as _`; `WebviewPlugin` does `if EXTERNAL_BEGIN_FRAME { app.add_systems(Main, send_external_begin_frame); }`. The system function itself stays unconditional. | The compiler enforces that both sites agree; no `#[cfg(windows)]` remains in `src/webview.rs`; no dead-code warning because the function is still referenced. |
+| `BeginFrameInterval` on Windows | Resource is initialized on all platforms (so `Res<BeginFrameInterval>` exists everywhere) but is documented as having no effect on Windows, where CEF composites at 60 Hz (macOS/Linux default to 30 fps via this resource) | Avoids a cfg in user code; honest docs. |
 | `Browsers::send_mouse_move` signature | Unchanged (`impl IntoIterator<Item = &MouseButton>`) | Only the Windows call sites built a `Vec`; they are deleted. |
 | Texture cfg | `#[cfg(target_os = "linux")]` on the CPU slot path becomes `#[cfg(not(target_os = "macos"))]` | Windows joins the Linux path; macOS stays on IOSurface. |
 | Focus gate on clicks (`get_focused_browser`) | Unchanged | Not the cause of the DevTools symptom; out of scope. |
@@ -95,16 +96,19 @@ the webview pipeline is "macOS (GPU / IOSurface) vs. everything else (CPU paint)
   `init_cef_browsers` exports.
 - Delete `browser_process/cef_command.rs` and `browser_process/cef_thread.rs`.
 - `browsers.rs`:
-  - Drop every `#[cfg(not(target_os = "windows"))]` gate (the file becomes unconditional).
+  - Drop every `#[cfg(not(target_os = "windows"))]` gate. The `macos` / `not(macos)` gates stay.
   - Drop the `#[cfg(target_os = "windows")]` arms (e.g. the `Arc<Mutex>` size/DPR writes in
     `resize` / `set_dpr`).
   - `#[cfg(target_os = "linux")]` → `#[cfg(not(target_os = "macos"))]` for `SharedTexture`
     slots, `try_receive_textures`, and the `client_handler` slot arguments.
   - `create_browser`: `parent_window` is `HWND` from `RawWindowHandle::Win32` on Windows
-    (null `HWND` if absent), `0` on Linux; `external_begin_frame_enabled` per the table above.
+    (null `HWND` if absent), `0` on Linux; `external_begin_frame_enabled: EXTERNAL_BEGIN_FRAME as _`.
+  - Define and export `EXTERNAL_BEGIN_FRAME` (see Design Decisions).
   - `modifiers_from_mouse_buttons` / `make_underlines_for` stay; they are used by `Browsers`.
 - `renderer_handler.rs`: remove the Windows `TextureSender` (`async_channel`) and
-  `Arc<Mutex>` variants; Linux slot path becomes `not(macos)`.
+  `Arc<Mutex>` variants; Linux slot path becomes `not(macos)`; the `not(windows)` slot block
+  inside `on_paint` becomes unconditional. Update the comments that describe the Windows
+  `TextureSender` path and the `SharedDpr` "platform split".
 - Genuine OS differences are untouched: key-code tables in `browsers/keyboard.rs`, the
   `HICON__` cursor argument in `display_handler.rs`, the `.exe` suffix in `util.rs`,
   Linux-only switches in `command_line_config.rs`.
@@ -121,8 +125,9 @@ the webview pipeline is "macOS (GPU / IOSurface) vs. everything else (CPU paint)
 - `webview.rs`:
   - Remove the Windows block (`init_cef_browsers` task, `post_drain_task`,
     `win_commands_pending`, drain `Task` impl) and the Windows imports.
-  - The non-Windows setup block becomes unconditional, except that
-    `send_external_begin_frame` (system + registration) is `#[cfg(not(target_os = "windows"))]`.
+  - The non-Windows setup block becomes unconditional (including
+    `init_resource::<BeginFrameInterval>()`), except that `send_external_begin_frame` is only
+    added `if EXTERNAL_BEGIN_FRAME`.
   - `on_despawn` hook: single `world.non_send_mut::<Browsers>().close(&ctx.entity)`.
   - Remove `create_webview_win`, `navigate_on_source_change_win`, `resize_win`,
     `apply_request_show_devtool_win`, `apply_request_close_devtool_win`.
@@ -145,16 +150,29 @@ the webview pipeline is "macOS (GPU / IOSurface) vs. everything else (CPU paint)
 - Texture delivery becomes latest-frame-wins (was an unbounded channel).
 - `Browsers::can_go_back`, `can_go_forward`, `zoom_level`, `exec_edit_command` work.
 - Rendering cadence is unchanged (CEF-driven at 60).
+- CEF browser-process work now runs only when Bevy's `Main` schedule runs (as it already does
+  on macOS/Linux). Under MTML CEF's UI thread ran independently. Webviews therefore slow down
+  or pause, where they did not before, when Bevy runs below 60 fps, when the app uses
+  reactive / low-power `WinitSettings` while unfocused, and during Win32 modal move/size loops
+  (e.g. while dragging a native window owned by the main thread, such as DevTools).
 
 ## Public API (breaking, 0.13.0)
 
 Removed:
 
 - `bevy_cef_core::prelude::{BrowsersProxy, CefCommand, drain_commands, init_cef_browsers}`
+  (including `BrowsersProxy::{is_empty, sender}`, which have no `Browsers` equivalent)
+- The `cef_command` and `cef_thread` modules and their other public items:
+  `cef_command::SendRawWindowHandle`, `cef_thread::BrowsersCefSide`
+- `TextureSender` (Windows-only type alias in `renderer_handler.rs`)
 - `bevy_cef::common::{CommandChannelReceiver, TextureReceiverRes, TextureSenderRes}`
 
+Changed on Windows only: `SharedViewSize` / `SharedDpr` become `Rc<Cell<_>>` (were
+`Arc<Mutex<_>>`), `WebviewBrowser` gains the `view_slot` / `popup_slot` fields, and
+`RenderHandlerBuilder::build` takes the slot arguments — i.e. Windows now matches Linux.
+
 Migration: Windows code using `Res<BrowsersProxy>` switches to `NonSend<Browsers>` (same
-method names). Code that only uses the EntityEvents (`RequestGoBack`, `RequestNavigate`,
+method names); callers of `create_browser` / `close` need `NonSendMut<Browsers>`. Code that only uses the EntityEvents (`RequestGoBack`, `RequestNavigate`,
 `HostEmitEvent`, `RequestShowDevTool`, …) or components is unaffected.
 
 ## Error Handling
@@ -168,18 +186,21 @@ No new error paths. `cef_initialize`'s existing assertion covers initialization 
 2. `cargo clippy --workspace --all-targets --all-features -- -Dwarnings` (Windows)
 3. `cargo test --workspace --all-features` — existing tests pass.
 4. Residue greps return nothing in `src/` and `crates/`:
-   `BrowsersProxy`, `CefCommand`, `drain_commands`, `init_cef_browsers`,
-   `CommandChannelReceiver`, `TextureReceiverRes`, `TextureSenderRes`, `_win\b` function
-   names, `multi_threaded_message_loop: true`.
+   `BrowsersProxy`, `BrowsersCefSide`, `CefCommand`, `SendRawWindowHandle`, `drain_commands`,
+   `init_cef_browsers`, `CommandChannelReceiver`, `TextureReceiverRes`, `TextureSenderRes`,
+   `TextureSender`, `fn \w+_win\b`, `multi_threaded_message_loop: true`.
    Remaining `target_os = "windows"` occurrences are limited to: `browsers/keyboard.rs`,
-   `display_handler.rs`, `util.rs`, the `parent_window` arm and begin-frame flag in
-   `browsers.rs`, and the `send_external_begin_frame` gate in `webview.rs`.
+   `display_handler.rs`, `util.rs`, `crates/bevy_cef_core/build.rs`, the `windows_subsystem`
+   attribute in both render-process `main.rs` files, and in `browsers.rs` the `parent_window`
+   arms plus the `EXTERNAL_BEGIN_FRAME` const. `src/` has none.
 5. Every example builds individually (`cargo build --example <name>`) and the interactive
    ones survive a 9-second startup smoke run without `panicked` in the log.
 6. Probe run (scratchpad `spike_probe.rs`, copied in temporarily, never committed), adapted to
    `NonSend<Browsers>`: Bevy ≈ 60 fps, rAF ≈ 60, rAF continues after DevTools opens, round-trip
    p50 within one frame, exit code 0 when DevTools is not opened.
-7. Manual (requested from the maintainer after the pipeline): Windows `devtool` example
+7. Compile gate for macOS and Linux: the three-OS CI matrix (`.github/workflows/ci.yml`) on
+   the PR. Local verification is Windows only.
+8. Manual (requested from the maintainer after the pipeline): Windows `devtool` example
    including one IME input; macOS `simple` and `devtool`. Linux via CI.
 
 ## Deliverables
@@ -187,10 +208,15 @@ No new error paths. `cef_initialize`'s existing assertion covers initialization 
 - Core and plugin changes above; two files deleted.
 - `CHANGELOG.md`: `## v0.13.0` with Breaking (API removals + migration) and Changed (Windows
   back on `external_message_pump`, why, and the measured numbers in one or two sentences).
-- `Cargo.toml` workspace version → `0.13.0` (and any intra-workspace version pins).
+- `Cargo.toml`: workspace version and the `bevy_cef` / `bevy_cef_core` workspace dependency
+  pins → `0.13.0`; `Cargo.lock` updated accordingly.
 - `CLAUDE.md`: Multi-Process Design / message loop bullets, Key Non-Obvious Patterns, Platform
   Notes (Windows), Version Compatibility table.
-- `README.md` / `docs/`: fix any mention of MTML or `BrowsersProxy`.
+- Version compatibility tables: `README.md`, `docs/website/docs/intro.md`,
+  `docs/website/docs/reference/version-compatibility.md`.
+- In-code comments: the plugin doc and inline comments in `src/common/message_loop.rs`, the
+  Windows comment block in `src/webview.rs`, and the `renderer_handler.rs` comments.
+  (No `.md` file outside the changelog mentions MTML or `BrowsersProxy` today.)
 
 ## Out of Scope
 
@@ -200,3 +226,7 @@ No new error paths. `cef_initialize`'s existing assertion covers initialization 
 - Letting clicks bypass the focused-frame gate.
 - The `cargo build --examples` (all at once) "required to be available in rlib format" error.
 - A Trigger/EntityEvent input API for embedders.
+- Review suggestions deferred: extending CI clippy to all three OSes, extracting the pump
+  throttle decision into a unit-tested pure helper, waking the winit event loop from
+  `on_schedule_message_pump_work` (would decouple CEF from reactive update modes), merging the
+  two `cef_initialize` functions.
