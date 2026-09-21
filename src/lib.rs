@@ -36,9 +36,7 @@ pub mod prelude {
     pub use crate::focus::FocusedWebview;
     pub use crate::keyboard::{CefKeyboardFilter, KeyboardDeliverSet, ModifiersState};
     pub use crate::resize::components::{AspectLockMode, WebviewResizable};
-    pub use crate::{
-        CefPlugin, RunOnMainThread, common::*, navigation::*, title::*, webview::prelude::*,
-    };
+    pub use crate::{CefPlugin, RunOnMainThread, navigation::*, title::*, webview::prelude::*};
     pub use bevy_cef_core::prelude::{
         CefCustomScheme, CefExtensions, CefSchemeBody, CefSchemeHandler, CefSchemeOptions,
         CefSchemeRequest, CefSchemeResponse, CommandLineConfig, switches,
