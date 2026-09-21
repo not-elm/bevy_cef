@@ -37,7 +37,10 @@ the webview pipeline is "macOS (GPU / IOSurface) vs. everything else (CPU paint)
   function states "This function will not block.", and the actual cost concern (pumping at an
   uncapped frame rate) was fixed four days later by PR #39 (4 ms minimum pump interval,
   30 Hz max-delay timer) — on the non-Windows path only.
-- Spike result (Windows 11, debug build, same probe on both builds):
+- Spike result (Windows 11, debug build, same probe on both builds). Note: the machine's
+  CEF runtime was 152.0.6 (the crate pins the 145.6.1 bindings), so these numbers and the
+  DevTools begin-frame stall below were observed on 152.0.6, not 145.6.1. The MTML-vs-pump
+  comparison is still like-for-like:
 
   | Metric | MTML (current) | external pump |
   |---|---|---|
@@ -67,8 +70,12 @@ the webview pipeline is "macOS (GPU / IOSurface) vs. everything else (CPU paint)
 5. Windows uses the same CPU texture path as Linux: the `Rc<Cell<Option<RenderTextureMessage>>>`
    latest-frame-wins view/popup slots and `Rc<Cell<_>>` `SharedViewSize` / `SharedDpr`. The
    Windows-only `async_channel` texture channel and `Arc<Mutex<_>>` variants are removed.
-6. On Windows `create_browser` passes the Bevy window's `HWND` as `WindowInfo::parent_window`
-   (behavior carried over from `cef_thread.rs`); Linux keeps `0`; macOS keeps `parent_view`.
+6. On Windows `create_browser` leaves `WindowInfo::parent_window` null; Linux keeps `0`; macOS
+   keeps `parent_view`. (Amended after code review: `cef_thread.rs` *textually* passed the Bevy
+   `HWND`, but `create_webview_win` ran off the main thread where winit's window lookup always
+   failed, so the effective 0.12 value was null. Passing a real `HWND` switches on CEF's default
+   OSR context menu — mis-positioned, since `GetScreenPoint` is not implemented — and native JS
+   dialogs. Follow-up: wire the context-menu handler, then a real `HWND` can be passed.)
 7. No behavior change on macOS or Linux.
 8. All `*_win` functions and Windows-side cfg pairs in `src/` are removed; the surviving
    function loses its `#[cfg(not(target_os = "windows"))]`.
@@ -101,8 +108,8 @@ the webview pipeline is "macOS (GPU / IOSurface) vs. everything else (CPU paint)
     `resize` / `set_dpr`).
   - `#[cfg(target_os = "linux")]` → `#[cfg(not(target_os = "macos"))]` for `SharedTexture`
     slots, `try_receive_textures`, and the `client_handler` slot arguments.
-  - `create_browser`: `parent_window` is `HWND` from `RawWindowHandle::Win32` on Windows
-    (null `HWND` if absent), `0` on Linux; `external_begin_frame_enabled: EXTERNAL_BEGIN_FRAME as _`.
+  - `create_browser`: `parent_window` stays null on Windows (see Requirement 6), `0` on Linux;
+    `external_begin_frame_enabled: EXTERNAL_BEGIN_FRAME as _`.
   - Define and export `EXTERNAL_BEGIN_FRAME` (see Design Decisions).
   - `modifiers_from_mouse_buttons` / `make_underlines_for` stay; they are used by `Browsers`.
 - `renderer_handler.rs`: remove the Windows `TextureSender` (`async_channel`) and
@@ -177,8 +184,7 @@ method names); callers of `create_browser` / `close` need `NonSendMut<Browsers>`
 
 ## Error Handling
 
-No new error paths. `cef_initialize`'s existing assertion covers initialization failure. The
-`HWND` lookup falls back to a null `HWND` exactly as `cef_thread.rs` did.
+No new error paths. `cef_initialize`'s existing assertion covers initialization failure.
 
 ## Verification
 
@@ -191,8 +197,8 @@ No new error paths. `cef_initialize`'s existing assertion covers initialization 
    `TextureSender`, `fn \w+_win\b`, `multi_threaded_message_loop: true`.
    Remaining `target_os = "windows"` occurrences are limited to: `browsers/keyboard.rs`,
    `display_handler.rs`, `util.rs`, `crates/bevy_cef_core/build.rs`, the `windows_subsystem`
-   attribute in both render-process `main.rs` files, and in `browsers.rs` the `parent_window`
-   arms plus the `EXTERNAL_BEGIN_FRAME` const. `src/` has none.
+   attribute in both render-process `main.rs` files, and in `browsers.rs` the
+   `EXTERNAL_BEGIN_FRAME` const. `src/` has none.
 5. Every example builds individually (`cargo build --example <name>`) and the interactive
    ones survive a 9-second startup smoke run without `panicked` in the log.
 6. Probe run (scratchpad `spike_probe.rs`, copied in temporarily, never committed), adapted to

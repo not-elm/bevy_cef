@@ -3,7 +3,8 @@ use crate::common::WebviewIoSurface;
 use crate::common::{WebviewSize, WebviewSource};
 #[cfg(not(target_os = "macos"))]
 use crate::prelude::update_webview_image;
-use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
+use crate::webview::scroll_delta;
+use bevy::input::mouse::MouseWheel;
 use bevy::prelude::*;
 use bevy_cef_core::prelude::Browsers;
 #[cfg(not(target_os = "macos"))]
@@ -189,6 +190,7 @@ fn on_mouse_wheel(
         return;
     };
     for event in er.read() {
+        let delta = scroll_delta(event.unit, event.x, event.y);
         for (webview, sprite, webview_size, gtf) in webviews.iter() {
             let Some(pos) = obtain_relative_pos(sprite, webview_size, gtf, &cameras, cursor_pos)
             else {
@@ -204,14 +206,6 @@ fn on_mouse_wheel(
             }) {
                 continue;
             }
-
-            let delta = match event.unit {
-                MouseScrollUnit::Line => {
-                    // CEF expects pixel deltas; Chromium default: 3 lines × 40px = 120px per notch
-                    Vec2::new(event.x * 120.0, event.y * 120.0)
-                }
-                MouseScrollUnit::Pixel => Vec2::new(event.x, event.y),
-            };
             browsers.send_mouse_wheel(&webview, pos, delta);
         }
     }

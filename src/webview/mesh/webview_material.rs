@@ -20,10 +20,8 @@ impl Plugin for WebviewMaterialPlugin {
         // macOS uses the GPU IOSurface accelerated-paint path and never emits
         // `RenderTextureMessage`; the CPU `OnPaint` chain is Linux/Windows-only.
         #[cfg(not(target_os = "macos"))]
-        app.add_message::<RenderTextureMessage>();
-
-        #[cfg(not(target_os = "macos"))]
-        app.add_systems(Update, send_render_textures);
+        app.add_message::<RenderTextureMessage>()
+            .add_systems(Update, send_render_textures);
 
         load_internal_asset!(
             app,

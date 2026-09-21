@@ -35,9 +35,14 @@ impl Plugin for ResponserPlugin {
             .insert_resource(RequesterReceiver(rx))
             .init_resource::<InlineHtmlStore>()
             .add_systems(PreUpdate, resolve_webview_source)
-            .add_systems(Update, (coming_request, responser));
-
-        app.add_systems(Update, hot_reload.run_if(any_changed_assets));
+            .add_systems(
+                Update,
+                (
+                    coming_request,
+                    responser,
+                    hot_reload.run_if(any_changed_assets),
+                ),
+            );
     }
 }
 

@@ -23,9 +23,7 @@ pub(crate) struct FocusPlugin;
 impl Plugin for FocusPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<FocusedWebview>()
-            .add_systems(Update, setup_focus_observers);
-
-        app.add_systems(Update, apply_webview_focus);
+            .add_systems(Update, (setup_focus_observers, apply_webview_focus));
     }
 }
 

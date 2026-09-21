@@ -192,21 +192,25 @@ impl ImplRenderHandler for RenderHandlerBuilder {
             cef_paint_element_type_t::PET_POPUP => RenderPaintElementType::Popup,
             _ => RenderPaintElementType::View,
         };
-        let texture = RenderTextureMessage {
-            webview: self.webview,
-            ty,
-            width: width as u32,
-            height: height as u32,
-            buffer: unsafe {
-                std::slice::from_raw_parts(buffer, (width * height * 4) as usize).to_vec()
-            },
-        };
-
         let slot = match ty {
             RenderPaintElementType::Popup => &self.popup_slot,
             RenderPaintElementType::View => &self.view_slot,
         };
-        slot.set(Some(texture));
+        let pixels = unsafe { std::slice::from_raw_parts(buffer, (width * height * 4) as usize) };
+        // NOTE: Reuse the allocation of a frame the consumer has not drained yet. CEF can
+        // paint several times between two drains (on Windows it composites at its own rate);
+        // without this each of those paints allocates and frees a full-frame `Vec`. When the
+        // slot was already drained this is the same single allocation as before.
+        let mut pixel_buffer = slot.take().map(|stale| stale.buffer).unwrap_or_default();
+        pixel_buffer.clear();
+        pixel_buffer.extend_from_slice(pixels);
+        slot.set(Some(RenderTextureMessage {
+            webview: self.webview,
+            ty,
+            width: width as u32,
+            height: height as u32,
+            buffer: pixel_buffer,
+        }));
     }
 
     #[cfg(target_os = "macos")]

@@ -2,8 +2,7 @@ use crate::common::WebviewSource;
 use crate::focus::FocusedWebview;
 use bevy::input::keyboard::KeyboardInput;
 use bevy::prelude::*;
-use bevy_cef_core::prelude::Browsers;
-use bevy_cef_core::prelude::{EditCommand, create_cef_key_events, keyboard_modifiers};
+use bevy_cef_core::prelude::{Browsers, EditCommand, create_cef_key_events, keyboard_modifiers};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 

@@ -199,12 +199,7 @@ fn on_drag_press(
     });
 
     // Clear CEF hover state — the webview is being dragged, not hovered.
-    browsers.send_mouse_move(
-        &webview,
-        std::iter::empty::<&MouseButton>(),
-        pixel_pos,
-        true,
-    );
+    browsers.send_mouse_leave(&webview, pixel_pos);
 }
 
 /// Attach drag-press observer to newly-created mesh webviews with a Transform.

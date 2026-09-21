@@ -8,13 +8,11 @@ use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 use bevy_remote::BrpMessage;
 use cef::{
-    Browser, BrowserHost, BrowserSettings, CompositionUnderline, ImplBrowser, ImplBrowserHost,
-    ImplFrame, ImplListValue, ImplProcessMessage, MouseButtonType, ProcessId, Range, WindowInfo,
+    Browser, BrowserHost, BrowserSettings, CefString, Client, CompositionUnderline,
+    DictionaryValue, ImplBrowser, ImplBrowserHost, ImplDictionaryValue, ImplFrame, ImplListValue,
+    ImplProcessMessage, ImplRequestContext, MouseButtonType, ProcessId, Range, RequestContext,
+    RequestContextSettings, WindowInfo, browser_host_create_browser_sync, dictionary_value_create,
     process_message_create,
-};
-use cef::{
-    CefString, Client, DictionaryValue, ImplDictionaryValue, ImplRequestContext, RequestContext,
-    RequestContextSettings, browser_host_create_browser_sync, dictionary_value_create,
 };
 use cef_dll_sys::{cef_event_flags_t, cef_mouse_button_type_t};
 #[allow(deprecated)]
@@ -22,7 +20,7 @@ use raw_window_handle::RawWindowHandle;
 use std::cell::Cell;
 use std::rc::Rc;
 
-pub(crate) mod devtool_render_handler;
+mod devtool_render_handler;
 mod keyboard;
 
 use crate::browser_process::browsers::devtool_render_handler::DevToolRenderHandlerBuilder;
@@ -38,7 +36,8 @@ pub use keyboard::*;
 ///
 /// `false` on Windows: CEF composites on its own at `windowless_frame_rate`. With
 /// externally driven begin frames, opening DevTools on Windows permanently stops the
-/// inspected webview's rAF and painting. This one flag decides both
+/// inspected webview's rAF and painting (observed with a CEF 152.0.6 runtime; not
+/// re-checked against other CEF versions). This one flag decides both
 /// `WindowInfo::external_begin_frame_enabled` and whether the `send_external_begin_frame`
 /// system is scheduled, so the two can never disagree.
 pub const EXTERNAL_BEGIN_FRAME: bool = !cfg!(target_os = "windows");
@@ -126,13 +125,9 @@ impl Browsers {
                 // Windowless rendering does not require a parent window handle on Linux.
                 #[cfg(target_os = "linux")]
                 parent_window: 0,
-                #[cfg(target_os = "windows")]
-                parent_window: match _window_handle {
-                    Some(RawWindowHandle::Win32(handle)) => {
-                        cef_dll_sys::HWND(handle.hwnd.get() as _)
-                    }
-                    _ => cef_dll_sys::HWND(std::ptr::null_mut()),
-                },
+                // NOTE: Windows keeps the default null `parent_window`. With a real HWND, CEF
+                // turns on its default OSR context menu and native JS dialogs, which bevy_cef
+                // neither positions (`GetScreenPoint` is not implemented) nor suppresses.
                 ..Default::default()
             }),
             Some(&mut self.client_handler(
@@ -179,8 +174,8 @@ impl Browsers {
         self.browsers.insert(webview, webview_browser);
     }
 
-    pub fn send_external_begin_frame(&mut self) {
-        for browser in self.browsers.values_mut() {
+    pub fn send_external_begin_frame(&self) {
+        for browser in self.browsers.values() {
             browser.host.send_external_begin_frame();
         }
     }
@@ -247,6 +242,13 @@ impl Browsers {
                 .host
                 .send_mouse_move_event(Some(&mouse_event), mouse_leave as _);
         }
+    }
+
+    /// Tells CEF the pointer left the webview, clearing its hover state.
+    ///
+    /// Used when an embedder-side interaction (drag, resize) takes over the pointer.
+    pub fn send_mouse_leave(&self, webview: &Entity, position: Vec2) {
+        self.send_mouse_move(webview, std::iter::empty::<&MouseButton>(), position, true);
     }
 
     pub fn send_mouse_click(

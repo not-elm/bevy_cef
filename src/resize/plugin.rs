@@ -131,12 +131,7 @@ fn on_resizable_press(
             };
 
             // Clear CEF hover state.
-            browsers.send_mouse_move(
-                &webview,
-                std::iter::empty::<&MouseButton>(),
-                pixel_pos,
-                true,
-            );
+            browsers.send_mouse_leave(&webview, pixel_pos);
         }
         HitResult::Drag => {
             // Start drag (duplicated from on_drag_press for resizable webviews).
@@ -168,12 +163,7 @@ fn on_resizable_press(
             });
 
             // Clear CEF hover state.
-            browsers.send_mouse_move(
-                &webview,
-                std::iter::empty::<&MouseButton>(),
-                pixel_pos,
-                true,
-            );
+            browsers.send_mouse_leave(&webview, pixel_pos);
         }
         HitResult::None => {
             // Normal page input — do nothing, let CEF handle it.

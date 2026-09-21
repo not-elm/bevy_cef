@@ -29,9 +29,7 @@ pub(super) struct HostEmitPlugin;
 
 impl Plugin for HostEmitPlugin {
     fn build(&self, app: &mut App) {
-        app.register_type::<HostEmitEvent>();
-
-        app.add_observer(host_emit);
+        app.register_type::<HostEmitEvent>().add_observer(host_emit);
     }
 }
 

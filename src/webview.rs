@@ -8,6 +8,7 @@ use crate::webview::mesh::MeshWebviewPlugin;
 use crate::webview::ui::UiWebviewPlugin;
 use bevy::ecs::lifecycle::HookContext;
 use bevy::ecs::world::DeferredWorld;
+use bevy::input::mouse::MouseScrollUnit;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use bevy::winit::WINIT_WINDOWS;
@@ -175,6 +176,15 @@ impl Plugin for WebviewPlugin {
     }
 }
 
+/// Converts a mouse-wheel delta into the pixel deltas CEF expects.
+/// Chromium's default line height is 3 lines × 40px = 120px per notch.
+pub(crate) fn scroll_delta(unit: MouseScrollUnit, x: f32, y: f32) -> Vec2 {
+    match unit {
+        MouseScrollUnit::Line => Vec2::new(x * 120.0, y * 120.0),
+        MouseScrollUnit::Pixel => Vec2::new(x, y),
+    }
+}
+
 fn any_resized(webviews: Query<Entity, Changed<WebviewSize>>) -> bool {
     !webviews.is_empty()
 }
@@ -184,7 +194,7 @@ fn added_webview(webviews: Query<Entity, Added<ResolvedWebviewUri>>) -> bool {
 }
 
 fn send_external_begin_frame(
-    mut hosts: NonSendMut<Browsers>,
+    browsers: NonSend<Browsers>,
     time: Res<Time>,
     interval: Res<BeginFrameInterval>,
     mut timer: Local<Option<Timer>>,
@@ -195,7 +205,7 @@ fn send_external_begin_frame(
     let timer = timer.as_mut().unwrap();
     timer.tick(time.delta());
     if timer.just_finished() {
-        hosts.send_external_begin_frame();
+        browsers.send_external_begin_frame();
     }
 }
 

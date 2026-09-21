@@ -8,10 +8,10 @@ use crate::prelude::{WebviewSize, WebviewSource, WebviewSurface};
 use crate::webview::alpha::is_pixel_transparent;
 #[cfg(target_os = "macos")]
 use crate::webview::alpha::is_pixel_transparent_surface;
+use crate::webview::scroll_delta;
 use crate::webview::ui::material::WebviewUiMaterial;
 use bevy::ecs::lifecycle::HookContext;
 use bevy::ecs::world::DeferredWorld;
-use bevy::input::mouse::MouseScrollUnit;
 use bevy::picking::events::Scroll;
 use bevy::prelude::*;
 use bevy::ui::RelativeCursorPosition;
@@ -53,15 +53,6 @@ fn setup_ui_observers(mut world: DeferredWorld, ctx: HookContext) {
 /// webview's logical size.
 fn ui_pos_to_dip(normalized: Vec2, computed_size: Vec2, inverse_scale_factor: f32) -> Vec2 {
     (normalized + Vec2::splat(0.5)) * computed_size * inverse_scale_factor
-}
-
-/// Converts a `Pointer<Scroll>` delta into the pixel deltas CEF expects.
-/// Chromium's default line height is 3 lines × 40px = 120px per notch.
-fn scroll_delta(unit: MouseScrollUnit, x: f32, y: f32) -> Vec2 {
-    match unit {
-        MouseScrollUnit::Line => Vec2::new(x * 120.0, y * 120.0),
-        MouseScrollUnit::Pixel => Vec2::new(x, y),
-    }
 }
 
 /// Components every UI input handler reads off the observed webview node.
