@@ -19,11 +19,11 @@ On **macOS**, the render process binary is located inside the CEF framework bund
 
 ## Message Loop {#message-loop}
 
-CEF requires a message loop to process internal events (network requests, rendering, IPC). bevy_cef runs CEF in **external message pump** mode, meaning it does not hand control of the main thread over to CEF. Instead, `cef_do_message_loop_work()` is called once per Bevy frame in the `Main` schedule.
+CEF requires a message loop to process internal events (network requests, rendering, IPC). bevy_cef runs CEF in **external message pump** mode, meaning it does not hand control of the main thread over to CEF. Instead, on every platform `cef_do_message_loop_work()` runs from a system in the `Main` schedule whenever CEF requests work (throttled to a 4 ms minimum interval, with a 30 Hz fallback).
 
-This design integrates naturally with Bevy's frame-based execution model. Each Bevy frame, the message loop plugin gives CEF a chance to process pending work -- delivering rendered frames, dispatching IPC messages, handling network responses. The trade-off is that CEF's responsiveness is tied to your frame rate: at 60 FPS, CEF processes events roughly every 16ms, which is sufficient for most use cases.
+This design integrates naturally with Bevy's frame-based execution model. When CEF has pending work, the message loop plugin lets it run during the Bevy frame -- delivering rendered frames, dispatching IPC messages, handling network responses. The trade-off is that CEF's responsiveness is tied to your frame rate: at 60 FPS, CEF processes events roughly every 16ms, which is sufficient for most use cases.
 
-You do not need to configure the message loop directly. The `MessageLoopPlugin`, included automatically by `CefPlugin`, handles initialization and per-frame pumping.
+You do not need to configure the message loop directly. The `MessageLoopPlugin`, included automatically by `CefPlugin`, handles initialization and pumping.
 
 ## EntityEvent Pattern {#entity-event-pattern}
 
@@ -105,7 +105,7 @@ This means web content responds to hover states, button clicks, text selection, 
 ```
 CefPlugin (root — accepts CommandLineConfig, CefExtensions, root_cache_path)
 ├── LocalHostPlugin (cef://localhost/ scheme for local assets)
-├── MessageLoopPlugin (CEF init + per-frame cef_do_message_loop_work())
+├── MessageLoopPlugin (CEF init + cef_do_message_loop_work() pump)
 ├── WebviewCoreComponentsPlugin (component registration)
 ├── WebviewPlugin → MeshWebviewPlugin (lifecycle, materials, DevTools)
 ├── IpcPlugin (IpcRawEventPlugin + HostEmitPlugin)
