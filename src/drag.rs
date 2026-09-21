@@ -152,8 +152,7 @@ fn on_drag_press(
     regions_q: Query<&DraggableRegions>,
     transforms_q: Query<(&GlobalTransform, &Transform), With<WebviewSource>>,
     cameras_q: Query<(&Camera, &GlobalTransform)>,
-    #[cfg(not(target_os = "windows"))] browsers: NonSend<bevy_cef_core::prelude::Browsers>,
-    #[cfg(target_os = "windows")] browsers: Res<bevy_cef_core::prelude::BrowsersProxy>,
+    browsers: NonSend<bevy_cef_core::prelude::Browsers>,
 ) {
     // Ignore if already dragging.
     if drag_state.is_dragging() {
@@ -200,15 +199,12 @@ fn on_drag_press(
     });
 
     // Clear CEF hover state — the webview is being dragged, not hovered.
-    #[cfg(not(target_os = "windows"))]
     browsers.send_mouse_move(
         &webview,
         std::iter::empty::<&MouseButton>(),
         pixel_pos,
         true,
     );
-    #[cfg(target_os = "windows")]
-    browsers.send_mouse_move(&webview, &[], pixel_pos, true);
 }
 
 /// Attach drag-press observer to newly-created mesh webviews with a Transform.
@@ -282,8 +278,7 @@ fn restore_hover_after_drag(
     mut pending: ResMut<InteractionEndPending>,
     windows: Query<&Window>,
     pointer: WebviewPointer,
-    #[cfg(not(target_os = "windows"))] browsers: NonSend<bevy_cef_core::prelude::Browsers>,
-    #[cfg(target_os = "windows")] browsers: Res<bevy_cef_core::prelude::BrowsersProxy>,
+    browsers: NonSend<bevy_cef_core::prelude::Browsers>,
 ) {
     let Some(entity) = pending.webview.take() else {
         return;
@@ -295,10 +290,7 @@ fn restore_hover_after_drag(
         return;
     };
 
-    #[cfg(not(target_os = "windows"))]
     browsers.send_mouse_move(&entity, std::iter::empty::<&MouseButton>(), pos, false);
-    #[cfg(target_os = "windows")]
-    browsers.send_mouse_move(&entity, &[], pos, false);
 }
 
 #[cfg(test)]

@@ -22,11 +22,8 @@ impl Plugin for WebviewMaterialPlugin {
         #[cfg(not(target_os = "macos"))]
         app.add_message::<RenderTextureMessage>();
 
-        #[cfg(target_os = "linux")]
+        #[cfg(not(target_os = "macos"))]
         app.add_systems(Update, send_render_textures);
-
-        #[cfg(target_os = "windows")]
-        app.add_systems(Update, send_render_textures_win);
 
         load_internal_asset!(
             app,
@@ -49,19 +46,9 @@ pub struct WebviewMaterial {
 
 impl Material for WebviewMaterial {}
 
-#[cfg(target_os = "linux")]
+#[cfg(not(target_os = "macos"))]
 fn send_render_textures(mut ew: MessageWriter<RenderTextureMessage>, browsers: NonSend<Browsers>) {
     for texture in browsers.try_receive_textures() {
-        ew.write(texture);
-    }
-}
-
-#[cfg(target_os = "windows")]
-fn send_render_textures_win(
-    mut ew: MessageWriter<RenderTextureMessage>,
-    texture_rx: Res<crate::common::TextureReceiverRes>,
-) {
-    while let Ok(texture) = texture_rx.0.try_recv() {
         ew.write(texture);
     }
 }

@@ -5,10 +5,7 @@ use crate::common::{WebviewSize, WebviewSource};
 use crate::prelude::update_webview_image;
 use bevy::input::mouse::{MouseScrollUnit, MouseWheel};
 use bevy::prelude::*;
-#[cfg(not(target_os = "windows"))]
 use bevy_cef_core::prelude::Browsers;
-#[cfg(target_os = "windows")]
-use bevy_cef_core::prelude::BrowsersProxy;
 #[cfg(not(target_os = "macos"))]
 use bevy_cef_core::prelude::RenderTextureMessage;
 use std::fmt::Debug;
@@ -30,21 +27,11 @@ impl Plugin for WebviewSpritePlugin {
             render.run_if(on_message::<RenderTextureMessage>),
         );
 
-        #[cfg(not(target_os = "windows"))]
         app.add_systems(
             Update,
             (
                 setup_observers,
                 on_mouse_wheel.run_if(on_message::<MouseWheel>),
-            ),
-        );
-
-        #[cfg(target_os = "windows")]
-        app.add_systems(
-            Update,
-            (
-                setup_observers_win,
-                on_mouse_wheel_win.run_if(on_message::<MouseWheel>),
             ),
         );
     }
@@ -65,7 +52,6 @@ fn render(
     }
 }
 
-#[cfg(not(target_os = "windows"))]
 fn setup_observers(
     mut commands: Commands,
     webviews: Query<Entity, (Added<WebviewSource>, With<Sprite>)>,
@@ -104,7 +90,6 @@ fn sprite_pos_transparent(
 }
 
 #[allow(clippy::too_many_arguments)]
-#[cfg(not(target_os = "windows"))]
 fn apply_on_pointer_move(
     trigger: On<Pointer<Move>>,
     input: Res<ButtonInput<MouseButton>>,
@@ -132,7 +117,6 @@ fn apply_on_pointer_move(
 }
 
 #[allow(clippy::too_many_arguments)]
-#[cfg(not(target_os = "windows"))]
 fn apply_on_pointer_pressed(
     trigger: On<Pointer<Press>>,
     browsers: NonSend<Browsers>,
@@ -159,7 +143,6 @@ fn apply_on_pointer_pressed(
 }
 
 #[allow(clippy::too_many_arguments)]
-#[cfg(not(target_os = "windows"))]
 fn apply_on_pointer_released(
     trigger: On<Pointer<Release>>,
     browsers: NonSend<Browsers>,
@@ -186,7 +169,6 @@ fn apply_on_pointer_released(
 }
 
 #[allow(clippy::too_many_arguments)]
-#[cfg(not(target_os = "windows"))]
 fn on_mouse_wheel(
     mut er: MessageReader<MouseWheel>,
     browsers: NonSend<Browsers>,
@@ -231,123 +213,6 @@ fn on_mouse_wheel(
                 MouseScrollUnit::Pixel => Vec2::new(event.x, event.y),
             };
             browsers.send_mouse_wheel(&webview, pos, delta);
-        }
-    }
-}
-
-#[cfg(target_os = "windows")]
-fn setup_observers_win(
-    mut commands: Commands,
-    webviews: Query<Entity, (Added<WebviewSource>, With<Sprite>)>,
-) {
-    for entity in webviews.iter() {
-        commands
-            .entity(entity)
-            .observe(apply_on_pointer_move_win)
-            .observe(apply_on_pointer_pressed_win)
-            .observe(apply_on_pointer_released_win);
-    }
-}
-
-#[cfg(target_os = "windows")]
-fn apply_on_pointer_move_win(
-    trigger: On<Pointer<Move>>,
-    input: Res<ButtonInput<MouseButton>>,
-    proxy: Res<BrowsersProxy>,
-    cameras: Query<(&Camera, &GlobalTransform)>,
-    webviews: Query<(&Sprite, &WebviewSize, &GlobalTransform)>,
-    drag_state: Res<crate::drag::DragState>,
-    resize_state: Res<crate::resize::ResizeState>,
-) {
-    if drag_state.is_dragging() {
-        return;
-    }
-    if resize_state.is_resizing() {
-        return;
-    }
-    let Some(pos) = obtain_relative_pos_from_trigger(&trigger, &webviews, &cameras) else {
-        return;
-    };
-    let buttons: Vec<MouseButton> = input.get_pressed().copied().collect();
-    proxy.send_mouse_move(&trigger.entity, &buttons, pos, false);
-}
-
-#[cfg(target_os = "windows")]
-fn apply_on_pointer_pressed_win(
-    trigger: On<Pointer<Press>>,
-    proxy: Res<BrowsersProxy>,
-    cameras: Query<(&Camera, &GlobalTransform)>,
-    webviews: Query<(&Sprite, &WebviewSize, &GlobalTransform)>,
-    drag_state: Res<crate::drag::DragState>,
-    resize_state: Res<crate::resize::ResizeState>,
-) {
-    if drag_state.is_dragging() {
-        return;
-    }
-    if resize_state.is_resizing() {
-        return;
-    }
-    let Some(pos) = obtain_relative_pos_from_trigger(&trigger, &webviews, &cameras) else {
-        return;
-    };
-    proxy.send_mouse_click(&trigger.entity, pos, trigger.button, false);
-}
-
-#[cfg(target_os = "windows")]
-fn apply_on_pointer_released_win(
-    trigger: On<Pointer<Release>>,
-    proxy: Res<BrowsersProxy>,
-    cameras: Query<(&Camera, &GlobalTransform)>,
-    webviews: Query<(&Sprite, &WebviewSize, &GlobalTransform)>,
-    drag_state: Res<crate::drag::DragState>,
-    resize_state: Res<crate::resize::ResizeState>,
-) {
-    if drag_state.is_dragging() {
-        return;
-    }
-    if resize_state.is_resizing() {
-        return;
-    }
-    let Some(pos) = obtain_relative_pos_from_trigger(&trigger, &webviews, &cameras) else {
-        return;
-    };
-    proxy.send_mouse_click(&trigger.entity, pos, trigger.button, true);
-}
-
-#[cfg(target_os = "windows")]
-fn on_mouse_wheel_win(
-    mut er: MessageReader<MouseWheel>,
-    proxy: Res<BrowsersProxy>,
-    webviews: Query<(Entity, &Sprite, &WebviewSize, &GlobalTransform)>,
-    cameras: Query<(&Camera, &GlobalTransform)>,
-    windows: Query<&Window>,
-    drag_state: Res<crate::drag::DragState>,
-    resize_state: Res<crate::resize::ResizeState>,
-) {
-    if drag_state.is_dragging() {
-        return;
-    }
-    if resize_state.is_resizing() {
-        return;
-    }
-    let Some(cursor_pos) = windows.iter().find_map(|window| window.cursor_position()) else {
-        return;
-    };
-    for event in er.read() {
-        for (webview, sprite, webview_size, gtf) in webviews.iter() {
-            let Some(pos) = obtain_relative_pos(sprite, webview_size, gtf, &cameras, cursor_pos)
-            else {
-                continue;
-            };
-
-            let delta = match event.unit {
-                MouseScrollUnit::Line => {
-                    // CEF expects pixel deltas; Chromium default: 3 lines × 40px = 120px per notch
-                    Vec2::new(event.x * 120.0, event.y * 120.0)
-                }
-                MouseScrollUnit::Pixel => Vec2::new(event.x, event.y),
-            };
-            proxy.send_mouse_wheel(&webview, pos, delta);
         }
     }
 }

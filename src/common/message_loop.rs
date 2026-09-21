@@ -6,13 +6,14 @@ use cef::{Settings, api_hash, execute_process, initialize, shutdown, sys};
 
 /// Controls the CEF message loop.
 ///
-/// On macOS (and future Linux), uses `external_message_pump` and calls
-/// [`CefDoMessageLoopWork`](https://cef-builds.spotifycdn.com/docs/106.1/cef__app_8h.html#a830ae43dcdffcf4e719540204cefdb61)
-/// every frame.
+/// Every platform runs CEF in `external_message_pump` mode: CEF asks for work through
+/// `on_schedule_message_pump_work`, and [`CefDoMessageLoopWork`](https://cef-builds.spotifycdn.com/docs/106.1/cef__app_8h.html#a830ae43dcdffcf4e719540204cefdb61)
+/// runs from a system in the `Main` schedule (throttled to a 4 ms minimum interval, with a
+/// 30 Hz max-delay fallback). The CEF UI thread is therefore the Bevy main thread, which is
+/// why `Browsers` is a `NonSend` resource.
 ///
-/// On Windows, uses `multi_threaded_message_loop` where CEF owns its own UI
-/// thread. Bevy systems communicate with CEF through [`BrowsersProxy`] and a
-/// command channel instead of calling CEF APIs directly.
+/// `multi_threaded_message_loop` is not used: CEF does not support it on macOS, and
+/// `cef_do_message_loop_work` does not block.
 pub struct MessageLoopPlugin {
     pub config: CommandLineConfig,
     pub extensions: CefExtensions,
@@ -31,12 +32,6 @@ impl Plugin for MessageLoopPlugin {
         let _ = api_hash(sys::CEF_API_VERSION_LAST, 0);
         let args = Args::new();
 
-        // On Windows with multi_threaded_message_loop, the on_schedule_message_pump_work
-        // callback is never invoked by CEF, so we create a dummy channel. The sender
-        // is never used but BrowserProcessAppBuilder::build() still requires it.
-        #[cfg(target_os = "windows")]
-        let (tx, _rx) = std::sync::mpsc::channel();
-        #[cfg(not(target_os = "windows"))]
         let (tx, rx) = std::sync::mpsc::channel();
 
         let mut cef_app =
@@ -75,34 +70,14 @@ impl Plugin for MessageLoopPlugin {
 
         app.insert_non_send(cef_app);
 
-        // On Windows, CEF runs its own message loop thread (multi_threaded_message_loop).
-        // We insert a BrowsersProxy and CommandChannelReceiver instead of the
-        // external-pump timer infrastructure.
-        // We also create the texture delivery channel here so the receiver side
-        // is available to Bevy systems, and the sender can be passed to
-        // `init_cef_browsers()` on the CEF UI thread.
-        #[cfg(target_os = "windows")]
-        {
-            let (cmd_tx, cmd_rx) = async_channel::unbounded::<CefCommand>();
-            let (tex_tx, tex_rx) = async_channel::unbounded::<RenderTextureMessage>();
-            app.insert_resource(BrowsersProxy::new(cmd_tx));
-            app.insert_resource(CommandChannelReceiver(cmd_rx));
-            app.insert_resource(TextureReceiverRes(tex_rx));
-            app.insert_resource(TextureSenderRes(tex_tx));
-        }
+        app.insert_non_send(MessageLoopWorkingReceiver(rx));
+        app.add_systems(Main, cef_do_message_loop_work);
 
-        // On non-Windows platforms, use the external message pump.
-        #[cfg(not(target_os = "windows"))]
-        {
-            app.insert_non_send(MessageLoopWorkingReceiver(rx));
-            app.add_systems(Main, cef_do_message_loop_work);
-
-            #[cfg(all(target_os = "macos", feature = "debug"))]
-            app.add_systems(
-                Main,
-                macos::observe_terminate_request.before(cef_do_message_loop_work),
-            );
-        }
+        #[cfg(all(target_os = "macos", feature = "debug"))]
+        app.add_systems(
+            Main,
+            macos::observe_terminate_request.before(cef_do_message_loop_work),
+        );
 
         app.insert_non_send(RunOnMainThread)
             .add_systems(Update, cef_shutdown.run_if(on_message::<AppExit>));
@@ -186,9 +161,6 @@ fn cef_initialize(
         no_sandbox: no_sandbox as _,
         root_cache_path: root_cache_path.unwrap_or_default().into(),
         windowless_rendering_enabled: true as _,
-        #[cfg(target_os = "windows")]
-        multi_threaded_message_loop: true as _,
-        #[cfg(not(target_os = "windows"))]
         external_message_pump: true as _,
         disable_signal_handlers: false as _,
         ..Default::default()
@@ -205,34 +177,6 @@ fn cef_initialize(
     );
 }
 
-/// Receives [`CefCommand`]s from the [`BrowsersProxy`] resource.
-///
-/// Inserted as a Bevy [`Resource`] on Windows where the multi-threaded message
-/// loop architecture is used. The CEF-side drain task reads from the receiver
-/// end to execute commands on the CEF UI thread.
-#[cfg(target_os = "windows")]
-#[derive(Resource)]
-pub struct CommandChannelReceiver(pub async_channel::Receiver<CefCommand>);
-
-/// Holds the receiver end of the texture delivery channel on Windows.
-///
-/// On macOS/Linux the receiver lives inside `NonSend<Browsers>`, but on Windows
-/// `Browsers` is not initialised on Bevy's main thread.  This resource makes
-/// the receiver available to the `send_render_textures` system.
-#[cfg(target_os = "windows")]
-#[derive(Resource)]
-pub struct TextureReceiverRes(pub async_channel::Receiver<RenderTextureMessage>);
-
-/// Holds the sender end of the texture delivery channel on Windows.
-///
-/// This is inserted as a Bevy resource so that it can later be passed to
-/// `init_cef_browsers()` on the CEF UI thread to wire up the
-/// `BrowsersCefSide` texture delivery path.
-#[cfg(target_os = "windows")]
-#[derive(Resource)]
-pub struct TextureSenderRes(pub async_channel::Sender<RenderTextureMessage>);
-
-#[cfg(not(target_os = "windows"))]
 fn cef_do_message_loop_work(
     receiver: NonSend<MessageLoopWorkingReceiver>,
     mut timer: Local<Option<MessageLoopTimer>>,

@@ -10,10 +10,7 @@ use crate::webview::WebviewSet;
 use bevy::prelude::*;
 use bevy::window::{PrimaryWindow, WindowScaleFactorChanged};
 
-#[cfg(not(target_os = "windows"))]
 use bevy_cef_core::prelude::Browsers;
-#[cfg(target_os = "windows")]
-use bevy_cef_core::prelude::BrowsersProxy;
 
 pub struct WebviewDpiPlugin;
 
@@ -28,16 +25,9 @@ impl Plugin for WebviewDpiPlugin {
                 .in_set(WebviewSet::DpiSeed),
         );
 
-        #[cfg(not(target_os = "windows"))]
         app.add_systems(
             Update,
             commit_webview_dpr_system.in_set(WebviewSet::CommitResize),
-        );
-
-        #[cfg(target_os = "windows")]
-        app.add_systems(
-            Update,
-            commit_webview_dpr_system_win.in_set(WebviewSet::CommitResize),
         );
     }
 }
@@ -77,7 +67,6 @@ fn refresh_on_scale_factor_changed_system(
     }
 }
 
-#[cfg(not(target_os = "windows"))]
 fn commit_webview_dpr_system(
     browsers: NonSend<Browsers>,
     webviews: Query<(Entity, &WebviewDpr), Changed<WebviewDpr>>,
@@ -85,17 +74,6 @@ fn commit_webview_dpr_system(
     for (entity, dpr) in webviews.iter() {
         browsers.set_dpr(&entity, dpr.0);
         browsers.notify_screen_info_changed(&entity);
-    }
-}
-
-#[cfg(target_os = "windows")]
-fn commit_webview_dpr_system_win(
-    proxy: Res<BrowsersProxy>,
-    webviews: Query<(Entity, &WebviewDpr), Changed<WebviewDpr>>,
-) {
-    for (entity, dpr) in webviews.iter() {
-        proxy.set_dpr(&entity, dpr.0);
-        proxy.notify_screen_info_changed(&entity);
     }
 }
 

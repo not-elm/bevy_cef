@@ -37,11 +37,7 @@ impl Plugin for ResponserPlugin {
             .add_systems(PreUpdate, resolve_webview_source)
             .add_systems(Update, (coming_request, responser));
 
-        #[cfg(not(target_os = "windows"))]
         app.add_systems(Update, hot_reload.run_if(any_changed_assets));
-
-        #[cfg(target_os = "windows")]
-        app.add_systems(Update, hot_reload_win.run_if(any_changed_assets));
     }
 }
 
@@ -149,12 +145,6 @@ fn responser(
     }
 }
 
-#[cfg(not(target_os = "windows"))]
 fn hot_reload(browsers: NonSend<Browsers>) {
     browsers.reload();
-}
-
-#[cfg(target_os = "windows")]
-fn hot_reload_win(proxy: Res<BrowsersProxy>) {
-    proxy.reload();
 }

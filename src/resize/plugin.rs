@@ -68,8 +68,7 @@ fn on_resizable_press(
     transforms_q: Query<(&GlobalTransform, &Transform, &DisplaySize), With<WebviewSource>>,
     cameras_q: Query<(&Camera, &GlobalTransform)>,
     keyboard: Res<ButtonInput<KeyCode>>,
-    #[cfg(not(target_os = "windows"))] browsers: NonSend<bevy_cef_core::prelude::Browsers>,
-    #[cfg(target_os = "windows")] browsers: Res<bevy_cef_core::prelude::BrowsersProxy>,
+    browsers: NonSend<bevy_cef_core::prelude::Browsers>,
 ) {
     // Ignore if already interacting.
     if resize_state.is_resizing() || drag_state.is_dragging() {
@@ -132,15 +131,12 @@ fn on_resizable_press(
             };
 
             // Clear CEF hover state.
-            #[cfg(not(target_os = "windows"))]
             browsers.send_mouse_move(
                 &webview,
                 std::iter::empty::<&MouseButton>(),
                 pixel_pos,
                 true,
             );
-            #[cfg(target_os = "windows")]
-            browsers.send_mouse_move(&webview, &[], pixel_pos, true);
         }
         HitResult::Drag => {
             // Start drag (duplicated from on_drag_press for resizable webviews).
@@ -172,15 +168,12 @@ fn on_resizable_press(
             });
 
             // Clear CEF hover state.
-            #[cfg(not(target_os = "windows"))]
             browsers.send_mouse_move(
                 &webview,
                 std::iter::empty::<&MouseButton>(),
                 pixel_pos,
                 true,
             );
-            #[cfg(target_os = "windows")]
-            browsers.send_mouse_move(&webview, &[], pixel_pos, true);
         }
         HitResult::None => {
             // Normal page input — do nothing, let CEF handle it.
