@@ -20,13 +20,8 @@ impl Plugin for WebviewMaterialPlugin {
         // macOS uses the GPU IOSurface accelerated-paint path and never emits
         // `RenderTextureMessage`; the CPU `OnPaint` chain is Linux/Windows-only.
         #[cfg(not(target_os = "macos"))]
-        app.add_message::<RenderTextureMessage>();
-
-        #[cfg(target_os = "linux")]
-        app.add_systems(Update, send_render_textures);
-
-        #[cfg(target_os = "windows")]
-        app.add_systems(Update, send_render_textures_win);
+        app.add_message::<RenderTextureMessage>()
+            .add_systems(Update, send_render_textures);
 
         load_internal_asset!(
             app,
@@ -49,19 +44,9 @@ pub struct WebviewMaterial {
 
 impl Material for WebviewMaterial {}
 
-#[cfg(target_os = "linux")]
+#[cfg(not(target_os = "macos"))]
 fn send_render_textures(mut ew: MessageWriter<RenderTextureMessage>, browsers: NonSend<Browsers>) {
     for texture in browsers.try_receive_textures() {
-        ew.write(texture);
-    }
-}
-
-#[cfg(target_os = "windows")]
-fn send_render_textures_win(
-    mut ew: MessageWriter<RenderTextureMessage>,
-    texture_rx: Res<crate::common::TextureReceiverRes>,
-) {
-    while let Ok(texture) = texture_rx.0.try_recv() {
         ew.write(texture);
     }
 }

@@ -4,9 +4,35 @@
 
 - Update cef_rs version to 152.3.0+152.0.6 (Chromium 152.0.7977.83)
   - Please update the CEF framework version using the Makefile setup command.
+- Windows: removed the `multi_threaded_message_loop` architecture. Removed
+  `BrowsersProxy` (incl. `is_empty` / `sender`), `CefCommand`, `drain_commands`,
+  `init_cef_browsers`, the `cef_command` / `cef_thread` modules (`SendRawWindowHandle`,
+  `BrowsersCefSide`), `TextureSender`, `CommandChannelReceiver`, `TextureReceiverRes`, and
+  `TextureSenderRes`. Use `NonSend<Browsers>` on every platform (same method names;
+  `create_browser` / `close` need `NonSendMut<Browsers>`). Code that only uses components
+  and EntityEvents (`RequestGoBack`, `HostEmitEvent`, …) is unaffected.
+- Windows: `SharedViewSize` / `SharedDpr` are now `Rc<Cell<_>>` (were `Arc<Mutex<_>>`),
+  `WebviewBrowser` has `view_slot` / `popup_slot`, and `RenderHandlerBuilder::build` takes
+  the slot arguments — identical to Linux.
 
 ### Changed
 
+- Windows now runs CEF with `external_message_pump`, like macOS and Linux, so the CEF UI
+  thread is the Bevy main thread on every platform. This removes ~970 lines of duplicated
+  Windows-only core code and every Windows call-site branch in the plugin crate. The
+  rationale for the earlier switch (#40) was that `cef_do_message_loop_work()` blocks the
+  render loop; CEF documents that it does not block, and the pump throttle from #39 already
+  bounds its cost. Measured on Windows 11 (debug build, CEF 152.0.6 runtime): 60 fps, page rAF ≈ 60, host→JS→host
+  round trip p50 ≈ 17 ms, CPU on par with the previous architecture.
+- Windows: CEF calls are immediate instead of queued to another thread; CPU textures use the
+  latest-frame-wins slot instead of an unbounded channel; `Browsers::can_go_back`,
+  `can_go_forward`, `zoom_level`, and `exec_edit_command` now work on Windows.
+- Windows: CEF work now runs only when Bevy's `Main` schedule runs (as on macOS/Linux).
+  Webviews slow down or pause when Bevy runs below 60 fps, whenever a reactive
+  `WinitSettings` update mode leaves the app idle (e.g. `WinitSettings::desktop_app()`,
+  which is reactive even while focused), and during Win32 modal move/size loops.
+- Windows keeps CEF-driven compositing (`EXTERNAL_BEGIN_FRAME == false`);
+  `BeginFrameInterval` has no effect there.
 - **Internal:** removed a redundant `common::*` glob re-export from
   `bevy_cef::prelude`. The same items already reach the prelude through
   `webview::prelude::*` (which re-exports `crate::common::*` via

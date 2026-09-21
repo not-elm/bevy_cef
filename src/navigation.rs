@@ -1,10 +1,7 @@
 use async_channel::Receiver;
 use bevy::ecs::event::EntityTrigger;
 use bevy::prelude::*;
-#[cfg(not(target_os = "windows"))]
 use bevy_cef_core::prelude::Browsers;
-#[cfg(target_os = "windows")]
-use bevy_cef_core::prelude::BrowsersProxy;
 use bevy_cef_core::prelude::{
     AddressChangedMessage, AddressChangedSenderInner, LoadHandlerMessage, LoadHandlerSenderInner,
 };
@@ -190,42 +187,18 @@ fn drain_address_changed(mut commands: Commands, receiver: Res<AddressChangedRec
     }
 }
 
-#[cfg(not(target_os = "windows"))]
 fn apply_request_go_back(trigger: On<RequestGoBack>, browsers: NonSend<Browsers>) {
     browsers.go_back(&trigger.webview);
 }
 
-#[cfg(not(target_os = "windows"))]
 fn apply_request_go_forward(trigger: On<RequestGoForward>, browsers: NonSend<Browsers>) {
     browsers.go_forward(&trigger.webview);
 }
 
-#[cfg(not(target_os = "windows"))]
 fn apply_request_navigate(trigger: On<RequestNavigate>, browsers: NonSend<Browsers>) {
     browsers.navigate(&trigger.webview, &trigger.url);
 }
 
-#[cfg(not(target_os = "windows"))]
 fn apply_request_reload(trigger: On<RequestReload>, browsers: NonSend<Browsers>) {
     browsers.reload_webview(&trigger.webview);
-}
-
-#[cfg(target_os = "windows")]
-fn apply_request_go_back(trigger: On<RequestGoBack>, proxy: Res<BrowsersProxy>) {
-    proxy.go_back(&trigger.webview);
-}
-
-#[cfg(target_os = "windows")]
-fn apply_request_go_forward(trigger: On<RequestGoForward>, proxy: Res<BrowsersProxy>) {
-    proxy.go_forward(&trigger.webview);
-}
-
-#[cfg(target_os = "windows")]
-fn apply_request_navigate(trigger: On<RequestNavigate>, proxy: Res<BrowsersProxy>) {
-    proxy.navigate(&trigger.webview, &trigger.url);
-}
-
-#[cfg(target_os = "windows")]
-fn apply_request_reload(trigger: On<RequestReload>, proxy: Res<BrowsersProxy>) {
-    proxy.reload_webview(&trigger.webview);
 }

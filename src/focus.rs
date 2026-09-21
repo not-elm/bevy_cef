@@ -7,10 +7,7 @@
 use crate::common::WebviewSource;
 use crate::system_param::pointer::find_webview_entity;
 use bevy::prelude::*;
-#[cfg(not(target_os = "windows"))]
 use bevy_cef_core::prelude::Browsers;
-#[cfg(target_os = "windows")]
-use bevy_cef_core::prelude::BrowsersProxy;
 
 /// The webview that currently holds input focus, if any.
 ///
@@ -26,13 +23,7 @@ pub(crate) struct FocusPlugin;
 impl Plugin for FocusPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<FocusedWebview>()
-            .add_systems(Update, setup_focus_observers);
-
-        #[cfg(not(target_os = "windows"))]
-        app.add_systems(Update, apply_webview_focus);
-
-        #[cfg(target_os = "windows")]
-        app.add_systems(Update, apply_webview_focus_win);
+            .add_systems(Update, (setup_focus_observers, apply_webview_focus));
     }
 }
 
@@ -52,7 +43,6 @@ fn set_focus_on_press(
     }
 }
 
-#[cfg(not(target_os = "windows"))]
 fn apply_webview_focus(
     focused: Res<FocusedWebview>,
     browsers: NonSend<Browsers>,
@@ -79,34 +69,6 @@ fn apply_webview_focus(
         None => {
             if let Some(p) = prev.take() {
                 browsers.set_focus(&p, false);
-            }
-        }
-    }
-}
-
-#[cfg(target_os = "windows")]
-fn apply_webview_focus_win(
-    focused: Res<FocusedWebview>,
-    proxy: Res<BrowsersProxy>,
-    webviews: Query<Entity, With<WebviewSource>>,
-    mut prev: Local<Option<Entity>>,
-) {
-    if !focused.is_changed() {
-        return;
-    }
-    match focused.0 {
-        Some(target) => {
-            for webview in webviews.iter() {
-                proxy.set_focus(&webview, webview == target);
-            }
-            *prev = Some(target);
-        }
-        // NOTE: blur ONLY the previously-focused webview, never blur-all (see
-        // the non-Windows variant for the first-frame rationale). A genuine
-        // Some→None transition releases CEF focus on the webview that held it.
-        None => {
-            if let Some(p) = prev.take() {
-                proxy.set_focus(&p, false);
             }
         }
     }

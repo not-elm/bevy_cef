@@ -17,7 +17,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```
 CefPlugin (root — accepts CommandLineConfig, CefExtensions, root_cache_path)
 ├── LocalHostPlugin (cef://localhost/ scheme for local assets)
-├── MessageLoopPlugin (CEF init + per-frame cef_do_message_loop_work())
+├── MessageLoopPlugin (CEF init + cef_do_message_loop_work() pump)
 ├── WebviewCoreComponentsPlugin (component registration)
 ├── WebviewPlugin → MeshWebviewPlugin (lifecycle, materials, DevTools)
 ├── IpcPlugin (IpcRawEventPlugin + HostEmitPlugin)
@@ -42,7 +42,7 @@ CefPlugin (root — accepts CommandLineConfig, CefExtensions, root_cache_path)
 1. User adds `WebviewSource` component → auto-requires `WebviewSize`, `ZoomLevel`, `AudioMuted`, `PreloadScripts`
 2. System resolves `WebviewSource` → internal `ResolvedWebviewUri` (lazy, change detection); runtime changes trigger navigation without browser recreation
 3. `WebviewPlugin` detects new `ResolvedWebviewUri` → calls `Browsers::create_browser()`
-4. CEF renders offscreen → `TextureSender` delivers texture to Bevy
+4. CEF renders offscreen → the frame reaches Bevy through a latest-frame-wins `Rc<Cell>` texture slot (CPU `OnPaint`, Windows/Linux) or a retained IOSurface (macOS GPU path)
 5. `WebviewMaterialPlugin` applies texture to mesh/sprite material
 6. User input (mouse/keyboard) → observers → `Browsers` methods forward to CEF
 
@@ -62,7 +62,8 @@ Navigation and DevTools use Bevy's trigger/observer pattern. These require expli
 
 ### Key Non-Obvious Patterns
 - **NonSend resources**: `Browsers` and CEF library loaders are `NonSend` — CEF is not thread-safe
-- **Message loop**: Uses CEF's `external_message_pump` mode; `cef_do_message_loop_work()` called every Bevy frame in `Main` schedule
+- **Message loop**: Every platform (Windows included) uses CEF's `external_message_pump` mode; `cef_do_message_loop_work()` runs from a system in the `Main` schedule when CEF requests work (4 ms minimum interval, 30 Hz max-delay fallback). `multi_threaded_message_loop` is not used — CEF does not support it on macOS.
+- **Begin frames**: macOS/Linux drive compositing with `send_external_begin_frame` (`BeginFrameInterval`, default 30 fps). Windows lets CEF composite on its own (`EXTERNAL_BEGIN_FRAME == false`); externally driven begin frames stall the webview there once DevTools opens.
 - **Pointer interaction**: Custom `WebviewPointer` SystemParam converts screen-space pointer → webview UV via AABB/mesh bounds + camera transforms; alpha channel hit-testing for transparent pixels
 - **Localhost scheme**: Static assets via Bevy asset system; inline HTML via `cef://localhost/__inline__/{id}` with auto-cleanup on component remove
 - **Secure-by-default switches**: no security-relaxing CEF switches are enabled by default. Users opt into `disable-web-security` etc. via `CommandLineConfig::default().with_switch(switches::DISABLE_WEB_SECURITY)`; opt-in switches are forwarded to all CEF child processes (CORS is enforced in the network process). `CefPlugin::sandbox: SandboxMode` controls the OS sandbox (`PlatformDefault` preserves per-platform behavior; enabling is best-effort and needs platform setup).
@@ -127,7 +128,7 @@ No automated tests. Testing done through examples:
 ## Platform Notes
 
 - **macOS**: Full support. Uses `objc` crate for window handling. CEF framework at `$HOME/.local/share/cef/Chromium Embedded Framework.framework`. All webviews (mesh + bevy_ui + sprite) render via the GPU `OnAcceleratedPaint` + IOSurface path — a render-world system (`webview_blit`, `RenderGraph` schedule) imports the IOSurface as a Metal texture and blits it into the Bevy texture each frame (no CPU readback; requires the Metal wgpu backend). `root_cache_path` must be set in `CefPlugin` to avoid `cef_initialize` failures from CEF's process-singleton lock. Known limitations: CEF popup widgets (`PET_POPUP`, e.g. `<select>` dropdowns) are not rendered yet, and sprite webviews' transparent regions still block lower pickable entities (sprite picking reads the CPU placeholder).
-- **Windows**: Full support. CEF at `$USERPROFILE/.local/share/cef`, auto-copied by build.rs. Separate render process binary recommended
+- **Windows**: Full support. CEF at `$USERPROFILE/.local/share/cef`, auto-copied by build.rs. Separate render process binary recommended. Shares the CPU `OnPaint` texture path with Linux; CEF drives compositing (`BeginFrameInterval` has no effect).
 - **Linux**: Supported. CEF at `$HOME/.local/share/cef`, auto-copied by `build.rs`. Run `make setup-linux` to install CEF + `bevy_cef_render_process`. `--no-zygote` is set in the default `CommandLineConfig` to avoid `chrome-sandbox` dependencies (combined with `no_sandbox: true`).
 
 ## Version Compatibility

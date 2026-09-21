@@ -8,6 +8,7 @@ use crate::webview::mesh::MeshWebviewPlugin;
 use crate::webview::ui::UiWebviewPlugin;
 use bevy::ecs::lifecycle::HookContext;
 use bevy::ecs::world::DeferredWorld;
+use bevy::input::mouse::MouseScrollUnit;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use bevy::winit::WINIT_WINDOWS;
@@ -17,11 +18,6 @@ use bevy_remote::BrpSender;
 use raw_window_handle::HasRawWindowHandle;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
-
-#[cfg(target_os = "windows")]
-use crate::common::CommandChannelReceiver;
-#[cfg(target_os = "windows")]
-use crate::common::TextureSenderRes;
 
 pub(crate) mod alpha;
 // [macos-gpu-osr] Injects the owned CEF webview GPU texture into RenderAssets<GpuImage>.
@@ -96,6 +92,9 @@ pub struct RequestCloseDevtool {
 ///     .add_plugins(CefPlugin::default())
 ///     .insert_resource(BeginFrameInterval(core::time::Duration::from_millis(1000 / 60)));
 /// ```
+///
+/// Has no effect on Windows: there CEF drives compositing itself at 60 Hz, so no
+/// external begin frames are sent.
 #[derive(Resource)]
 pub struct BeginFrameInterval(pub Duration);
 
@@ -138,87 +137,34 @@ impl Plugin for WebviewPlugin {
                 .chain(),
         );
 
-        // macOS/Linux: direct NonSend<Browsers>
-        #[cfg(not(target_os = "windows"))]
-        {
-            app.init_non_send::<Browsers>()
-                .init_resource::<BeginFrameInterval>()
-                .add_plugins((MeshWebviewPlugin, UiWebviewPlugin))
-                .add_systems(Main, send_external_begin_frame)
-                .add_systems(
-                    Update,
-                    (
-                        resize.run_if(any_resized).in_set(WebviewSet::CommitResize),
-                        create_webview
-                            .run_if(added_webview)
-                            .in_set(WebviewSet::CreateBrowser),
-                        navigate_on_source_change,
-                    ),
-                )
-                .add_observer(apply_request_show_devtool)
-                .add_observer(apply_request_close_devtool);
+        app.init_non_send::<Browsers>()
+            .init_resource::<BeginFrameInterval>()
+            .add_plugins((MeshWebviewPlugin, UiWebviewPlugin))
+            .add_systems(
+                Update,
+                (
+                    resize.run_if(any_resized).in_set(WebviewSet::CommitResize),
+                    create_webview
+                        .run_if(added_webview)
+                        .in_set(WebviewSet::CreateBrowser),
+                    navigate_on_source_change,
+                ),
+            )
+            .add_observer(apply_request_show_devtool)
+            .add_observer(apply_request_close_devtool);
 
-            #[cfg(target_os = "macos")]
-            app.add_plugins(crate::webview::gpu_surface::WebviewGpuInjectPlugin);
+        // Windows lets CEF drive compositing; see `EXTERNAL_BEGIN_FRAME`.
+        if EXTERNAL_BEGIN_FRAME {
+            app.add_systems(Main, send_external_begin_frame);
         }
 
-        // Windows: BrowsersProxy already inserted by MessageLoopPlugin.
-        // No send_external_begin_frame (CEF drives compositing).
-        // Register conditional drain system that posts CefPostTask(TID_UI).
-        #[cfg(target_os = "windows")]
-        {
-            app.add_plugins((MeshWebviewPlugin, UiWebviewPlugin));
+        #[cfg(target_os = "macos")]
+        app.add_plugins(crate::webview::gpu_surface::WebviewGpuInjectPlugin);
 
-            // Initialise the thread-local BrowsersCefSide on the CEF UI thread
-            // with the texture sender so that created browsers can deliver
-            // rendered frames back to Bevy.
-            let texture_sender = app.world().resource::<TextureSenderRes>().0.clone();
-            {
-                use cef::rc::Rc;
-                use cef::{ImplTask, Task, WrapTask};
-
-                cef::wrap_task! {
-                    struct InitCefBrowsersTask {
-                        sender: async_channel::Sender<RenderTextureMessage>,
-                    }
-                    impl Task {
-                        fn execute(&self) {
-                            bevy_cef_core::prelude::init_cef_browsers(self.sender.clone());
-                        }
-                    }
-                }
-                let mut task = InitCefBrowsersTask::new(texture_sender);
-                cef::post_task(cef::ThreadId::UI, Some(&mut task));
-            }
-
-            app.add_systems(Main, post_drain_task.run_if(win_commands_pending))
-                .add_systems(
-                    Update,
-                    (
-                        resize_win
-                            .run_if(any_resized)
-                            .in_set(WebviewSet::CommitResize),
-                        create_webview_win
-                            .run_if(added_webview)
-                            .in_set(WebviewSet::CreateBrowser),
-                        navigate_on_source_change_win,
-                    ),
-                )
-                .add_observer(apply_request_show_devtool_win)
-                .add_observer(apply_request_close_devtool_win);
-        }
-
-        // Platform-conditional despawn hook
         app.world_mut()
             .register_component_hooks::<WebviewSource>()
-            .on_despawn(|world: DeferredWorld, ctx: HookContext| {
-                #[cfg(not(target_os = "windows"))]
-                {
-                    let mut world = world;
-                    world.non_send_mut::<Browsers>().close(&ctx.entity);
-                }
-                #[cfg(target_os = "windows")]
-                world.resource::<BrowsersProxy>().close(&ctx.entity);
+            .on_despawn(|mut world: DeferredWorld, ctx: HookContext| {
+                world.non_send_mut::<Browsers>().close(&ctx.entity);
             });
 
         app.world_mut()
@@ -230,6 +176,15 @@ impl Plugin for WebviewPlugin {
     }
 }
 
+/// Converts a mouse-wheel delta into the pixel deltas CEF expects.
+/// Chromium's default line height is 3 lines × 40px = 120px per notch.
+pub(crate) fn scroll_delta(unit: MouseScrollUnit, x: f32, y: f32) -> Vec2 {
+    match unit {
+        MouseScrollUnit::Line => Vec2::new(x * 120.0, y * 120.0),
+        MouseScrollUnit::Pixel => Vec2::new(x, y),
+    }
+}
+
 fn any_resized(webviews: Query<Entity, Changed<WebviewSize>>) -> bool {
     !webviews.is_empty()
 }
@@ -238,9 +193,8 @@ fn added_webview(webviews: Query<Entity, Added<ResolvedWebviewUri>>) -> bool {
     !webviews.is_empty()
 }
 
-#[cfg(not(target_os = "windows"))]
 fn send_external_begin_frame(
-    mut hosts: NonSendMut<Browsers>,
+    browsers: NonSend<Browsers>,
     time: Res<Time>,
     interval: Res<BeginFrameInterval>,
     mut timer: Local<Option<Timer>>,
@@ -251,11 +205,10 @@ fn send_external_begin_frame(
     let timer = timer.as_mut().unwrap();
     timer.tick(time.delta());
     if timer.just_finished() {
-        hosts.send_external_begin_frame();
+        browsers.send_external_begin_frame();
     }
 }
 
-#[cfg(not(target_os = "windows"))]
 #[allow(clippy::too_many_arguments)]
 fn create_webview(
     mut browsers: NonSendMut<Browsers>,
@@ -310,7 +263,6 @@ fn create_webview(
     });
 }
 
-#[cfg(not(target_os = "windows"))]
 fn navigate_on_source_change(
     browsers: NonSend<Browsers>,
     webviews: Query<(Entity, &ResolvedWebviewUri), Changed<ResolvedWebviewUri>>,
@@ -324,7 +276,6 @@ fn navigate_on_source_change(
     }
 }
 
-#[cfg(not(target_os = "windows"))]
 fn resize(
     browsers: NonSend<Browsers>,
     webviews: Query<(Entity, &WebviewSize), Changed<WebviewSize>>,
@@ -334,127 +285,10 @@ fn resize(
     }
 }
 
-#[cfg(not(target_os = "windows"))]
 fn apply_request_show_devtool(trigger: On<RequestShowDevTool>, browsers: NonSend<Browsers>) {
     browsers.show_devtool(&trigger.webview);
 }
 
-#[cfg(not(target_os = "windows"))]
 fn apply_request_close_devtool(trigger: On<RequestCloseDevtool>, browsers: NonSend<Browsers>) {
     browsers.close_devtools(&trigger.webview);
-}
-
-#[cfg(target_os = "windows")]
-fn win_commands_pending(proxy: Res<BrowsersProxy>) -> bool {
-    !proxy.is_empty()
-}
-
-#[cfg(target_os = "windows")]
-fn post_drain_task(rx: Res<CommandChannelReceiver>) {
-    use cef::rc::Rc;
-    use cef::{ImplTask, Task, WrapTask};
-
-    let receiver = rx.0.clone();
-    cef::wrap_task! {
-        struct DrainTask {
-            rx: async_channel::Receiver<CefCommand>,
-        }
-
-        impl Task {
-            fn execute(&self) {
-                bevy_cef_core::prelude::drain_commands(&self.rx);
-            }
-        }
-    }
-    let mut task = DrainTask::new(receiver);
-    cef::post_task(cef::ThreadId::UI, Some(&mut task));
-}
-
-#[cfg(target_os = "windows")]
-#[allow(clippy::too_many_arguments)]
-fn create_webview_win(
-    proxy: Res<BrowsersProxy>,
-    requester: Res<Requester>,
-    ipc_event_sender: Res<IpcEventRawSender>,
-    brp_sender: Res<BrpSender>,
-    cursor_icon_sender: Res<SystemCursorIconSender>,
-    drag_regions_sender: Res<crate::drag::DraggableRegionSender>,
-    load_handler_sender: Res<crate::navigation::LoadHandlerSender>,
-    address_changed_sender: Res<crate::navigation::AddressChangedSender>,
-    title_changed_sender: Res<crate::title::TitleChangedSender>,
-    webviews: Query<
-        (
-            Entity,
-            &ResolvedWebviewUri,
-            &WebviewSize,
-            &WebviewDpr,
-            &PreloadScripts,
-            Option<&HostWindow>,
-        ),
-        Added<ResolvedWebviewUri>,
-    >,
-    primary_window: Query<Entity, With<PrimaryWindow>>,
-) {
-    WINIT_WINDOWS.with(|winit_windows| {
-        let winit_windows = winit_windows.borrow();
-        for (entity, uri, size, dpr, initialize_scripts, host_window) in webviews.iter() {
-            let host_window = host_window
-                .and_then(|w| winit_windows.get_window(w.0))
-                .or_else(|| winit_windows.get_window(primary_window.single().ok()?))
-                .and_then(|w| {
-                    #[allow(deprecated)]
-                    w.raw_window_handle().ok()
-                });
-            proxy.create_browser(
-                entity,
-                &uri.0,
-                size.0,
-                dpr.0,
-                requester.clone(),
-                ipc_event_sender.0.clone(),
-                brp_sender.clone(),
-                cursor_icon_sender.clone(),
-                drag_regions_sender.0.clone(),
-                load_handler_sender.0.clone(),
-                address_changed_sender.0.clone(),
-                title_changed_sender.0.clone(),
-                &initialize_scripts.0,
-                host_window,
-            );
-        }
-    });
-}
-
-#[cfg(target_os = "windows")]
-fn navigate_on_source_change_win(
-    proxy: Res<BrowsersProxy>,
-    webviews: Query<(Entity, &ResolvedWebviewUri), Changed<ResolvedWebviewUri>>,
-    added: Query<Entity, Added<ResolvedWebviewUri>>,
-) {
-    for (entity, uri) in webviews.iter() {
-        if added.contains(entity) {
-            continue;
-        }
-        proxy.navigate(&entity, &uri.0);
-    }
-}
-
-#[cfg(target_os = "windows")]
-fn resize_win(
-    proxy: Res<BrowsersProxy>,
-    webviews: Query<(Entity, &WebviewSize), Changed<WebviewSize>>,
-) {
-    for (webview, size) in webviews.iter() {
-        proxy.resize(&webview, size.0);
-    }
-}
-
-#[cfg(target_os = "windows")]
-fn apply_request_show_devtool_win(trigger: On<RequestShowDevTool>, proxy: Res<BrowsersProxy>) {
-    proxy.show_devtool(&trigger.webview);
-}
-
-#[cfg(target_os = "windows")]
-fn apply_request_close_devtool_win(trigger: On<RequestCloseDevtool>, proxy: Res<BrowsersProxy>) {
-    proxy.close_devtools(&trigger.webview);
 }

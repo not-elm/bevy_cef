@@ -8,17 +8,14 @@ use crate::prelude::{WebviewSize, WebviewSource, WebviewSurface};
 use crate::webview::alpha::is_pixel_transparent;
 #[cfg(target_os = "macos")]
 use crate::webview::alpha::is_pixel_transparent_surface;
+use crate::webview::scroll_delta;
 use crate::webview::ui::material::WebviewUiMaterial;
 use bevy::ecs::lifecycle::HookContext;
 use bevy::ecs::world::DeferredWorld;
-use bevy::input::mouse::MouseScrollUnit;
 use bevy::picking::events::Scroll;
 use bevy::prelude::*;
 use bevy::ui::RelativeCursorPosition;
-#[cfg(not(target_os = "windows"))]
 use bevy_cef_core::prelude::Browsers;
-#[cfg(target_os = "windows")]
-use bevy_cef_core::prelude::BrowsersProxy;
 
 pub struct WebviewUiInputPlugin;
 
@@ -36,7 +33,7 @@ impl Plugin for WebviewUiInputPlugin {
 ///
 /// Skips nodes that lack `WebviewSource` (a bare material node is not a webview).
 /// `on_add` fires once per insertion, so each node is wired exactly once. The
-/// platform split lives in the observer functions, not here.
+/// macOS alpha hit-test split lives in `resolve_ui_pos`, not here.
 fn setup_ui_observers(mut world: DeferredWorld, ctx: HookContext) {
     if world.get::<WebviewSource>(ctx.entity).is_none() {
         return;
@@ -56,15 +53,6 @@ fn setup_ui_observers(mut world: DeferredWorld, ctx: HookContext) {
 /// webview's logical size.
 fn ui_pos_to_dip(normalized: Vec2, computed_size: Vec2, inverse_scale_factor: f32) -> Vec2 {
     (normalized + Vec2::splat(0.5)) * computed_size * inverse_scale_factor
-}
-
-/// Converts a `Pointer<Scroll>` delta into the pixel deltas CEF expects.
-/// Chromium's default line height is 3 lines × 40px = 120px per notch.
-fn scroll_delta(unit: MouseScrollUnit, x: f32, y: f32) -> Vec2 {
-    match unit {
-        MouseScrollUnit::Line => Vec2::new(x * 120.0, y * 120.0),
-        MouseScrollUnit::Pixel => Vec2::new(x, y),
-    }
 }
 
 /// Components every UI input handler reads off the observed webview node.
@@ -122,7 +110,6 @@ fn ui_pointer_pos_macos(
 /// On macOS, reads `WebviewIoSurface` from `webview_iosurfaces`; on other
 /// platforms (or before the first GPU frame on macOS) falls back to `Image.data`
 /// via `ui_pointer_pos`.
-#[cfg(not(target_os = "windows"))]
 fn resolve_ui_pos(
     entity: bevy::ecs::entity::Entity,
     node: UiNode,
@@ -142,7 +129,6 @@ fn resolve_ui_pos(
 }
 
 #[allow(clippy::too_many_arguments)]
-#[cfg(not(target_os = "windows"))]
 fn on_ui_pointer_move(
     trigger: On<Pointer<Move>>,
     input: Res<ButtonInput<MouseButton>>,
@@ -171,7 +157,6 @@ fn on_ui_pointer_move(
     browsers.send_mouse_move(&trigger.entity, input.get_pressed(), pos, false);
 }
 
-#[cfg(not(target_os = "windows"))]
 fn on_ui_pointer_pressed(
     trigger: On<Pointer<Press>>,
     browsers: NonSend<Browsers>,
@@ -199,7 +184,6 @@ fn on_ui_pointer_pressed(
     browsers.send_mouse_click(&trigger.entity, pos, trigger.button, false);
 }
 
-#[cfg(not(target_os = "windows"))]
 fn on_ui_pointer_released(
     trigger: On<Pointer<Release>>,
     browsers: NonSend<Browsers>,
@@ -227,7 +211,6 @@ fn on_ui_pointer_released(
     browsers.send_mouse_click(&trigger.entity, pos, trigger.button, true);
 }
 
-#[cfg(not(target_os = "windows"))]
 fn on_ui_pointer_scroll(
     trigger: On<Pointer<Scroll>>,
     browsers: NonSend<Browsers>,
@@ -254,93 +237,6 @@ fn on_ui_pointer_scroll(
     };
     let delta = scroll_delta(trigger.unit, trigger.x, trigger.y);
     browsers.send_mouse_wheel(&trigger.entity, pos, delta);
-}
-
-#[cfg(target_os = "windows")]
-fn on_ui_pointer_move(
-    trigger: On<Pointer<Move>>,
-    input: Res<ButtonInput<MouseButton>>,
-    proxy: Res<BrowsersProxy>,
-    nodes: Query<UiNode, With<MaterialNode<WebviewUiMaterial>>>,
-    images: Res<Assets<Image>>,
-    drag_state: Res<crate::drag::DragState>,
-    resize_state: Res<crate::resize::ResizeState>,
-) {
-    if drag_state.is_dragging() || resize_state.is_resizing() {
-        return;
-    }
-    let Ok(node) = nodes.get(trigger.entity) else {
-        return;
-    };
-    let Some(pos) = ui_pointer_pos(node, &images) else {
-        return;
-    };
-    let buttons: Vec<MouseButton> = input.get_pressed().copied().collect();
-    proxy.send_mouse_move(&trigger.entity, &buttons, pos, false);
-}
-
-#[cfg(target_os = "windows")]
-fn on_ui_pointer_pressed(
-    trigger: On<Pointer<Press>>,
-    proxy: Res<BrowsersProxy>,
-    nodes: Query<UiNode, With<MaterialNode<WebviewUiMaterial>>>,
-    images: Res<Assets<Image>>,
-    drag_state: Res<crate::drag::DragState>,
-    resize_state: Res<crate::resize::ResizeState>,
-) {
-    if drag_state.is_dragging() || resize_state.is_resizing() {
-        return;
-    }
-    let Ok(node) = nodes.get(trigger.entity) else {
-        return;
-    };
-    let Some(pos) = ui_pointer_pos(node, &images) else {
-        return;
-    };
-    proxy.send_mouse_click(&trigger.entity, pos, trigger.button, false);
-}
-
-#[cfg(target_os = "windows")]
-fn on_ui_pointer_released(
-    trigger: On<Pointer<Release>>,
-    proxy: Res<BrowsersProxy>,
-    nodes: Query<UiNode, With<MaterialNode<WebviewUiMaterial>>>,
-    images: Res<Assets<Image>>,
-    drag_state: Res<crate::drag::DragState>,
-    resize_state: Res<crate::resize::ResizeState>,
-) {
-    if drag_state.is_dragging() || resize_state.is_resizing() {
-        return;
-    }
-    let Ok(node) = nodes.get(trigger.entity) else {
-        return;
-    };
-    let Some(pos) = ui_pointer_pos(node, &images) else {
-        return;
-    };
-    proxy.send_mouse_click(&trigger.entity, pos, trigger.button, true);
-}
-
-#[cfg(target_os = "windows")]
-fn on_ui_pointer_scroll(
-    trigger: On<Pointer<Scroll>>,
-    proxy: Res<BrowsersProxy>,
-    nodes: Query<UiNode, With<MaterialNode<WebviewUiMaterial>>>,
-    images: Res<Assets<Image>>,
-    drag_state: Res<crate::drag::DragState>,
-    resize_state: Res<crate::resize::ResizeState>,
-) {
-    if drag_state.is_dragging() || resize_state.is_resizing() {
-        return;
-    }
-    let Ok(node) = nodes.get(trigger.entity) else {
-        return;
-    };
-    let Some(pos) = ui_pointer_pos(node, &images) else {
-        return;
-    };
-    let delta = scroll_delta(trigger.unit, trigger.x, trigger.y);
-    proxy.send_mouse_wheel(&trigger.entity, pos, delta);
 }
 
 #[cfg(test)]

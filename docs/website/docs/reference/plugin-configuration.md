@@ -135,7 +135,7 @@ This initializes CEF with no custom command-line arguments, no extensions, no cu
 | Sub-Plugin | Purpose |
 |-----------|---------|
 | `LocalHostPlugin` | Registers the `cef://localhost/` scheme for serving local assets from Bevy's asset system. |
-| `MessageLoopPlugin` | Initializes CEF and calls `cef_do_message_loop_work()` once per frame. |
+| `MessageLoopPlugin` | Initializes CEF and runs a system in the `Main` schedule that calls `cef_do_message_loop_work()` whenever CEF requests work (throttled to a 4 ms minimum interval, with a 30 Hz fallback). |
 | `WebviewCoreComponentsPlugin` | Registers core webview components (`WebviewSource`, `WebviewSize`, etc.) with Bevy. |
 | `WebviewPlugin` / `MeshWebviewPlugin` | Manages webview lifecycle: creation, texture delivery, material assignment, and DevTools. |
 | `IpcPlugin` | Composes `IpcRawEventPlugin` and `HostEmitPlugin` for bidirectional IPC. |

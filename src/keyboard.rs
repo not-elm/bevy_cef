@@ -2,11 +2,7 @@ use crate::common::WebviewSource;
 use crate::focus::FocusedWebview;
 use bevy::input::keyboard::KeyboardInput;
 use bevy::prelude::*;
-#[cfg(not(target_os = "windows"))]
-use bevy_cef_core::prelude::Browsers;
-#[cfg(target_os = "windows")]
-use bevy_cef_core::prelude::BrowsersProxy;
-use bevy_cef_core::prelude::{EditCommand, create_cef_key_events, keyboard_modifiers};
+use bevy_cef_core::prelude::{Browsers, EditCommand, create_cef_key_events, keyboard_modifiers};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
@@ -61,7 +57,6 @@ impl Plugin for KeyboardPlugin {
             .init_resource::<IsImeComposing>()
             .init_resource::<CefKeyboardFilter>();
 
-        #[cfg(not(target_os = "windows"))]
         app.add_systems(
             Update,
             (
@@ -70,18 +65,6 @@ impl Plugin for KeyboardPlugin {
                 activate_ime,
                 ime_event.run_if(on_message::<Ime>),
                 send_key_event.run_if(on_message::<KeyboardInput>),
-            )
-                .chain()
-                .in_set(KeyboardDeliverSet),
-        );
-
-        #[cfg(target_os = "windows")]
-        app.add_systems(
-            Update,
-            (
-                activate_ime,
-                ime_event_win.run_if(on_message::<Ime>),
-                send_key_event_win.run_if(on_message::<KeyboardInput>),
             )
                 .chain()
                 .in_set(KeyboardDeliverSet),
@@ -139,7 +122,6 @@ struct IsImeCommiting(bool);
 #[reflect(Default, Serialize, Deserialize)]
 struct IsImeComposing(bool);
 
-#[cfg(not(target_os = "windows"))]
 #[allow(clippy::too_many_arguments)]
 fn send_key_event(
     mut er: MessageReader<KeyboardInput>,
@@ -206,7 +188,6 @@ fn send_key_event(
     }
 }
 
-#[cfg(not(target_os = "windows"))]
 fn ime_event(
     mut er: MessageReader<Ime>,
     mut is_ime_commiting: ResMut<IsImeCommiting>,
@@ -253,101 +234,6 @@ fn ime_event(
             }
             Ime::Disabled { .. } => {
                 browsers.ime_cancel_composition();
-                is_ime_composing.0 = false;
-            }
-            _ => {}
-        }
-    }
-}
-
-#[cfg(target_os = "windows")]
-#[allow(clippy::too_many_arguments)]
-fn send_key_event_win(
-    mut er: MessageReader<KeyboardInput>,
-    mut is_ime_commiting: ResMut<IsImeCommiting>,
-    mut is_ime_composing: ResMut<IsImeComposing>,
-    input: Res<ButtonInput<KeyCode>>,
-    proxy: Res<BrowsersProxy>,
-    focused: Res<FocusedWebview>,
-    filter: Res<CefKeyboardFilter>,
-    webviews: Query<Entity, With<WebviewSource>>,
-) {
-    let modifiers = keyboard_modifiers(&input);
-    let target = focused.0.filter(|e| webviews.get(*e).is_ok());
-    for event in er.read() {
-        if (event.key_code == KeyCode::Enter || event.key_code == KeyCode::Backspace)
-            && is_ime_commiting.0
-        {
-            is_ime_commiting.0 = false;
-            continue;
-        }
-        if event.key_code == KeyCode::Backspace && is_ime_composing.0 {
-            is_ime_composing.0 = false;
-            continue;
-        }
-        // Deliver only to the explicitly-focused webview. See the non-Windows
-        // variant for why broadcasting on `None` leaks keys to a blurred webview,
-        // and why a webview receives keys only after it is first clicked.
-        let Some(webview) = target else {
-            continue;
-        };
-        let ms = ModifiersState {
-            alt: input.pressed(KeyCode::AltLeft) || input.pressed(KeyCode::AltRight),
-            ctrl: input.pressed(KeyCode::ControlLeft) || input.pressed(KeyCode::ControlRight),
-            shift: input.pressed(KeyCode::ShiftLeft) || input.pressed(KeyCode::ShiftRight),
-            logo: input.pressed(KeyCode::SuperLeft) || input.pressed(KeyCode::SuperRight),
-        };
-        if filter.contains(webview, event.key_code, ms) {
-            // NOTE: the embedder routes this key elsewhere (e.g. a PTY); skipping this
-            // `continue` would leak the key to CEF despite the filter.
-            continue;
-        }
-        for key_event in create_cef_key_events(modifiers, event) {
-            proxy.send_key(&webview, key_event);
-        }
-    }
-}
-
-#[cfg(target_os = "windows")]
-fn ime_event_win(
-    mut er: MessageReader<Ime>,
-    mut is_ime_commiting: ResMut<IsImeCommiting>,
-    mut is_ime_composing: ResMut<IsImeComposing>,
-    proxy: Res<BrowsersProxy>,
-    focused: Res<FocusedWebview>,
-    webviews: Query<Entity, With<WebviewSource>>,
-) {
-    let has_target = focused.0.filter(|e| webviews.get(*e).is_ok()).is_some();
-    if !has_target {
-        // See `ime_event`: finalize any composition on the now-blurred webview
-        // and clear the shared IME flags when no webview is focused.
-        if is_ime_composing.0 {
-            proxy.ime_cancel_composition();
-        }
-        is_ime_composing.0 = false;
-        is_ime_commiting.0 = false;
-    }
-    for event in er.read() {
-        // See `ime_event`: drive CEF IME only when a webview is focused.
-        if !has_target {
-            continue;
-        }
-        match event {
-            Ime::Preedit { value, cursor, .. } => {
-                if value.is_empty() {
-                    proxy.ime_cancel_composition();
-                } else {
-                    proxy.set_ime_composition(value, cursor.map(|(_, e)| e as u32));
-                    is_ime_composing.0 = true;
-                }
-            }
-            Ime::Commit { value, .. } => {
-                proxy.set_ime_commit_text(value);
-                is_ime_commiting.0 = true;
-                is_ime_composing.0 = false;
-            }
-            Ime::Disabled { .. } => {
-                proxy.ime_cancel_composition();
                 is_ime_composing.0 = false;
             }
             _ => {}
