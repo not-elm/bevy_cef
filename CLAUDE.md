@@ -30,7 +30,7 @@ CefPlugin (root — accepts CommandLineConfig, CefExtensions, root_cache_path)
 - `WebviewSource`: URL spec enum — `WebviewSource::new("url")`, `WebviewSource::local("file.html")`, or `WebviewSource::inline("<h1>Hello</h1>")`; auto-requires `WebviewSize`, `ZoomLevel`, `AudioMuted`, `PreloadScripts`
 - `WebviewSize`: Texture resolution (default 800×800), not 3D mesh size
 - `WebviewExtendStandardMaterial`: Material for 3D mesh rendering
-- `WebviewSpriteMaterial`: Material for 2D sprite rendering
+- `Sprite` (Bevy): 2D sprite display. Bevy 0.20 renders it through `Mesh2d` + `SpriteMeshMaterial`; bevy_cef touches that material when the webview image is reallocated or Bevy reassigns the material
 - `HostWindow`: Optional parent window (defaults to PrimaryWindow)
 - `ZoomLevel`: f64 zoom (0.0 = default)
 - `AudioMuted`: bool audio control
@@ -67,6 +67,8 @@ Navigation and DevTools use Bevy's trigger/observer pattern. These require expli
 - **Pointer interaction**: Custom `WebviewPointer` SystemParam converts screen-space pointer → webview UV via AABB/mesh bounds + camera transforms; alpha channel hit-testing for transparent pixels
 - **Localhost scheme**: Static assets via Bevy asset system; inline HTML via `cef://localhost/__inline__/{id}` with auto-cleanup on component remove
 - **Secure-by-default switches**: no security-relaxing CEF switches are enabled by default. Users opt into `disable-web-security` etc. via `CommandLineConfig::default().with_switch(switches::DISABLE_WEB_SECURITY)`; opt-in switches are forwarded to all CEF child processes (CORS is enforced in the network process). `CefPlugin::sandbox: SandboxMode` controls the OS sandbox (`PlatformDefault` preserves per-platform behavior; enabling is best-effort and needs platform setup).
+- **WESL shaders**: all shaders are `.wesl`. The shared sampling helper is the WESL module `bevy_cef::webview::util` (`surface_color(uv)`, bindings 101/102), registered with `load_shader_library!`; user material shaders import it with `import bevy_cef::webview::util::surface_color;`. A material plugin must call `embedded_asset!` for its shader before adding its `MaterialPlugin`, because Bevy 0.20's `MaterialPlugin::build` starts loading the shader immediately.
+- **Mesh vs. sprite input routing**: mesh-path systems filter with `MeshWebviewFilter`, which excludes `Sprite` because Bevy 0.20 inserts a `Mesh2d` on every sprite.
 
 ## Development Commands
 
@@ -85,7 +87,7 @@ make install-debug-render-process
 make setup-windows
 ```
 
-**Note:** Workspace uses Rust edition 2024.
+**Note:** Workspace uses Rust edition 2024 with MSRV 1.97.1 (Bevy 0.20's).
 
 ### Debug Tools Setup (macOS)
 ```bash
@@ -127,7 +129,7 @@ No automated tests. Testing done through examples:
 
 ## Platform Notes
 
-- **macOS**: Full support. Uses `objc` crate for window handling. CEF framework at `$HOME/.local/share/cef/Chromium Embedded Framework.framework`. All webviews (mesh + bevy_ui + sprite) render via the GPU `OnAcceleratedPaint` + IOSurface path — a render-world system (`webview_blit`, `RenderGraph` schedule) imports the IOSurface as a Metal texture and blits it into the Bevy texture each frame (no CPU readback; requires the Metal wgpu backend). `root_cache_path` must be set in `CefPlugin` to avoid `cef_initialize` failures from CEF's process-singleton lock. Known limitations: CEF popup widgets (`PET_POPUP`, e.g. `<select>` dropdowns) are not rendered yet, and sprite webviews' transparent regions still block lower pickable entities (sprite picking reads the CPU placeholder).
+- **macOS**: Full support. Uses `objc` crate for window handling. CEF framework at `$HOME/.local/share/cef/Chromium Embedded Framework.framework`. All webviews (mesh + bevy_ui + sprite) render via the GPU `OnAcceleratedPaint` + IOSurface path — a render-world system (`webview_blit`, `RenderGraph` schedule) imports the IOSurface as a Metal texture and blits it into the Bevy texture each frame (ordered `.before(RenderGraphSystems::Render)` explicitly, because Bevy 0.20 chains the render-graph sets only weakly) (no CPU readback; requires the Metal wgpu backend). `root_cache_path` must be set in `CefPlugin` to avoid `cef_initialize` failures from CEF's process-singleton lock. Known limitations: CEF popup widgets (`PET_POPUP`, e.g. `<select>` dropdowns) are not rendered yet, and sprite webviews' transparent regions still block lower pickable entities (sprite picking reads the CPU placeholder).
 - **Windows**: Full support. CEF at `$USERPROFILE/.local/share/cef`, auto-copied by build.rs. Separate render process binary recommended. Shares the CPU `OnPaint` texture path with Linux; CEF drives compositing (`BeginFrameInterval` has no effect).
 - **Linux**: Supported. CEF at `$HOME/.local/share/cef`, auto-copied by `build.rs`. Run `make setup-linux` to install CEF + `bevy_cef_render_process`. `--no-zygote` is set in the default `CommandLineConfig` to avoid `chrome-sandbox` dependencies (combined with `no_sandbox: true`).
 
@@ -135,6 +137,7 @@ No automated tests. Testing done through examples:
 
 | Bevy   | bevy_cef       | CEF              |
 | ------ | -------------- | ---------------- |
+| 0.20   | 0.14.0         | 152.3.0+152.0.6  |
 | 0.19   | 0.13.0         | 152.3.0+152.0.6  |
 | 0.19   | 0.12.0         | 149.3.0+149.0.6  |
 | 0.18   | 0.5.0 – 0.11.0 | 145.6.1+145.0.28 |
