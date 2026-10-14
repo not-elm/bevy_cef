@@ -2,7 +2,9 @@
 //! CEF `OnDraggableRegionsChanged` callbacks to Bevy ECS.
 
 use crate::prelude::WebviewSource;
+use crate::resize::components::WebviewResizable;
 use crate::system_param::pointer::WebviewPointer;
+use crate::webview::MeshWebviewFilter;
 use async_channel::Receiver;
 use bevy::prelude::*;
 use bevy_cef_core::prelude::{DraggableRegion, DraggableRegionSenderInner};
@@ -211,8 +213,8 @@ fn attach_drag_observers(
         (
             Added<WebviewSource>,
             With<Transform>,
-            Without<crate::resize::components::WebviewResizable>,
-            Or<(With<Mesh3d>, With<Mesh2d>)>,
+            Without<WebviewResizable>,
+            MeshWebviewFilter,
         ),
     >,
 ) {

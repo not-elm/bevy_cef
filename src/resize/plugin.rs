@@ -10,6 +10,7 @@ use super::*;
 use crate::common::{WebviewSize, WebviewSource};
 use crate::drag::{DragState, DraggableRegions, DraggingState, InteractionEndPending};
 use crate::system_param::pointer::WebviewPointer;
+use crate::webview::MeshWebviewFilter;
 use crate::webview::WebviewSet;
 
 pub struct ResizePlugin;
@@ -46,7 +47,7 @@ fn attach_resize_observers(
             Added<WebviewSource>,
             With<Transform>,
             With<WebviewResizable>,
-            Or<(With<Mesh3d>, With<Mesh2d>)>,
+            MeshWebviewFilter,
         ),
     >,
 ) {
