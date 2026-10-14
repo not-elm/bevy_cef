@@ -56,8 +56,9 @@
 use crate::common::{WebviewIoSurface, WebviewSize, WebviewSource, WebviewTextureTarget};
 use crate::prelude::{WebviewExtendStandardMaterial, WebviewSurface};
 use crate::webview::texture_target::{WebviewGpuImageInjectSet, WebviewTextureSlot};
+use crate::webview::touch_asset;
 use crate::webview::ui::WebviewUiMaterial;
-use bevy::asset::{Asset, AssetId, RenderAssetUsages};
+use bevy::asset::{AssetId, RenderAssetUsages};
 use bevy::platform::collections::{HashMap, HashSet};
 use bevy::prelude::*;
 use bevy::render::{
@@ -142,7 +143,8 @@ impl Plugin for WebviewGpuInjectPlugin {
                 (
                     mark_webview_materials_changed_for::<WebviewExtendStandardMaterial>,
                     mark_webview_ui_materials_changed,
-                    mark_sprite_webview_images_changed,
+                    mark_sprite_webview_materials_changed
+                        .run_if(resource_exists::<Assets<SpriteMeshMaterial>>),
                     mark_target_webview_images_changed,
                 )
                     .in_set(WebviewSurfaceSet::MarkChanged),
@@ -161,19 +163,18 @@ impl Plugin for WebviewGpuInjectPlugin {
                 ExtractSchedule,
                 (extract_webview_iosurfaces, extract_live_webview_surface_ids),
             )
-            // Ordering: AFTER `prepare_assets::<GpuImage>` so the insert overwrites
-            // the black placeholder GpuImage for the same AssetId; BEFORE each
-            // material's bind-group build so the rebuilt bind group captures the
-            // injected view. Custom MESH materials (`WebviewExtendedMaterial<E>`)
-            // intentionally have NO `.before()` edge — their rebind path touches
-            // only the material (never the image), so on the echo frame the
-            // injected entry persists in `RenderAssets<GpuImage>` and the rebuild
-            // is order-independent (at-most-1-frame warmup flash, spec §6).
-            // Headless targets are DIFFERENT: their rebind path touches the image,
-            // which re-uploads the CPU placeholder in the same frames the
-            // consumer's bind group rebuilds — so consumers MUST order after
-            // `WebviewGpuImageInjectSet` (the turnkey plugin does it per material
-            // type) or they can capture the placeholder permanently.
+            // NOTE: Injection must run after `prepare_assets::<GpuImage>`, so that its insert
+            // overwrites the black placeholder `GpuImage` for the same `AssetId`, and before
+            // each webview material's bind-group build, so that the rebuilt bind group
+            // captures the injected view. Custom mesh materials (`WebviewExtendedMaterial<E>`)
+            // have no `.before()` edge: their rebind path touches only the material, never the
+            // image, so the injected entry is still in `RenderAssets<GpuImage>` when the
+            // material rebuilds, and the rebuild is order-independent apart from at most a
+            // one-frame warmup flash. Headless targets differ: their rebind path touches the
+            // image, which re-uploads the CPU placeholder in the same frames the consumer's
+            // bind group rebuilds, so consumers must order after `WebviewGpuImageInjectSet`
+            // (the turnkey plugin does so per material type) or they can capture the
+            // placeholder permanently.
             .add_systems(
                 Render,
                 inject_webview_gpu_images
@@ -181,15 +182,19 @@ impl Plugin for WebviewGpuInjectPlugin {
                     .in_set(WebviewGpuImageInjectSet)
                     .after(prepare_assets::<GpuImage>)
                     .before(prepare_erased_assets::<MeshMaterial3d<WebviewExtendStandardMaterial>>)
+                    .before(prepare_erased_assets::<MeshMaterial2d<SpriteMeshMaterial>>)
                     .before(prepare_assets::<PreparedUiMaterial<WebviewUiMaterial>>),
             );
 
-        // `RenderGraphSystems::Begin` is chained before `Render` (where
-        // `camera_driver` runs), and encoder recording order == submission
-        // order, so the blit lands before every camera pass samples the
-        // texture. Ordering against the concrete `camera_driver` fn would work
-        // too but couples us to bevy_core_pipeline internals (spec §3).
-        render_app.add_systems(RenderGraph, webview_blit.in_set(RenderGraphSystems::Begin));
+        // NOTE: `webview_blit` must record its blit before any camera pass samples the owned
+        // texture. Bevy orders the `RenderGraphSystems` sets only weakly, so the edge to
+        // `Render` (where `camera_driver` runs) is stated explicitly.
+        render_app.add_systems(
+            RenderGraph,
+            webview_blit
+                .in_set(RenderGraphSystems::Begin)
+                .before(RenderGraphSystems::Render),
+        );
     }
 }
 
@@ -630,18 +635,6 @@ fn inject_webview_gpu_images(
     }
 }
 
-/// Force an `AssetEvent::Modified` for `id` without changing the asset.
-///
-/// Bevy 0.19's `Assets::get_mut` returns an `AssetMut` guard that only queues
-/// `Modified` if actually deref-mutated; a bare `let _ = assets.get_mut(id);`
-/// silently emits nothing. Every rebind-trick site below MUST go through this
-/// helper so the intent stays greppable and cannot silently regress.
-fn touch_asset<A: Asset>(assets: &mut Assets<A>, id: impl Into<AssetId<A>>) {
-    if let Some(asset) = assets.get_mut(id) {
-        asset.into_inner();
-    }
-}
-
 /// Main-world system: touch a mesh webview material of type `M` on rebind frames
 /// (see [`WebviewSurfaceRebind`]) so Bevy re-extracts and rebuilds its bind
 /// group, capturing the freshly injected owned-texture view rather than the
@@ -720,11 +713,10 @@ fn mark_webview_ui_materials_changed(
 /// Main-world system: give every sprite webview a placeholder surface `Image`,
 /// point `Sprite.image` at it, and insert `WebviewSurface`.
 ///
-/// Sprites have no material asset, so (unlike mesh/UI) there is nothing to write
-/// a surface handle into — the sprite samples `Sprite.image` directly. The
-/// placeholder is sized from the entity's `WebviewSize` so the pre-first-frame
-/// quad and the picking backend's pixel-space mapping agree with the injected
-/// texture.
+/// The surface handle goes into `Sprite.image`, not into a material: Bevy derives the
+/// sprite's `SpriteMeshMaterial` from the `Sprite` itself. The placeholder is sized from the
+/// entity's `WebviewSize` so the pre-first-frame quad and the picking backend's pixel-space
+/// mapping agree with the injected texture.
 ///
 /// When the user supplied their own `Sprite.image` asset, the placeholder is
 /// written INTO that asset (preserving the handle) — on the CPU path the webview
@@ -759,30 +751,21 @@ fn allocate_sprite_webview_surfaces(
     }
 }
 
-/// Main-world system: touch a sprite webview's `Image` on rebind frames to fire
-/// `AssetEvent::Modified` for its id.
-///
-/// `bevy_sprite_render`'s `prepare_sprite_image_bind_groups` caches per-image
-/// bind groups in a private `ImageBindGroups` map and only evicts an entry when
-/// it sees an `AssetEvent::Modified { id }` for that image. Firing that event is
-/// the only public lever to force a rebuild, so the rebuilt bind group samples
-/// our freshly injected owned texture instead of the stale black placeholder.
-/// (The Modified event also makes `prepare_assets::<GpuImage>` re-upload the CPU
-/// placeholder that frame — harmless, since injection overwrites it — which is
-/// exactly why this only fires on rebind frames instead of every frame.)
-fn mark_sprite_webview_images_changed(
+/// Main-world system: touch a sprite webview's `SpriteMeshMaterial` on rebind frames (see
+/// [`WebviewSurfaceRebind`]) so Bevy rebuilds its bind group against the injected texture.
+fn mark_sprite_webview_materials_changed(
+    mut materials: ResMut<Assets<SpriteMeshMaterial>>,
     webviews: Query<
-        &WebviewSurface,
+        &MeshMaterial2d<SpriteMeshMaterial>,
         (
             With<WebviewSource>,
             With<Sprite>,
             With<WebviewSurfaceRebind>,
         ),
     >,
-    mut images: ResMut<Assets<Image>>,
 ) {
-    for surface in webviews.iter() {
-        touch_asset(&mut images, surface.0.id());
+    for material in webviews.iter() {
+        touch_asset(&mut materials, material.id());
     }
 }
 
@@ -791,9 +774,8 @@ fn mark_sprite_webview_images_changed(
 /// its id. This is the PUBLIC rebind signal for third-party consumers: Bevy
 /// only rebuilds a material's bind group on the *material's own* asset events,
 /// never on a referenced image's, so a consumer must `get_mut` its material
-/// when this event fires (or use `WebviewTargetUiMaterialPlugin`). Mirrors
-/// `mark_sprite_webview_images_changed`; the CPU placeholder re-upload this
-/// triggers is harmless — injection overwrites it the same frame.
+/// when this event fires (or use `WebviewTargetUiMaterialPlugin`). The CPU placeholder
+/// re-upload this triggers is harmless — injection overwrites it the same frame.
 fn mark_target_webview_images_changed(
     webviews: Query<
         &WebviewSurface,

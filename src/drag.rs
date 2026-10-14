@@ -143,11 +143,11 @@ pub(crate) fn is_draggable(
     drag_rects.iter().any(|r| r.contains(pos))
 }
 
-/// Observer that fires on Pointer<Press> and starts a drag if the press is in a drag region.
+/// Observer that fires on `PointerPress` and starts a drag if the press is in a drag region.
 /// Attached to mesh webview entities via `attach_drag_observers`.
 #[allow(clippy::too_many_arguments)]
 fn on_drag_press(
-    trigger: On<Pointer<Press>>,
+    trigger: On<PointerPress>,
     mut drag_state: ResMut<DragState>,
     mut commands: Commands,
     pointer: WebviewPointer,
@@ -180,7 +180,7 @@ fn on_drag_press(
         return;
     };
 
-    let viewport_pos = trigger.pointer_location.position;
+    let viewport_pos = trigger.pointer.position;
     let Ok(ray) = cam.viewport_to_world(cam_gtf, viewport_pos) else {
         return;
     };

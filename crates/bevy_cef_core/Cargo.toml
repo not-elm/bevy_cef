@@ -3,6 +3,7 @@ name = "bevy_cef_core"
 description = "Core library for bevy_cef"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
@@ -70,7 +71,7 @@ objc2-metal = { version = "0.3", default-features = false, features = [
     "MTLTexture",
     "objc2-io-surface",
 ], optional = true }
-wgpu = { version = "29", default-features = false, optional = true }
+wgpu = { version = "30", default-features = false, optional = true }
 
 [lints]
 workspace = true

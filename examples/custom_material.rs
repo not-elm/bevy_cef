@@ -53,6 +53,6 @@ struct CustomExtension {
 
 impl MaterialExtension for CustomExtension {
     fn fragment_shader() -> ShaderRef {
-        "shaders/custom_material.wgsl".into()
+        "shaders/custom_material.wesl".into()
     }
 }

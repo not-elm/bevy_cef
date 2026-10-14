@@ -5,7 +5,6 @@ use crate::prelude::{WebviewSize, WebviewSource};
 use crate::system_param::mesh_aabb::MeshAabb;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
-use std::fmt::Debug;
 
 #[derive(SystemParam)]
 pub struct WebviewPointer<'w, 's, C: Component = Camera3d> {
@@ -28,12 +27,9 @@ pub struct WebviewPointer<'w, 's, C: Component = Camera3d> {
 }
 
 impl<C: Component> WebviewPointer<'_, '_, C> {
-    pub fn pos_from_trigger<P>(&self, trigger: &On<Pointer<P>>) -> Option<(Entity, Vec2)>
-    where
-        P: Clone + Reflect + Debug,
-    {
-        let webview = find_webview_entity(trigger.entity, &self.parents)?;
-        let pos = self.pointer_pos(webview, trigger.pointer_location.position)?;
+    pub fn pos_from_trigger<E: PointerEvent>(&self, trigger: &On<E>) -> Option<(Entity, Vec2)> {
+        let webview = find_webview_entity(trigger.event_target(), &self.parents)?;
+        let pos = self.pointer_pos(webview, trigger.pointer().position)?;
         Some((webview, pos))
     }
 
@@ -81,15 +77,12 @@ impl<C: Component> WebviewPointer<'_, '_, C> {
 
     /// Like [`Self::pos_from_trigger`], but skips transparency check.
     /// Returns (webview, pixel_pos, camera_entity).
-    pub fn pos_from_trigger_raw<P>(
+    pub fn pos_from_trigger_raw<E: PointerEvent>(
         &self,
-        trigger: &On<Pointer<P>>,
-    ) -> Option<(Entity, Vec2, Entity)>
-    where
-        P: Clone + Reflect + Debug,
-    {
-        let webview = find_webview_entity(trigger.entity, &self.parents)?;
-        let (pos, cam_entity) = self.pointer_pos_raw(webview, trigger.pointer_location.position)?;
+        trigger: &On<E>,
+    ) -> Option<(Entity, Vec2, Entity)> {
+        let webview = find_webview_entity(trigger.event_target(), &self.parents)?;
+        let (pos, cam_entity) = self.pointer_pos_raw(webview, trigger.pointer().position)?;
         Some((webview, pos, cam_entity))
     }
 

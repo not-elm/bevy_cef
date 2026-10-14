@@ -10,6 +10,7 @@ use bevy::ecs::lifecycle::HookContext;
 use bevy::ecs::world::DeferredWorld;
 use bevy::input::mouse::MouseScrollUnit;
 use bevy::prelude::*;
+use bevy::shader::load_shader_library;
 use bevy::window::PrimaryWindow;
 use bevy::winit::WINIT_WINDOWS;
 use bevy_cef_core::prelude::*;
@@ -123,6 +124,7 @@ pub struct WebviewPlugin;
 
 impl Plugin for WebviewPlugin {
     fn build(&self, app: &mut App) {
+        load_shader_library!(app, "webview/util.wesl");
         app.register_type::<RequestShowDevTool>();
 
         app.configure_sets(
@@ -180,6 +182,16 @@ impl Plugin for WebviewPlugin {
 /// excluding `Sprite` entities, which take the sprite input path even though Bevy renders them
 /// through an internal `Mesh2d`.
 pub(crate) type MeshWebviewFilter = (Or<(With<Mesh3d>, With<Mesh2d>)>, Without<Sprite>);
+
+/// Queues `AssetEvent::Modified` for `id` without changing the asset, so Bevy rebuilds the
+/// asset's GPU-side data (for a material, its bind group). Does nothing when `id` is not loaded.
+pub(crate) fn touch_asset<A: Asset>(assets: &mut Assets<A>, id: impl Into<AssetId<A>>) {
+    if let Some(asset) = assets.get_mut(id) {
+        // NOTE: A bare `assets.get_mut(id)` queues nothing. Bevy's `AssetMut` guard queues the
+        // event only when it is mutably dereferenced, which `into_inner` does.
+        asset.into_inner();
+    }
+}
 
 /// Converts a mouse-wheel delta into the pixel deltas CEF expects.
 /// Chromium's default line height is 3 lines × 40px = 120px per notch.

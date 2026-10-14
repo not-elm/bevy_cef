@@ -52,7 +52,7 @@ fn setup_observers(
 }
 
 fn on_pointer_move(
-    trigger: On<Pointer<Move>>,
+    trigger: On<PointerMove>,
     input: Res<ButtonInput<MouseButton>>,
     pointer: WebviewPointer,
     browsers: NonSend<Browsers>,
@@ -73,7 +73,7 @@ fn on_pointer_move(
 }
 
 fn on_pointer_pressed(
-    trigger: On<Pointer<Press>>,
+    trigger: On<PointerPress>,
     browsers: NonSend<Browsers>,
     pointer: WebviewPointer,
     drag_state: Res<crate::drag::DragState>,
@@ -92,7 +92,7 @@ fn on_pointer_pressed(
 }
 
 fn on_pointer_released(
-    trigger: On<Pointer<Release>>,
+    trigger: On<PointerRelease>,
     browsers: NonSend<Browsers>,
     pointer: WebviewPointer,
     drag_state: Res<crate::drag::DragState>,

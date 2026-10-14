@@ -1,10 +1,19 @@
 use crate::prelude::WebviewMaterial;
 #[cfg(not(target_os = "macos"))]
 use crate::prelude::{WebviewSurface, update_webview_image};
+#[cfg(not(target_os = "macos"))]
+use crate::webview::mesh::webview_material::order_webview_materials_after_images;
 use bevy::app::Plugin;
+#[cfg(not(target_os = "macos"))]
+use bevy::asset::AssetEventSystems;
 use bevy::pbr::{ExtendedMaterial, MaterialExtension};
 use bevy::prelude::*;
 use bevy::render::render_resource::AsBindGroup;
+#[cfg(not(target_os = "macos"))]
+use bevy::render::{
+    Render, RenderApp, RenderSystems, erased_render_asset::prepare_erased_assets,
+    render_asset::prepare_assets, texture::GpuImage,
+};
 // `RenderTextureMessage` from the core prelude is only used by the CPU `OnPaint`
 // consumer (Linux/Windows). macOS injects the texture via the GPU path.
 #[cfg(not(target_os = "macos"))]
@@ -52,7 +61,21 @@ where
 
         // CPU `OnPaint` consumer: Linux/Windows only. macOS uses the GPU path.
         #[cfg(not(target_os = "macos"))]
-        app.add_systems(PostUpdate, render::<E>);
+        app.add_systems(PostUpdate, render::<E>.before(AssetEventSystems));
+
+        // NOTE: Bevy does not order material preparation after `GpuImage` preparation, so a
+        // material touched in the frame its image is reallocated can capture the old texture
+        // view, and a static page never repaints to repair it.
+        #[cfg(not(target_os = "macos"))]
+        if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
+            render_app.add_systems(
+                Render,
+                order_webview_materials_after_images
+                    .in_set(RenderSystems::PrepareAssets)
+                    .after(prepare_assets::<GpuImage>)
+                    .before(prepare_erased_assets::<MeshMaterial3d<WebviewExtendedMaterial<E>>>),
+            );
+        }
 
         // macOS GPU path: register the generic surface allocate/mark systems for
         // this custom material type so it flows through the same IOSurface

@@ -3,6 +3,7 @@ name = "bevy_cef"
 description = "Bevy CEF integration for web rendering"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
@@ -18,6 +19,7 @@ members = ["crates/*"]
 [workspace.package]
 version = "0.13.0"
 edition = "2024"
+rust-version = "1.97.1"
 license = "Apache-2.0 OR MIT"
 authors = ["notelm"]
 repository = "https://github.com/not-elm/bevy_cef"
@@ -39,8 +41,8 @@ unexpected_cfgs = { level = "warn", check-cfg = [
 # Bare minimum. Each member crate enables exactly the bevy features it uses.
 # The render-process binaries only need `bevy::platform` (always available).
 # The browser-side library and top-level crate light up renderer features.
-bevy = { version = "0.19", default-features = false }
-bevy_remote = "0.19"
+bevy = { version = "0.20", default-features = false }
+bevy_remote = "0.20"
 cef = { version = "152.3.0+152.0.6" }
 cef-dll-sys = { version = "152.3.0+152.0.6", features = ["sandbox"] }
 bevy_cef = { path = ".", version = "0.13.0" }

@@ -4,8 +4,9 @@ use crate::prelude::{WebviewDpr, WebviewSize, WebviewSource};
 #[cfg(not(target_os = "macos"))]
 use crate::prelude::{WebviewSurface, update_webview_image};
 use crate::webview::ui::input::WebviewUiInputPlugin;
-use crate::webview::ui::material::WEBVIEW_UI_SHADER_HANDLE;
-use bevy::asset::load_internal_asset;
+#[cfg(not(target_os = "macos"))]
+use bevy::asset::AssetEventSystems;
+use bevy::asset::embedded_asset;
 use bevy::prelude::*;
 use bevy::ui::UiSystems;
 #[cfg(not(target_os = "macos"))]
@@ -21,12 +22,7 @@ pub(in crate::webview) struct UiWebviewPlugin;
 
 impl Plugin for UiWebviewPlugin {
     fn build(&self, app: &mut App) {
-        load_internal_asset!(
-            app,
-            WEBVIEW_UI_SHADER_HANDLE,
-            "ui/webview_ui.wgsl",
-            Shader::from_wgsl
-        );
+        embedded_asset!(app, "ui/webview_ui.wesl");
 
         if !app.is_plugin_added::<UiPickingPlugin>() {
             app.add_plugins(UiPickingPlugin);
@@ -44,7 +40,9 @@ impl Plugin for UiWebviewPlugin {
         #[cfg(not(target_os = "macos"))]
         app.add_systems(
             PostUpdate,
-            render_ui_surface.run_if(on_message::<RenderTextureMessage>),
+            render_ui_surface
+                .run_if(on_message::<RenderTextureMessage>)
+                .before(AssetEventSystems),
         );
     }
 }
