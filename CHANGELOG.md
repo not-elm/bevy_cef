@@ -24,6 +24,9 @@
 
 - Windows/Linux: mesh webview material preparation (standard and `WebviewExtendedMaterial<E>`)
   is ordered after image preparation, so a resized static page no longer keeps a stale texture.
+- `cef` and `cef-dll-sys` are pinned to `=152.3.0+152.0.6`, so the Rust bindings always match the
+  CEF 152.0.6 runtime that `export-cef-dir` installs. Previously Cargo could resolve newer 152.x
+  bindings in applications that depend on bevy_cef.
 
 ### Known Limitations
 
