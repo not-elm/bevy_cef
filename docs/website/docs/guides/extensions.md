@@ -4,7 +4,7 @@ sidebar_position: 7
 
 # Extensions
 
-CEF extensions let you register custom JavaScript that is available globally in every webview. Unlike preload scripts, extensions are registered once at startup and become part of the V8 JavaScript context itself.
+CEF extensions let you register custom JavaScript that is available globally in every webview. Unlike preload scripts, extensions are registered once at startup and are evaluated in every page's V8 context before its own scripts run.
 
 ## Registering Extensions
 
@@ -69,6 +69,8 @@ In the browser, calling `myGame.sendScore(42)` fires the `score_update` event, w
 ## Global Scope
 
 Extensions are evaluated in every frame's V8 context, iframes included, and apply to **all** webviews. In each context, `window.cef` is defined first, then the extensions run in name order, then [Preload Scripts](./preload-scripts.md), then the page's own scripts. You cannot register different extensions for different webviews. If you need per-webview customization, use [Preload Scripts](./preload-scripts.md) instead.
+
+Extension code runs once per V8 context, which includes every iframe and a frame's initial `about:blank` document, so a top-level `window.cef.emit()` or `window.cef.brp()` call fires once per context. Put such calls inside functions the page calls when it needs them to run once.
 
 ## Multiple Extensions
 

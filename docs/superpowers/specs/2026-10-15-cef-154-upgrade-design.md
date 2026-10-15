@@ -148,7 +148,7 @@ switch (`browser_process_handler.rs:77-80`).
 
 - A shared helper evaluates one script with `context.eval` and, on failure, calls
   `cef_error!` with the script URL, the exception message, line number and start column
-  (the format `inject_initialize_scripts` already uses). Both extensions and preload
+  in the format `<message> (<url>:<line>:<column>)`, with a 1-based column. Both extensions and preload
   scripts go through it. It also calls the context's `console.error` with
   `<message> (<url>:<line>:<column>)`, because an exception caught by `CefV8Context::Eval`
   during `OnContextCreated` never reaches the page console on its own. §3 describes where
@@ -281,7 +281,8 @@ visible through another path: the eval helper calls the context's `console.error
 call the error stays invisible: an exception caught by `CefV8Context::Eval` during
 `OnContextCreated` is not reported to the page console, although `Eval` uses a verbose
 `TryCatch` (verified on CEF 152.0.8, where `console.error` calls from the same code do
-arrive). The absolute extension URL names the extension in that message. No crate-specific error type is introduced.
+arrive). The absolute extension URL names the extension in that message. No
+crate-specific error type is introduced.
 
 ### 4. Verification
 

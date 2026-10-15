@@ -93,7 +93,7 @@ make setup-windows
 ```bash
 cargo install export-cef-dir --version 154.5.0+154.0.34
 export-cef-dir --force $HOME/.local/share/cef
-cargo install bevy_cef_debug_render_process
+cargo install --locked --path crates/bevy_cef_debug_render_process --force
 cp $HOME/.cargo/bin/bevy_cef_debug_render_process "$HOME/.local/share/cef/Chromium Embedded Framework.framework/Libraries/bevy_cef_debug_render_process"
 ```
 

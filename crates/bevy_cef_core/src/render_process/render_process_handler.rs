@@ -150,6 +150,9 @@ impl ImplRenderProcessHandler for RenderProcessHandlerBuilder {
 /// Defines `window.cef` in `context` with the `brp`, `emit` and `listen` functions.
 ///
 /// On failure, logs with `cef_error!` and leaves `window.cef` undefined.
+///
+/// Must run while `context` is the entered V8 context, as inside
+/// `on_context_created`.
 fn bind_cef_api(context: &V8Context) {
     let Some(global) = context.global() else {
         cef_error!("failed to bind window.cef: the context has no global object");
@@ -199,7 +202,7 @@ fn eval_extensions(context: &V8Context) {
 
 /// Returns the script URL that the extension `name` is evaluated under.
 ///
-/// Console errors and DevTools show this URL as the extension's source.
+/// This URL is the name that console error messages and DevTools use for the extension.
 fn extension_script_url(name: &str) -> String {
     format!("cef://localhost/__extensions__/{name}.js")
 }
@@ -221,7 +224,10 @@ fn inject_initialize_scripts(browser: &Browser, context: &V8Context, frame: &Fra
 /// `cef_error!`.
 ///
 /// The failure is also reported to the context's `console.error` as
-/// `<message> (<url>:<line>:<column>)`.
+/// `<message> (<url>:<line>:<column>)`, with a 1-based column.
+///
+/// Must run while `context` is the entered V8 context, as inside
+/// `on_context_created`.
 fn eval_script(context: &V8Context, code: &str, script_url: &str) {
     let mut retval: Option<V8Value> = None;
     let mut exception: Option<V8Exception> = None;
@@ -241,16 +247,19 @@ fn eval_script(context: &V8Context, code: &str, script_url: &str) {
             ex.message().into_string(),
             script_url,
             ex.line_number(),
-            ex.start_column(),
+            ex.start_column() + 1,
         ),
         None => format!("eval failed with no exception details ({script_url})"),
     };
-    cef_error!("eval failed - {message}");
+    cef_error!("{message}");
     report_to_console(context, &message);
 }
 
 /// Calls `console.error` of `context` with `message`, doing nothing when `console.error` is
 /// unavailable.
+///
+/// Must run while `context` is the entered V8 context, as inside
+/// `on_context_created`.
 fn report_to_console(context: &V8Context, message: &str) {
     let Some(global) = context.global() else {
         return;
@@ -261,6 +270,9 @@ fn report_to_console(context: &V8Context, message: &str) {
     let Some(error) = console.value_bykey(Some(&"error".into())) else {
         return;
     };
+    if !console.is_object().is_positive() || !error.is_function().is_positive() {
+        return;
+    }
     error.execute_function(
         Some(&mut console),
         Some(&[v8_value_create_string(Some(&message.into()))]),
@@ -352,7 +364,7 @@ mod tests {
     /// ending in its name.
     ///
     /// Case: an app registers an extension named `myGame`, and a syntax error in it appears in
-    /// the Bevy log with this URL as its source.
+    /// the Bevy log with this URL naming the extension.
     #[test]
     fn extension_script_url_names_the_extension() {
         assert_eq!(

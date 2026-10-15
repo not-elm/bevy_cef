@@ -39,6 +39,8 @@ impl CefExtensions {
     /// # Arguments
     /// * `name` - Extension name. It sets the evaluation order and the script URL
     ///   `cef://localhost/__extensions__/{name}.js` that console errors and DevTools show.
+    ///   Names are ordered by Unicode code point (byte-wise), so uppercase names run before
+    ///   lowercase ones.
     /// * `code` - JavaScript code defining the extension's API. Empty code is ignored.
     pub fn add(mut self, name: impl Into<String>, code: impl Into<String>) -> Self {
         self.0.insert(name.into(), code.into());
