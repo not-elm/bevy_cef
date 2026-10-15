@@ -18,6 +18,15 @@ cef = { workspace = true }
 bevy_cef_core = { workspace = true }
 cef-dll-sys = { workspace = true }
 
+# Applies only when this package is the build root, i.e. `cargo install
+# bevy_cef_render_process` from crates.io. Inside the workspace Cargo uses the
+# root manifest's copy and warns that this one is ignored; keep the two identical.
+[profile.release]
+strip = "symbols"
+lto = "fat"
+codegen-units = 1
+opt-level = "z"
+
 [lints]
 workspace = true
 
