@@ -8,6 +8,7 @@ use cef::{
 };
 use cef_dll_sys::cef_process_id_t;
 use std::os::raw::c_int;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Extracts the context key (browser_id, frame_id) from the current V8 context.
 fn current_context_key() -> Option<(i32, String)> {
@@ -15,6 +16,12 @@ fn current_context_key() -> Option<(i32, String)> {
     let browser = context.browser()?;
     let frame = context.frame()?;
     Some((browser.identifier(), frame.identifier().into_string()))
+}
+
+/// Returns a BRP request id that no earlier request from this render process has used.
+fn next_brp_request_id() -> String {
+    static NEXT_ID: AtomicU64 = AtomicU64::new(0);
+    NEXT_ID.fetch_add(1, Ordering::Relaxed).to_string()
 }
 
 /// Handles calls to the three `window.cef` functions of a V8 context.
@@ -115,7 +122,7 @@ impl CefApiHandler {
                 && let Ok(brp_request) = serde_json::to_string(&brp_request)
                 && let Some(ret) = ret
             {
-                let id = uuid::Uuid::new_v4().to_string();
+                let id = next_brp_request_id();
                 arguments_list.set_string(0, Some(&id.as_str().into()));
                 arguments_list.set_string(1, Some(&brp_request.as_str().into()));
                 frame.send_process_message(
@@ -123,12 +130,9 @@ impl CefApiHandler {
                     Some(&mut process),
                 );
                 ret.replace(promise.clone());
-                BRP_PROMISES
-                    .lock()
-                    .unwrap()
-                    .entry(key)
-                    .or_default()
-                    .insert(id, promise);
+                if let Ok(mut promises) = BRP_PROMISES.lock() {
+                    promises.entry(key).or_default().insert(id, promise);
+                }
             } else {
                 let mut exception =
                     v8_value_create_string(Some(&"Failed to execute BRP request".into()));
@@ -180,5 +184,19 @@ impl CefApiHandler {
                 .insert(id.string_value().into_string(), callback.clone());
         }
         1
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Asserts that consecutive BRP request ids differ.
+    ///
+    /// Case: a page fires two `window.cef.brp` calls before either reply arrives, and each
+    /// reply must resolve its own promise.
+    #[test]
+    fn consecutive_brp_request_ids_differ() {
+        assert_ne!(next_brp_request_id(), next_brp_request_id());
     }
 }

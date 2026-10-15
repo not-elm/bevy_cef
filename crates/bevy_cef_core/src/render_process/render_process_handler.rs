@@ -4,8 +4,6 @@ use crate::render_process::cef_api_handler::CefApiHandler;
 use crate::util::v8_accessor::V8DefaultAccessorBuilder;
 use crate::util::v8_interceptor::V8DefaultInterceptorBuilder;
 use crate::util::{json_to_v8, read_switch_json};
-use bevy::platform::collections::HashMap;
-use bevy_remote::BrpResult;
 use cef::rc::{Rc, RcImpl};
 use cef::{
     Browser, CefString, DictionaryValue, Frame, ImplBrowser, ImplDictionaryValue, ImplFrame,
@@ -14,6 +12,8 @@ use cef::{
     V8Value, WrapRenderProcessHandler, sys, v8_value_create_function, v8_value_create_object,
     v8_value_create_string,
 };
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::BTreeMap;
 use std::os::raw::c_int;
 use std::sync::{LazyLock, Mutex};
@@ -21,17 +21,35 @@ use std::sync::{LazyLock, Mutex};
 /// Composite key identifying a V8 context: (browser_id, frame_id).
 pub(crate) type ContextKey = (i32, String);
 
-pub(crate) static BRP_PROMISES: Mutex<HashMap<ContextKey, HashMap<String, V8Value>>> =
-    Mutex::new(HashMap::new());
-pub(crate) static LISTEN_EVENTS: Mutex<HashMap<ContextKey, HashMap<String, V8Value>>> =
-    Mutex::new(HashMap::new());
+pub(crate) static BRP_PROMISES: Mutex<BTreeMap<ContextKey, BTreeMap<String, V8Value>>> =
+    Mutex::new(BTreeMap::new());
+pub(crate) static LISTEN_EVENTS: Mutex<BTreeMap<ContextKey, BTreeMap<String, V8Value>>> =
+    Mutex::new(BTreeMap::new());
 
-static INIT_SCRIPTS: Mutex<HashMap<c_int, String>> = Mutex::new(HashMap::new());
+static INIT_SCRIPTS: Mutex<BTreeMap<c_int, String>> = Mutex::new(BTreeMap::new());
 pub const INIT_SCRIPT_KEY: &str = "init_script";
 
 pub const PROCESS_MESSAGE_BRP: &str = "brp";
 pub const PROCESS_MESSAGE_HOST_EMIT: &str = "host-emit";
 pub const PROCESS_MESSAGE_JS_EMIT: &str = "js-emit";
+
+/// A BRP reply sent from the browser process to the render process.
+///
+/// It serializes to the same JSON as `bevy_remote::BrpResult`: `{"Ok": value}` or
+/// `{"Err": {"code", "message", "data"}}`.
+pub(crate) type BrpReply = Result<Value, BrpReplyError>;
+
+/// The error half of a [`BrpReply`].
+#[derive(Debug, Serialize, Deserialize)]
+pub(crate) struct BrpReplyError {
+    /// The JSON-RPC error code.
+    pub code: i16,
+    /// A short, human-readable description of the error.
+    pub message: String,
+    /// Additional error data, omitted from the JSON when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data: Option<Value>,
+}
 
 pub struct RenderProcessHandlerBuilder {
     object: *mut RcImpl<sys::_cef_render_process_handler_t, Self>,
@@ -311,7 +329,7 @@ fn handle_brp_message(
         return;
     };
 
-    if let Ok(brp_result) = serde_json::from_str::<BrpResult>(&payload)
+    if let Ok(brp_result) = serde_json::from_str::<BrpReply>(&payload)
         && ctx.enter() != 0
     {
         match brp_result {
@@ -378,5 +396,32 @@ mod tests {
             extension_script_url("myGame"),
             "cef://localhost/__extensions__/myGame.js"
         );
+    }
+
+    /// Asserts that an error reply in `bevy_remote::BrpResult`'s JSON form decodes into the
+    /// host's message.
+    ///
+    /// Case: a 0.14.0 host answers a page's call to an unknown method, and the render process
+    /// must reject the page's promise with that message.
+    #[test]
+    fn brp_error_reply_decodes_its_message() {
+        let reply: BrpReply =
+            serde_json::from_str(r#"{"Err":{"code":-32601,"message":"Method `nope` not found"}}"#)
+                .expect("an Err reply in bevy_remote's JSON form");
+        match reply {
+            Err(error) => assert_eq!(error.message, "Method `nope` not found"),
+            Ok(value) => panic!("expected an Err reply, got Ok({value})"),
+        }
+    }
+
+    /// Asserts that a success reply decodes into its JSON value.
+    ///
+    /// Case: the host's `greet` method answers, and the page's promise resolves with the
+    /// greeting.
+    #[test]
+    fn brp_ok_reply_decodes_its_value() {
+        let reply: BrpReply = serde_json::from_str(r#"{"Ok":"Hello, Bevy!"}"#)
+            .expect("an Ok reply in bevy_remote's JSON form");
+        assert_eq!(reply.ok(), Some(Value::String("Hello, Bevy!".into())));
     }
 }
