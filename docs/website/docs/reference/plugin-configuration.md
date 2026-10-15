@@ -64,8 +64,7 @@ cross-origin attacks.
 ```rust
 use bevy_cef::prelude::*;
 
-let mut extensions = CefExtensions::default();
-extensions.register_extension(
+let extensions = CefExtensions::new().add(
     "my_extension",
     r#"
         var myGlobal = {
@@ -81,7 +80,7 @@ let plugin = CefPlugin {
 };
 ```
 
-Unlike `PreloadScripts` (which are per-webview and run after the page's context is created), extensions are registered once at the CEF level and are available in every webview. They run in V8's extension context, which means they execute before any page scripts and cannot access the DOM directly.
+Unlike `PreloadScripts`, which are set per webview, extensions are registered once on the plugin and apply to every webview. In each frame's V8 context, `window.cef` is defined first, then the extensions run in name order, then `PreloadScripts`, then the page's own scripts. `document` already exists when extension code runs, but the page's elements have not been parsed yet.
 
 ### root_cache_path
 

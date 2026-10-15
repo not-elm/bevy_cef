@@ -20,6 +20,14 @@
   `PointerRelease`, `PointerMove`, `PointerScroll`, …) instead of `Pointer<Press>`,
   `Pointer<Release>`, and so on.
 
+### Changed
+
+- CEF 154 removed `CefRegisterExtension`, so the render process now injects `window.cef` and
+  `CefExtensions` from `on_context_created`. The Rust and JavaScript APIs are unchanged.
+  `window.cef` can now be used at the top level of extensions and preload scripts, extensions
+  run in name order, and an error in an extension is reported to the page console, and from
+  there to the Bevy log, instead of being silently ignored.
+
 ### Fixed
 
 - Windows/Linux: mesh webview material preparation (standard and `WebviewExtendedMaterial<E>`)

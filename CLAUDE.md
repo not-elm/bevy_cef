@@ -35,7 +35,7 @@ CefPlugin (root — accepts CommandLineConfig, CefExtensions, root_cache_path)
 - `ZoomLevel`: f64 zoom (0.0 = default)
 - `AudioMuted`: bool audio control
 - `PreloadScripts`: Vec<String> scripts executed before page scripts
-- `CefExtensions`: Custom JS extensions via `register_extension` (global to all webviews)
+- `CefExtensions`: Custom JS evaluated in every frame's V8 context (global to all webviews), in name order, after `window.cef` is bound and before `PreloadScripts`. Both are injected in `on_context_created`, because CEF 154 removed `CefRegisterExtension`
 - `WebviewTextureTarget`: Headless render target — user-supplied `Handle<Image>` the webview renders into, for sampling from third-party materials without any display component (macOS GPU path only; pair with `WebviewTextureSlot` + `WebviewTargetUiMaterialPlugin` for bind-group rebinds)
 
 ### Webview Lifecycle (spans multiple files)
