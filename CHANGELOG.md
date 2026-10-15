@@ -1,3 +1,19 @@
+## v0.14.1
+
+### Changed
+
+- The render process no longer depends on Bevy. `bevy_cef_core`'s `bevy`, `bevy_remote`,
+  `async-channel` and `raw-window-handle` dependencies are now enabled only by its `browser`
+  feature, which cuts `bevy_cef_render_process`'s dependency graph from 486 to 58 crates and its
+  clean release build on macOS from 238 s to 145 s.
+- `cargo install bevy_cef_render_process` and the workspace's release builds use a size-oriented
+  `[profile.release]` (`strip = "symbols"`, `lto = "fat"`, `codegen-units = 1`,
+  `opt-level = "z"`). On macOS (arm64), `bevy_cef_render_process` shrinks from 749 KB to 404 KB
+  (`xz -9`: 226 KB to 161 KB). A bundled macOS app carries four copies of it, one per helper app.
+- BRP replies cross the process boundary as a bevy_cef-owned type with the same JSON as
+  `bevy_remote::BrpResult`, and BRP request ids are per-process counters instead of UUIDs.
+  Hosts and render processes from 0.14.0 and 0.14.1 can be mixed.
+
 ## v0.14.0
 
 ### Breaking Changes
