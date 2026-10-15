@@ -17,16 +17,14 @@ fn current_context_key() -> Option<(i32, String)> {
     Some((browser.identifier(), frame.identifier().into_string()))
 }
 
-/// Handles the `window.cef` JavaScript API functions.
+/// Handles calls to the three `window.cef` functions of a V8 context.
 ///
-/// This handler is registered as a CEF extension during `on_web_kit_initialized`
-/// and provides three native functions:
-/// - `__cef_brp`: Async Bevy Remote Protocol requests
-/// - `__cef_emit`: Send events from JavaScript to Bevy
-/// - `__cef_listen`: Register callbacks for events from Bevy
+/// `execute` dispatches on the function name:
+/// - `brp`: Async Bevy Remote Protocol requests
+/// - `emit`: Send events from JavaScript to Bevy
+/// - `listen`: Register callbacks for events from Bevy
 ///
-/// The Frame is obtained dynamically via `v8_context_get_current_context().frame()`
-/// since extensions are global and not bound to a specific context.
+/// A call made outside a frame's V8 context is not handled.
 pub struct CefApiHandler {
     object: *mut RcImpl<sys::_cef_v8_handler_t, Self>,
 }
@@ -78,9 +76,9 @@ impl ImplV8Handler for CefApiHandler {
         let name_str = name.to_string();
 
         match name_str.as_str() {
-            "__cef_brp" => self.execute_brp(arguments, ret),
-            "__cef_emit" => self.execute_emit(arguments),
-            "__cef_listen" => self.execute_listen(arguments),
+            "brp" => self.execute_brp(arguments, ret),
+            "emit" => self.execute_emit(arguments),
+            "listen" => self.execute_listen(arguments),
             _ => 0,
         }
     }

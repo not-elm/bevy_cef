@@ -1,11 +1,15 @@
 use bevy::platform::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
-/// Custom JavaScript extensions to register via CEF's `register_extension`.
+/// Custom JavaScript that bevy_cef evaluates in every webview.
 ///
-/// Extensions are global to all webviews and loaded before any page scripts run.
-/// Use existing `window.cef.emit()`, `window.cef.listen()`, and `window.cef.brp()`
-/// APIs within your extension code for Bevy communication.
+/// Each extension's code runs in every frame's V8 context, in name order, after
+/// `window.cef` is defined and before `PreloadScripts` and the page's own scripts.
+/// Extensions apply to all webviews. Extension code can use `window.cef.emit()`,
+/// `window.cef.listen()`, and `window.cef.brp()` to communicate with Bevy.
+///
+/// An exception or syntax error in one extension is reported to the page console, and the
+/// remaining extensions and the page keep running.
 ///
 /// # Example
 ///
@@ -16,7 +20,7 @@ use serde::{Deserialize, Serialize};
 ///     .add("myGame", r#"
 ///         var myGame = {
 ///             sendScore: function(score) {
-///                 window.cef.emit('score_update', { score: score });
+///                 window.cef.emit({ score: score });
 ///             }
 ///         };
 ///     "#);
@@ -30,11 +34,12 @@ impl CefExtensions {
         Self::default()
     }
 
-    /// Adds a JavaScript extension.
+    /// Adds a JavaScript extension, replacing any extension with the same name.
     ///
     /// # Arguments
-    /// * `name` - Extension name (will be prefixed with `v8/` internally)
-    /// * `code` - JavaScript code defining the extension's API
+    /// * `name` - Extension name. It sets the evaluation order and the script URL
+    ///   `cef://localhost/__extensions__/{name}.js` that console errors and DevTools show.
+    /// * `code` - JavaScript code defining the extension's API. Empty code is ignored.
     pub fn add(mut self, name: impl Into<String>, code: impl Into<String>) -> Self {
         self.0.insert(name.into(), code.into());
         self

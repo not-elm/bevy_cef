@@ -10,26 +10,12 @@ use cef::rc::{Rc, RcImpl};
 use cef::{
     Browser, CefString, DictionaryValue, Frame, ImplBrowser, ImplDictionaryValue, ImplFrame,
     ImplListValue, ImplProcessMessage, ImplRenderProcessHandler, ImplV8Context, ImplV8Exception,
-    ImplV8Value, ProcessId, ProcessMessage, V8Context, V8Handler, V8Value,
-    WrapRenderProcessHandler, register_extension, sys, v8_value_create_object,
+    ImplV8Value, ProcessId, ProcessMessage, V8Context, V8Exception, V8Handler, V8Propertyattribute,
+    V8Value, WrapRenderProcessHandler, sys, v8_value_create_function, v8_value_create_object,
 };
-use std::collections::HashMap as StdHashMap;
+use std::collections::BTreeMap;
 use std::os::raw::c_int;
-use std::sync::Mutex;
-
-const CEF_API_EXTENSION_NAME: &str = "v8/bevy-cef-api";
-const CEF_API_EXTENSION_CODE: &str = r#"
-var cef;
-if (!cef) cef = {};
-(function() {
-  native function __cef_brp();
-  native function __cef_emit();
-  native function __cef_listen();
-  cef.brp = __cef_brp;
-  cef.emit = __cef_emit;
-  cef.listen = __cef_listen;
-})();
-"#;
+use std::sync::{LazyLock, Mutex};
 
 /// Composite key identifying a V8 context: (browser_id, frame_id).
 pub(crate) type ContextKey = (i32, String);
@@ -85,11 +71,6 @@ impl Clone for RenderProcessHandlerBuilder {
 }
 
 impl ImplRenderProcessHandler for RenderProcessHandlerBuilder {
-    fn on_web_kit_initialized(&self) {
-        register_cef_api_extension();
-        register_extensions_from_command_line();
-    }
-
     fn on_browser_created(
         &self,
         browser: Option<&mut Browser>,
@@ -111,10 +92,12 @@ impl ImplRenderProcessHandler for RenderProcessHandlerBuilder {
         frame: Option<&mut Frame>,
         context: Option<&mut V8Context>,
     ) {
-        if let Some(context) = context
-            && let Some(frame) = frame
-            && let Some(browser) = browser
-        {
+        let Some(context) = context else {
+            return;
+        };
+        bind_cef_api(context);
+        eval_extensions(context);
+        if let (Some(browser), Some(frame)) = (browser, frame) {
             inject_initialize_scripts(browser, context, frame);
         }
     }
@@ -163,44 +146,106 @@ impl ImplRenderProcessHandler for RenderProcessHandlerBuilder {
     }
 }
 
-fn inject_initialize_scripts(browser: &mut Browser, context: &mut V8Context, frame: &mut Frame) {
-    let id = browser.identifier();
-    if let Some(script) = INIT_SCRIPTS.lock().ok().and_then(|scripts| {
-        let script = scripts.get(&id)?;
-        Some(CefString::from(script.as_str()))
-    }) {
-        context.enter();
-        let mut retval: Option<V8Value> = None;
-        let mut exception: Option<cef::V8Exception> = None;
-        let result = context.eval(
-            Some(&script),
-            Some(&(&frame.url()).into()),
-            0,
-            Some(&mut retval),
-            Some(&mut exception),
+/// Defines `window.cef` in `context` with the `brp`, `emit` and `listen` functions.
+///
+/// On failure, logs with `cef_error!` and leaves `window.cef` undefined.
+fn bind_cef_api(context: &V8Context) {
+    let Some(global) = context.global() else {
+        cef_error!("failed to bind window.cef: the context has no global object");
+        return;
+    };
+    let Some(mut cef) = v8_value_create_object(None, None) else {
+        cef_error!("failed to bind window.cef: could not create the object");
+        return;
+    };
+    let mut handler = V8Handler::new(CefApiHandler::default());
+    for name in ["brp", "emit", "listen"] {
+        let key = CefString::from(name);
+        let Some(mut function) = v8_value_create_function(Some(&key), Some(&mut handler)) else {
+            cef_error!("failed to bind window.cef: could not create cef.{name}");
+            return;
+        };
+        cef.set_value_bykey(
+            Some(&key),
+            Some(&mut function),
+            V8Propertyattribute::default(),
         );
-        if result == 0 {
-            if let Some(ex) = exception {
-                cef_error!(
-                    "eval failed - message: {}, line: {}, column: {}",
-                    ex.message().into_string(),
-                    ex.line_number(),
-                    ex.start_column(),
-                );
-            } else {
-                cef_error!("eval failed with no exception details");
-            }
-        }
-        context.exit();
+    }
+    if global.set_value_bykey(
+        Some(&"cef".into()),
+        Some(&mut cef),
+        V8Propertyattribute::default(),
+    ) == 0
+    {
+        cef_error!("failed to bind window.cef: could not set it on the global object");
     }
 }
 
-fn register_cef_api_extension() {
-    register_extension(
-        Some(&CEF_API_EXTENSION_NAME.into()),
-        Some(&CEF_API_EXTENSION_CODE.into()),
-        Some(&mut V8Handler::new(CefApiHandler::default())),
+/// Evaluates each non-empty `CefExtensions` entry in `context`, in name order.
+fn eval_extensions(context: &V8Context) {
+    /// The `CefExtensions` that the browser process passes in the extensions switch, iterated
+    /// in name order.
+    ///
+    /// Empty when the switch is absent or holds invalid JSON.
+    static EXTENSIONS: LazyLock<BTreeMap<String, String>> = LazyLock::new(|| {
+        read_switch_json::<BTreeMap<String, String>>(EXTENSIONS_SWITCH).unwrap_or_default()
+    });
+
+    for (name, code) in EXTENSIONS.iter().filter(|(_, code)| !code.is_empty()) {
+        eval_script(context, code, &extension_script_url(name));
+    }
+}
+
+/// Returns the script URL that the extension `name` is evaluated under.
+///
+/// Console errors and DevTools show this URL as the extension's source.
+fn extension_script_url(name: &str) -> String {
+    format!("cef://localhost/__extensions__/{name}.js")
+}
+
+/// Evaluates the browser's `PreloadScripts` in `context` as one script whose URL is the
+/// frame's URL.
+fn inject_initialize_scripts(browser: &Browser, context: &V8Context, frame: &Frame) {
+    let id = browser.identifier();
+    let script = INIT_SCRIPTS
+        .lock()
+        .ok()
+        .and_then(|scripts| scripts.get(&id).cloned());
+    if let Some(script) = script {
+        eval_script(context, &script, &frame.url().into_string());
+    }
+}
+
+/// Evaluates `code` in `context` under `script_url` and logs an uncaught exception with
+/// `cef_error!`.
+///
+/// CEF also reports the exception to the page console.
+fn eval_script(context: &V8Context, code: &str, script_url: &str) {
+    let mut retval: Option<V8Value> = None;
+    let mut exception: Option<V8Exception> = None;
+    let result = context.eval(
+        Some(&CefString::from(code)),
+        Some(&CefString::from(script_url)),
+        0,
+        Some(&mut retval),
+        Some(&mut exception),
     );
+    if result != 0 {
+        return;
+    }
+    match exception {
+        Some(ex) => cef_error!(
+            "eval failed - url: {}, message: {}, line: {}, column: {}",
+            script_url,
+            ex.message().into_string(),
+            ex.line_number(),
+            ex.start_column(),
+        ),
+        None => cef_error!(
+            "eval failed with no exception details - url: {}",
+            script_url
+        ),
+    }
 }
 
 fn context_key(browser: &Browser, frame: &Frame) -> ContextKey {
@@ -280,16 +325,20 @@ fn handle_listen_message(
     }
 }
 
-fn register_extensions_from_command_line() {
-    let Some(extensions) = read_switch_json::<StdHashMap<String, String>>(EXTENSIONS_SWITCH) else {
-        return;
-    };
-    for (name, code) in extensions {
-        let full_name = format!("v8/{}", name);
-        register_extension(
-            Some(&full_name.as_str().into()),
-            Some(&code.as_str().into()),
-            None,
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Asserts that an extension is evaluated under an absolute `cef://localhost` script URL
+    /// ending in its name.
+    ///
+    /// Case: an app registers an extension named `myGame`, and a syntax error in it appears in
+    /// the Bevy log with this URL as its source.
+    #[test]
+    fn extension_script_url_names_the_extension() {
+        assert_eq!(
+            extension_script_url("myGame"),
+            "cef://localhost/__extensions__/myGame.js"
         );
     }
 }
