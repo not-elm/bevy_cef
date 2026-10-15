@@ -12,6 +12,7 @@ use cef::{
     ImplListValue, ImplProcessMessage, ImplRenderProcessHandler, ImplV8Context, ImplV8Exception,
     ImplV8Value, ProcessId, ProcessMessage, V8Context, V8Exception, V8Handler, V8Propertyattribute,
     V8Value, WrapRenderProcessHandler, sys, v8_value_create_function, v8_value_create_object,
+    v8_value_create_string,
 };
 use std::collections::BTreeMap;
 use std::os::raw::c_int;
@@ -219,7 +220,8 @@ fn inject_initialize_scripts(browser: &Browser, context: &V8Context, frame: &Fra
 /// Evaluates `code` in `context` under `script_url` and logs an uncaught exception with
 /// `cef_error!`.
 ///
-/// CEF also reports the exception to the page console.
+/// The failure is also reported to the context's `console.error` as
+/// `<message> (<url>:<line>:<column>)`.
 fn eval_script(context: &V8Context, code: &str, script_url: &str) {
     let mut retval: Option<V8Value> = None;
     let mut exception: Option<V8Exception> = None;
@@ -233,19 +235,36 @@ fn eval_script(context: &V8Context, code: &str, script_url: &str) {
     if result != 0 {
         return;
     }
-    match exception {
-        Some(ex) => cef_error!(
-            "eval failed - url: {}, message: {}, line: {}, column: {}",
-            script_url,
+    let message = match exception {
+        Some(ex) => format!(
+            "{} ({}:{}:{})",
             ex.message().into_string(),
+            script_url,
             ex.line_number(),
             ex.start_column(),
         ),
-        None => cef_error!(
-            "eval failed with no exception details - url: {}",
-            script_url
-        ),
-    }
+        None => format!("eval failed with no exception details ({script_url})"),
+    };
+    cef_error!("eval failed - {message}");
+    report_to_console(context, &message);
+}
+
+/// Calls `console.error` of `context` with `message`, doing nothing when `console.error` is
+/// unavailable.
+fn report_to_console(context: &V8Context, message: &str) {
+    let Some(global) = context.global() else {
+        return;
+    };
+    let Some(mut console) = global.value_bykey(Some(&"console".into())) else {
+        return;
+    };
+    let Some(error) = console.value_bykey(Some(&"error".into())) else {
+        return;
+    };
+    error.execute_function(
+        Some(&mut console),
+        Some(&[v8_value_create_string(Some(&message.into()))]),
+    );
 }
 
 fn context_key(browser: &Browser, frame: &Frame) -> ContextKey {

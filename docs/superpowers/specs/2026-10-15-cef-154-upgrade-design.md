@@ -149,7 +149,10 @@ switch (`browser_process_handler.rs:77-80`).
 - A shared helper evaluates one script with `context.eval` and, on failure, calls
   `cef_error!` with the script URL, the exception message, line number and start column
   (the format `inject_initialize_scripts` already uses). Both extensions and preload
-  scripts go through it. §3 describes where such an error becomes visible.
+  scripts go through it. It also calls the context's `console.error` with
+  `<message> (<url>:<line>:<column>)`, because an exception caught by `CefV8Context::Eval`
+  during `OnContextCreated` never reaches the page console on its own. §3 describes where
+  such an error becomes visible.
 - Removed: the `on_web_kit_initialized` override, `CEF_API_EXTENSION_NAME`,
   `CEF_API_EXTENSION_CODE`, `register_cef_api_extension`,
   `register_extensions_from_command_line`, and the `register_extension` import.
@@ -200,8 +203,7 @@ switch (`browser_process_handler.rs:77-80`).
   shadow it with a top-level `let cef`. Both failed against the old non-configurable
   `var cef`.
 - An exception or syntax error in an extension no longer goes unnoticed (see §3), and the
-  remaining extensions, the preload scripts and the page keep running. Because CEF
-  evaluates with a verbose `TryCatch`, the error also reaches the page's `window.onerror`.
+  remaining extensions, the preload scripts and the page keep running.
 
 ### 2. Dependencies, documentation and CHANGELOG
 
@@ -264,7 +266,7 @@ Only the passages that describe the mechanism this work changes:
 | `on_context_created` receives no context | Return; there is nothing to bind |
 | `context.global()` or a `v8_value_create_*` call returns `None` | `cef_error!`, skip the `window.cef` binding, still run extensions and preload scripts |
 | An extension throws or fails to compile | `cef_error!` with script URL, message, line and column; continue with the next extension |
-| A preload script throws or fails to compile | Unchanged: the preload scripts are one joined script, so the rest of them do not run |
+| A preload script throws or fails to compile | Unchanged: the preload scripts are one joined script, so the rest of them do not run; the error is now reported to the console as well |
 | An extension's code is empty | Skipped without evaluation |
 | The extensions switch is absent | Empty `EXTENSIONS`, nothing logged |
 | The extensions switch holds invalid JSON | `cef_error!` from `read_switch_json`; empty `EXTENSIONS` |
@@ -273,11 +275,13 @@ Only the passages that describe the mechanism this work changes:
 is installed. The release render process enables neither and the debug render process
 installs no subscriber, so these lines are silent in practice — the same as every existing
 `cef_error!` in the render process, which this work does not change. Script errors become
-visible through another path: `CefV8Context::Eval` uses a verbose `TryCatch`, so Blink
-reports the uncaught error to the page console, and the browser process's
-`DisplayHandler::on_console_message` logs console errors with Bevy's `error!`, including
-the source URL and line. The absolute extension URL is what makes that source name the
-extension. No crate-specific error type is introduced.
+visible through another path: the eval helper calls the context's `console.error` with
+`<message> (<url>:<line>:<column>)`, and the browser process's
+`DisplayHandler::on_console_message` logs console errors with Bevy's `error!`. Without that
+call the error stays invisible: an exception caught by `CefV8Context::Eval` during
+`OnContextCreated` is not reported to the page console, although `Eval` uses a verbose
+`TryCatch` (verified on CEF 152.0.8, where `console.error` calls from the same code do
+arrive). The absolute extension URL names the extension in that message. No crate-specific error type is introduced.
 
 ### 4. Verification
 
