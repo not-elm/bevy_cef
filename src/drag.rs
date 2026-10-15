@@ -2,7 +2,9 @@
 //! CEF `OnDraggableRegionsChanged` callbacks to Bevy ECS.
 
 use crate::prelude::WebviewSource;
+use crate::resize::components::WebviewResizable;
 use crate::system_param::pointer::WebviewPointer;
+use crate::webview::MeshWebviewFilter;
 use async_channel::Receiver;
 use bevy::prelude::*;
 use bevy_cef_core::prelude::{DraggableRegion, DraggableRegionSenderInner};
@@ -141,11 +143,11 @@ pub(crate) fn is_draggable(
     drag_rects.iter().any(|r| r.contains(pos))
 }
 
-/// Observer that fires on Pointer<Press> and starts a drag if the press is in a drag region.
+/// Observer that fires on `PointerPress` and starts a drag if the press is in a drag region.
 /// Attached to mesh webview entities via `attach_drag_observers`.
 #[allow(clippy::too_many_arguments)]
 fn on_drag_press(
-    trigger: On<Pointer<Press>>,
+    trigger: On<PointerPress>,
     mut drag_state: ResMut<DragState>,
     mut commands: Commands,
     pointer: WebviewPointer,
@@ -178,7 +180,7 @@ fn on_drag_press(
         return;
     };
 
-    let viewport_pos = trigger.pointer_location.position;
+    let viewport_pos = trigger.pointer.position;
     let Ok(ray) = cam.viewport_to_world(cam_gtf, viewport_pos) else {
         return;
     };
@@ -211,8 +213,8 @@ fn attach_drag_observers(
         (
             Added<WebviewSource>,
             With<Transform>,
-            Without<crate::resize::components::WebviewResizable>,
-            Or<(With<Mesh3d>, With<Mesh2d>)>,
+            Without<WebviewResizable>,
+            MeshWebviewFilter,
         ),
     >,
 ) {

@@ -4,6 +4,7 @@ mod webview_material;
 
 pub use crate::common::*;
 use crate::system_param::pointer::WebviewPointer;
+use crate::webview::MeshWebviewFilter;
 use crate::webview::scroll_delta;
 use crate::webview::webview_sprite::WebviewSpritePlugin;
 use bevy::input::mouse::MouseWheel;
@@ -39,7 +40,7 @@ impl Plugin for MeshWebviewPlugin {
 
 fn setup_observers(
     mut commands: Commands,
-    webviews: Query<Entity, (Added<WebviewSource>, Or<(With<Mesh3d>, With<Mesh2d>)>)>,
+    webviews: Query<Entity, (Added<WebviewSource>, MeshWebviewFilter)>,
 ) {
     for entity in webviews.iter() {
         commands
@@ -51,7 +52,7 @@ fn setup_observers(
 }
 
 fn on_pointer_move(
-    trigger: On<Pointer<Move>>,
+    trigger: On<PointerMove>,
     input: Res<ButtonInput<MouseButton>>,
     pointer: WebviewPointer,
     browsers: NonSend<Browsers>,
@@ -72,7 +73,7 @@ fn on_pointer_move(
 }
 
 fn on_pointer_pressed(
-    trigger: On<Pointer<Press>>,
+    trigger: On<PointerPress>,
     browsers: NonSend<Browsers>,
     pointer: WebviewPointer,
     drag_state: Res<crate::drag::DragState>,
@@ -91,7 +92,7 @@ fn on_pointer_pressed(
 }
 
 fn on_pointer_released(
-    trigger: On<Pointer<Release>>,
+    trigger: On<PointerRelease>,
     browsers: NonSend<Browsers>,
     pointer: WebviewPointer,
     drag_state: Res<crate::drag::DragState>,
@@ -114,7 +115,7 @@ fn on_mouse_wheel(
     browsers: NonSend<Browsers>,
     pointer: WebviewPointer,
     windows: Query<&Window>,
-    webviews: Query<Entity, (With<WebviewSource>, Or<(With<Mesh3d>, With<Mesh2d>)>)>,
+    webviews: Query<Entity, (With<WebviewSource>, MeshWebviewFilter)>,
     drag_state: Res<crate::drag::DragState>,
     resize_state: Res<crate::resize::ResizeState>,
 ) {

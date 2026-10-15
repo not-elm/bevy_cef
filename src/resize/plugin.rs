@@ -10,6 +10,7 @@ use super::*;
 use crate::common::{WebviewSize, WebviewSource};
 use crate::drag::{DragState, DraggableRegions, DraggingState, InteractionEndPending};
 use crate::system_param::pointer::WebviewPointer;
+use crate::webview::MeshWebviewFilter;
 use crate::webview::WebviewSet;
 
 pub struct ResizePlugin;
@@ -46,7 +47,7 @@ fn attach_resize_observers(
             Added<WebviewSource>,
             With<Transform>,
             With<WebviewResizable>,
-            Or<(With<Mesh3d>, With<Mesh2d>)>,
+            MeshWebviewFilter,
         ),
     >,
 ) {
@@ -59,7 +60,7 @@ fn attach_resize_observers(
 /// Classifies the hit as resize, drag, or page input and routes accordingly.
 #[allow(clippy::too_many_arguments)]
 fn on_resizable_press(
-    trigger: On<Pointer<Press>>,
+    trigger: On<PointerPress>,
     mut resize_state: ResMut<ResizeState>,
     mut drag_state: ResMut<DragState>,
     mut commands: Commands,
@@ -98,7 +99,7 @@ fn on_resizable_press(
             let Ok((cam, cam_gtf)) = cameras_q.get(camera_entity) else {
                 return;
             };
-            let viewport_pos = trigger.pointer_location.position;
+            let viewport_pos = trigger.pointer.position;
             let Ok(ray) = cam.viewport_to_world(cam_gtf, viewport_pos) else {
                 return;
             };
@@ -141,7 +142,7 @@ fn on_resizable_press(
             let Ok((cam, cam_gtf)) = cameras_q.get(camera_entity) else {
                 return;
             };
-            let viewport_pos = trigger.pointer_location.position;
+            let viewport_pos = trigger.pointer.position;
             let Ok(ray) = cam.viewport_to_world(cam_gtf, viewport_pos) else {
                 return;
             };
@@ -378,7 +379,7 @@ fn init_resizable_system(
         if let Some(mesh3d) = mesh3d {
             // 3D mesh path
             if let Some(mesh) = mesh_assets.get(&mesh3d.0) {
-                if let Some(aabb) = mesh.compute_aabb() {
+                if let Some(aabb) = mesh.get_aabb() {
                     let local_size =
                         Vec2::new(aabb.half_extents.x * 2.0, aabb.half_extents.y * 2.0);
                     let scale = gtf.compute_transform().scale;
@@ -432,7 +433,7 @@ fn pending_basis_init_system(
         let Some(mesh) = mesh_assets.get(&mesh3d.0) else {
             continue;
         };
-        let Some(aabb) = mesh.compute_aabb() else {
+        let Some(aabb) = mesh.get_aabb() else {
             continue;
         };
         let local_size = Vec2::new(aabb.half_extents.x * 2.0, aabb.half_extents.y * 2.0);

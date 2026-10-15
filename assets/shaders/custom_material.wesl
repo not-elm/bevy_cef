@@ -1,12 +1,8 @@
-#import bevy_pbr::{
-    forward_io::VertexOutput,
-}
-#import webview::util::{
-    surface_color,
-}
+import bevy_pbr::render::forward_io::VertexOutput;
+import bevy_cef::webview::util::surface_color;
 
-@group(#{MATERIAL_BIND_GROUP}) @binding(0) var mask_texture: texture_2d<f32>;
-@group(#{MATERIAL_BIND_GROUP}) @binding(1) var mask_sampler: sampler;
+@group(constants::MATERIAL_BIND_GROUP) @binding(0) var mask_texture: texture_2d<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(1) var mask_sampler: sampler;
 
 @fragment
 fn fragment(

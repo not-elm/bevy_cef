@@ -9,22 +9,22 @@ fix-lint:
 	cargo fmt --all
 
 install-debug-render-process:
-	cargo install --path ./crates/bevy_cef_debug_render_process --force
+	cargo install --locked --path ./crates/bevy_cef_debug_render_process --force
 	cp "$(CARGO_BIN)/$(BIN)" "$(CEF_LIB)/$(BIN)"
 
 setup-macos:
 	brew install cmake ninja
-	cargo install export-cef-dir@152.3.0+152.0.6 --force
+	cargo install --locked export-cef-dir@152.3.0+152.0.6 --force
 	export-cef-dir --force "$(HOME)/.local/share/cef"
-	cargo install --path crates/bevy_cef_debug_render_process
+	cargo install --locked --path crates/bevy_cef_debug_render_process
 	cp "$(CARGO_BIN)/$(BIN)" "$(CEF_LIB)/$(BIN)"
 
 setup-windows:
-	cargo install export-cef-dir@152.3.0+152.0.6 --force
+	cargo install --locked export-cef-dir@152.3.0+152.0.6 --force
 	export-cef-dir --force "$(USERPROFILE)/.local/share/cef"
-	cargo install --path ./crates/bevy_cef_render_process --root "$(USERPROFILE)/.local/share/cef" --force
+	cargo install --locked --path ./crates/bevy_cef_render_process --root "$(USERPROFILE)/.local/share/cef" --force
 
 setup-linux:
-	cargo install export-cef-dir@152.3.0+152.0.6 --force
+	cargo install --locked export-cef-dir@152.3.0+152.0.6 --force
 	"$(CARGO_BIN)/export-cef-dir" --force "$(HOME)/.local/share/cef"
-	cargo install --path ./crates/bevy_cef_render_process --root "$(HOME)/.local/share/cef" --force
+	cargo install --locked --path ./crates/bevy_cef_render_process --root "$(HOME)/.local/share/cef" --force

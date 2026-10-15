@@ -40,26 +40,27 @@ struct CustomExtension {
 
 impl MaterialExtension for CustomExtension {
     fn fragment_shader() -> ShaderRef {
-        "shaders/custom_material.wgsl".into()
+        "shaders/custom_material.wesl".into()
     }
 }
 ```
 
 ## Writing the Shader
 
-Place your WGSL shader in the `assets/shaders/` directory. The webview texture is available through the base material bindings, and your custom bindings (like the mask texture above) are accessible at the binding indices you specified:
+Place your WESL shader in the `assets/shaders/` directory. The webview texture is sampled with `surface_color(uv)` from the `bevy_cef::webview::util` module, and your custom bindings (like the mask texture above) are accessible at the binding indices you specified:
 
 ```wgsl
-#import bevy_pbr::forward_io::VertexOutput
+import bevy_pbr::render::forward_io::VertexOutput;
+import bevy_cef::webview::util::surface_color;
 
-@group(2) @binding(0) var mask_texture: texture_2d<f32>;
-@group(2) @binding(1) var mask_sampler: sampler;
+@group(constants::MATERIAL_BIND_GROUP) @binding(0) var mask_texture: texture_2d<f32>;
+@group(constants::MATERIAL_BIND_GROUP) @binding(1) var mask_sampler: sampler;
 
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let mask = textureSample(mask_texture, mask_sampler, in.uv);
-    // Apply mask alpha to the final output
-    return vec4<f32>(in.color.rgb, mask.a);
+    // Apply mask alpha to the webview color
+    return vec4<f32>(surface_color(in.uv).rgb, mask.a);
 }
 ```
 

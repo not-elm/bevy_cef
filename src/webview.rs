@@ -10,6 +10,7 @@ use bevy::ecs::lifecycle::HookContext;
 use bevy::ecs::world::DeferredWorld;
 use bevy::input::mouse::MouseScrollUnit;
 use bevy::prelude::*;
+use bevy::shader::load_shader_library;
 use bevy::window::PrimaryWindow;
 use bevy::winit::WINIT_WINDOWS;
 use bevy_cef_core::prelude::*;
@@ -123,6 +124,7 @@ pub struct WebviewPlugin;
 
 impl Plugin for WebviewPlugin {
     fn build(&self, app: &mut App) {
+        load_shader_library!(app, "webview/util.wesl");
         app.register_type::<RequestShowDevTool>();
 
         app.configure_sets(
@@ -173,6 +175,21 @@ impl Plugin for WebviewPlugin {
                 let id = world.get::<InlineHtmlId>(ctx.entity).unwrap().0.clone();
                 world.resource_mut::<InlineHtmlStore>().remove(&id);
             });
+    }
+}
+
+/// Query filter for webviews on the mesh input path: entities with a `Mesh3d` or `Mesh2d`,
+/// excluding `Sprite` entities, which take the sprite input path even though Bevy renders them
+/// through an internal `Mesh2d`.
+pub(crate) type MeshWebviewFilter = (Or<(With<Mesh3d>, With<Mesh2d>)>, Without<Sprite>);
+
+/// Queues `AssetEvent::Modified` for `id` without changing the asset, so Bevy rebuilds the
+/// asset's GPU-side data (for a material, its bind group). Does nothing when `id` is not loaded.
+pub(crate) fn touch_asset<A: Asset>(assets: &mut Assets<A>, id: impl Into<AssetId<A>>) {
+    if let Some(asset) = assets.get_mut(id) {
+        // NOTE: A bare `assets.get_mut(id)` queues nothing. Bevy's `AssetMut` guard queues the
+        // event only when it is mutably dereferenced, which `into_inner` does.
+        asset.into_inner();
     }
 }
 
@@ -291,4 +308,36 @@ fn apply_request_show_devtool(trigger: On<RequestShowDevTool>, browsers: NonSend
 
 fn apply_request_close_devtool(trigger: On<RequestCloseDevtool>, browsers: NonSend<Browsers>) {
     browsers.close_devtools(&trigger.webview);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Asserts that a sprite carrying a `Mesh2d` is not matched by the mesh-path webview filter.
+    ///
+    /// Case: a sprite webview is rendered by Bevy 0.20, which inserts a `Mesh2d` quad on every
+    /// `Sprite`.
+    #[test]
+    fn sprite_with_mesh2d_is_not_a_mesh_webview() {
+        let mut world = World::new();
+        let sprite = world
+            .spawn((Sprite::default(), Mesh2d(Handle::default())))
+            .id();
+        let mut webviews = world.query_filtered::<Entity, MeshWebviewFilter>();
+        assert!(webviews.get(&world, sprite).is_err());
+    }
+
+    /// Asserts that `Mesh3d` and plain `Mesh2d` entities match the mesh-path webview filter.
+    ///
+    /// Case: a user shows a webview on a `Mesh3d` plane or on a hand-built `Mesh2d` quad.
+    #[test]
+    fn meshes_without_sprite_are_mesh_webviews() {
+        let mut world = World::new();
+        let mesh3d = world.spawn(Mesh3d(Handle::default())).id();
+        let mesh2d = world.spawn(Mesh2d(Handle::default())).id();
+        let mut webviews = world.query_filtered::<Entity, MeshWebviewFilter>();
+        assert!(webviews.get(&world, mesh3d).is_ok());
+        assert!(webviews.get(&world, mesh2d).is_ok());
+    }
 }

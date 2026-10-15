@@ -34,7 +34,7 @@ fn setup_focus_observers(mut commands: Commands, webviews: Query<Entity, Added<W
 }
 
 fn set_focus_on_press(
-    trigger: On<Pointer<Press>>,
+    trigger: On<PointerPress>,
     parents: Query<(Option<&ChildOf>, Has<WebviewSource>)>,
     mut focused: ResMut<FocusedWebview>,
 ) {

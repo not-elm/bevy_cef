@@ -1,3 +1,38 @@
+## v0.14.0
+
+### Breaking Changes
+
+- Support Bevy 0.20 (wgpu 30). bevy_cef now requires Rust 1.97.1 or later.
+- Shaders are WESL. The webview sampling helper moved from the naga_oil module `webview::util`
+  to the WESL module `bevy_cef::webview::util`. Migrate custom webview material shaders:
+
+  ```wgsl
+  // 0.13 (.wgsl)
+  #import webview::util::{surface_color}
+  // 0.14 (.wesl)
+  import bevy_cef::webview::util::surface_color;
+  ```
+
+  The rest of a shader's migration (`.wesl` extension, `@group(constants::MATERIAL_BIND_GROUP)`,
+  Bevy module paths such as `bevy_pbr::render::forward_io`) follows Bevy's 0.20 migration guide.
+  `surface_color(uv)` and bindings 101/102 are unchanged.
+- Observers on webview entities use Bevy 0.20's flat pointer events (`PointerPress`,
+  `PointerRelease`, `PointerMove`, `PointerScroll`, …) instead of `Pointer<Press>`,
+  `Pointer<Release>`, and so on.
+
+### Fixed
+
+- Windows/Linux: mesh webview material preparation (standard and `WebviewExtendedMaterial<E>`)
+  is ordered after image preparation, so a resized static page no longer keeps a stale texture.
+- `cef` and `cef-dll-sys` are pinned to `=152.3.0+152.0.6`, so the Rust bindings always match the
+  CEF 152.0.6 runtime that `export-cef-dir` installs. Previously Cargo could resolve newer 152.x
+  bindings in applications that depend on bevy_cef.
+
+### Known Limitations
+
+- A sprite webview that also uses Bevy's `SpriteMaterial<M>` extension is not rebound after a
+  resize.
+
 ## v0.13.0
 
 ### Breaking Changes

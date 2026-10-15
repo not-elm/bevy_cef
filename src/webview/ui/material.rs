@@ -1,12 +1,9 @@
 //! `WebviewUiMaterial`: a `UiMaterial` that samples the webview surface texture.
 
-use bevy::asset::uuid_handle;
+use bevy::asset::{AssetPath, embedded_path};
 use bevy::prelude::*;
 use bevy::render::render_resource::AsBindGroup;
 use bevy::shader::ShaderRef;
-
-pub(crate) const WEBVIEW_UI_SHADER_HANDLE: Handle<Shader> =
-    uuid_handle!("3f2b6e8a-0c1d-4e7a-9b2c-7a1e5d4c8f02");
 
 /// A `UiMaterial` that draws the webview's offscreen surface into a `bevy_ui`
 /// node. `surface` is `None` until the surface-copy system inserts the texture;
@@ -20,6 +17,8 @@ pub struct WebviewUiMaterial {
 
 impl UiMaterial for WebviewUiMaterial {
     fn fragment_shader() -> ShaderRef {
-        WEBVIEW_UI_SHADER_HANDLE.into()
+        ShaderRef::Path(
+            AssetPath::from_path_buf(embedded_path!("webview_ui.wesl")).with_source("embedded"),
+        )
     }
 }

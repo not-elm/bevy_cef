@@ -84,7 +84,7 @@ struct TintedWebviewMaterial {
 
 impl UiMaterial for TintedWebviewMaterial {
     fn fragment_shader() -> ShaderRef {
-        "shaders/headless_texture.wgsl".into()
+        "shaders/headless_texture.wesl".into()
     }
 }
 

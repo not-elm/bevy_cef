@@ -12,7 +12,6 @@ use crate::webview::scroll_delta;
 use crate::webview::ui::material::WebviewUiMaterial;
 use bevy::ecs::lifecycle::HookContext;
 use bevy::ecs::world::DeferredWorld;
-use bevy::picking::events::Scroll;
 use bevy::prelude::*;
 use bevy::ui::RelativeCursorPosition;
 use bevy_cef_core::prelude::Browsers;
@@ -130,7 +129,7 @@ fn resolve_ui_pos(
 
 #[allow(clippy::too_many_arguments)]
 fn on_ui_pointer_move(
-    trigger: On<Pointer<Move>>,
+    trigger: On<PointerMove>,
     input: Res<ButtonInput<MouseButton>>,
     browsers: NonSend<Browsers>,
     nodes: Query<UiNode, With<MaterialNode<WebviewUiMaterial>>>,
@@ -158,7 +157,7 @@ fn on_ui_pointer_move(
 }
 
 fn on_ui_pointer_pressed(
-    trigger: On<Pointer<Press>>,
+    trigger: On<PointerPress>,
     browsers: NonSend<Browsers>,
     nodes: Query<UiNode, With<MaterialNode<WebviewUiMaterial>>>,
     images: Res<Assets<Image>>,
@@ -185,7 +184,7 @@ fn on_ui_pointer_pressed(
 }
 
 fn on_ui_pointer_released(
-    trigger: On<Pointer<Release>>,
+    trigger: On<PointerRelease>,
     browsers: NonSend<Browsers>,
     nodes: Query<UiNode, With<MaterialNode<WebviewUiMaterial>>>,
     images: Res<Assets<Image>>,
@@ -212,7 +211,7 @@ fn on_ui_pointer_released(
 }
 
 fn on_ui_pointer_scroll(
-    trigger: On<Pointer<Scroll>>,
+    trigger: On<PointerScroll>,
     browsers: NonSend<Browsers>,
     nodes: Query<UiNode, With<MaterialNode<WebviewUiMaterial>>>,
     images: Res<Assets<Image>>,
