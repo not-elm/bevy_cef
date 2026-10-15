@@ -169,11 +169,15 @@ fn bind_cef_api(context: &V8Context) {
             cef_error!("failed to bind window.cef: could not create cef.{name}");
             return;
         };
-        cef.set_value_bykey(
+        if cef.set_value_bykey(
             Some(&key),
             Some(&mut function),
             V8Propertyattribute::default(),
-        );
+        ) == 0
+        {
+            cef_error!("failed to bind window.cef: could not set cef.{name}");
+            return;
+        }
     }
     if global.set_value_bykey(
         Some(&"cef".into()),
@@ -267,10 +271,13 @@ fn report_to_console(context: &V8Context, message: &str) {
     let Some(mut console) = global.value_bykey(Some(&"console".into())) else {
         return;
     };
+    if !console.is_object().is_positive() {
+        return;
+    }
     let Some(error) = console.value_bykey(Some(&"error".into())) else {
         return;
     };
-    if !console.is_object().is_positive() || !error.is_function().is_positive() {
+    if !error.is_function().is_positive() {
         return;
     }
     error.execute_function(

@@ -25,7 +25,7 @@ fn main() {
                     var myGame = {
                         version: "1.0.0",
                         sendScore: function(score) {
-                            window.cef.emit('score_update', { score: score });
+                            window.cef.emit({ score: score });
                         },
                         getPlayerName: function() {
                             return "Player1";
@@ -49,7 +49,7 @@ Extensions work well with the IPC system. Define extension functions that call `
 
 ```rust
 // In your app setup, register the JsEmitEventPlugin for your event type
-app.add_plugins(JsEmitEventPlugin::<ScoreUpdate>::new("score_update"));
+app.add_plugins(JsEmitEventPlugin::<ScoreUpdate>::default());
 
 // Define the event struct
 #[derive(Deserialize)]
@@ -58,13 +58,13 @@ struct ScoreUpdate {
 }
 
 // Handle the event with an observer
-fn on_score_update(trigger: Trigger<Receive<ScoreUpdate>>) {
-    let score = trigger.event().payload.score;
+fn on_score_update(trigger: On<Receive<ScoreUpdate>>) {
+    let score = trigger.score;
     println!("Score updated: {score}");
 }
 ```
 
-In the browser, calling `myGame.sendScore(42)` fires the `score_update` event, which the Bevy observer receives.
+In the browser, calling `myGame.sendScore(42)` emits `{ score: 42 }`, which deserializes into `ScoreUpdate` and reaches the Bevy observer as `Receive<ScoreUpdate>`.
 
 ## Global Scope
 
