@@ -91,7 +91,7 @@ make setup-windows
 
 ### Debug Tools Setup (macOS)
 ```bash
-cargo install export-cef-dir --version 152.3.0+152.0.6
+cargo install export-cef-dir --version 154.5.0+154.0.34
 export-cef-dir --force $HOME/.local/share/cef
 cargo install bevy_cef_debug_render_process
 cp $HOME/.cargo/bin/bevy_cef_debug_render_process "$HOME/.local/share/cef/Chromium Embedded Framework.framework/Libraries/bevy_cef_debug_render_process"
@@ -137,7 +137,7 @@ No automated tests. Testing done through examples:
 
 | Bevy   | bevy_cef       | CEF              |
 | ------ | -------------- | ---------------- |
-| 0.20   | 0.14.0         | 152.3.0+152.0.6  |
+| 0.20   | 0.14.0         | 154.5.0+154.0.34 |
 | 0.19   | 0.13.0         | 152.3.0+152.0.6  |
 | 0.19   | 0.12.0         | 149.3.0+149.0.6  |
 | 0.18   | 0.5.0 – 0.11.0 | 145.6.1+145.0.28 |

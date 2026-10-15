@@ -3,6 +3,9 @@
 ### Breaking Changes
 
 - Support Bevy 0.20 (wgpu 30). bevy_cef now requires Rust 1.97.1 or later.
+- Update CEF to 154.5.0+154.0.34 (Chromium 154.0.8037.98). Reinstall the CEF framework and the
+  render process (`bevy_cef_render_process`, or `bevy_cef_debug_render_process` on macOS) with
+  the Makefile setup command (`make setup-macos`, `make setup-windows` or `make setup-linux`).
 - Shaders are WESL. The webview sampling helper moved from the naga_oil module `webview::util`
   to the WESL module `bevy_cef::webview::util`. Migrate custom webview material shaders:
 
@@ -32,8 +35,8 @@
 
 - Windows/Linux: mesh webview material preparation (standard and `WebviewExtendedMaterial<E>`)
   is ordered after image preparation, so a resized static page no longer keeps a stale texture.
-- `cef` and `cef-dll-sys` are pinned to `=152.3.0+152.0.6`, so the Rust bindings always match the
-  CEF 152.0.6 runtime that `export-cef-dir` installs. Previously Cargo could resolve newer 152.x
+- `cef` and `cef-dll-sys` are pinned to `=154.5.0+154.0.34`, so the Rust bindings always match the
+  CEF 154.0.34 runtime that `export-cef-dir` installs. Previously Cargo could resolve newer 152.x
   bindings in applications that depend on bevy_cef.
 
 ### Known Limitations
