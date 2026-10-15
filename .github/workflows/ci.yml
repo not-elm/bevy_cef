@@ -31,14 +31,15 @@ jobs:
         run: |
           cargo test --workspace --no-default-features --tests
       - name: Check the Bevy-free render process
+        shell: bash
         run: |
           cargo check -p bevy_cef_render_process
           cargo clippy -p bevy_cef_core --no-default-features -- -Dwarnings
       - name: Render process must not depend on Bevy
         shell: bash
         run: |
-          bevy_crates=$(cargo tree -p bevy_cef_render_process -e normal --target all --prefix none \
-            | sed 's/ .*//' | sort -u | grep -E '^bevy(_|$)' | grep -v '^bevy_cef' || true)
+          cargo tree -p bevy_cef_render_process -e normal --target all --prefix none > "$RUNNER_TEMP/render-process-tree.txt"
+          bevy_crates=$(sed 's/ .*//' "$RUNNER_TEMP/render-process-tree.txt" | sort -u | grep -E '^bevy(_|$)' | grep -v '^bevy_cef' || true)
           if [ -n "$bevy_crates" ]; then
             echo "bevy_cef_render_process depends on Bevy crates:"
             echo "$bevy_crates"

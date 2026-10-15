@@ -69,7 +69,7 @@ Navigation and DevTools use Bevy's trigger/observer pattern. These require expli
 - **Secure-by-default switches**: no security-relaxing CEF switches are enabled by default. Users opt into `disable-web-security` etc. via `CommandLineConfig::default().with_switch(switches::DISABLE_WEB_SECURITY)`; opt-in switches are forwarded to all CEF child processes (CORS is enforced in the network process). `CefPlugin::sandbox: SandboxMode` controls the OS sandbox (`PlatformDefault` preserves per-platform behavior; enabling is best-effort and needs platform setup).
 - **WESL shaders**: all shaders are `.wesl`. The shared sampling helper is the WESL module `bevy_cef::webview::util` (`surface_color(uv)`, bindings 101/102), registered with `load_shader_library!`; user material shaders import it with `import bevy_cef::webview::util::surface_color;`. A material plugin must call `embedded_asset!` for its shader before adding its `MaterialPlugin`, because Bevy 0.20's `MaterialPlugin::build` starts loading the shader immediately.
 - **Mesh vs. sprite input routing**: mesh-path systems filter with `MeshWebviewFilter`, which excludes `Sprite` because Bevy 0.20 inserts a `Mesh2d` on every sprite.
-- **Bevy-free render process**: in `bevy_cef_core`, `bevy`, `bevy_remote`, `async-channel` and `raw-window-handle` are optional and enabled by `browser`. The release render process (`default-features = false`) must not depend on any `bevy`/`bevy_*` crate other than `bevy_cef_*`; the debug one may pull only `bevy` + `bevy_log` through `log`. CI fails otherwise. BRP replies cross the process boundary as `BrpReply` (same JSON as `bevy_remote::BrpResult`), and the browser-only half of `custom_scheme.rs` is expected dead code in browser-less builds.
+- **Bevy-free render process**: in `bevy_cef_core`, `bevy`, `bevy_remote`, `async-channel` and `raw-window-handle` are optional and enabled by `browser`. The release render process (`default-features = false`) must not depend on any `bevy`/`bevy_*` crate other than `bevy_cef_*`; the debug one may pull Bevy only through `log` (`bevy` with its `bevy_log` feature), never `bevy_remote` or the renderer. CI fails if the release render process gains a Bevy dependency. BRP replies cross the process boundary as `BrpReply` (same JSON as `bevy_remote::BrpResult`), and the browser-only half of `custom_scheme.rs` is expected dead code in browser-less builds.
 
 ## Development Commands
 
@@ -96,7 +96,7 @@ Release builds use the size-oriented `[profile.release]` in the root `Cargo.toml
 ```bash
 cargo install export-cef-dir --version 154.5.0+154.0.34
 export-cef-dir --force $HOME/.local/share/cef
-cargo install --locked --path crates/bevy_cef_debug_render_process --force
+CARGO_PROFILE_RELEASE_STRIP=false cargo install --locked --path crates/bevy_cef_debug_render_process --force
 cp $HOME/.cargo/bin/bevy_cef_debug_render_process "$HOME/.local/share/cef/Chromium Embedded Framework.framework/Libraries/bevy_cef_debug_render_process"
 ```
 

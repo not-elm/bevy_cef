@@ -4,7 +4,7 @@
 
 - The render process no longer depends on Bevy. `bevy_cef_core`'s `bevy`, `bevy_remote`,
   `async-channel` and `raw-window-handle` dependencies are now enabled only by its `browser`
-  feature, which cuts `bevy_cef_render_process`'s dependency graph from 486 to 58 crates and its
+  feature, which cuts `bevy_cef_render_process`'s dependency graph from 356 to 50 crates and its
   clean release build on macOS from 238 s to 145 s.
 - `cargo install bevy_cef_render_process` and the workspace's release builds use a size-oriented
   `[profile.release]` (`strip = "symbols"`, `lto = "fat"`, `codegen-units = 1`,

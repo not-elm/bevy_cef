@@ -39,8 +39,8 @@ unexpected_cfgs = { level = "warn", check-cfg = [
 
 [workspace.dependencies]
 # Bare minimum. Each member crate enables exactly the bevy features it uses.
-# The release render process depends on no Bevy crate; the debug one pulls only
-# `bevy` + `bevy_log` (through `bevy_cef_core/log`). The browser-side library and
+# The release render process depends on no Bevy crate; the debug one pulls Bevy
+# only through `bevy_cef_core/log` (`bevy` with `bevy_log`). The browser-side library and
 # top-level crate light up renderer features.
 bevy = { version = "0.20", default-features = false }
 bevy_remote = "0.20"
