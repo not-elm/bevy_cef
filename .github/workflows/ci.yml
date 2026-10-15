@@ -23,12 +23,27 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
+          components: clippy
       - name: Install alsa and udev
         run: sudo apt-get update; sudo apt-get install --no-install-recommends libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev pkg-config libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libgbm1 libpango-1.0-0 libcairo2 libgtk-3-0
         if: runner.os == 'linux'
       - name: Build & run tests
         run: |
           cargo test --workspace --no-default-features --tests
+      - name: Check the Bevy-free render process
+        run: |
+          cargo check -p bevy_cef_render_process
+          cargo clippy -p bevy_cef_core --no-default-features -- -Dwarnings
+      - name: Render process must not depend on Bevy
+        shell: bash
+        run: |
+          bevy_crates=$(cargo tree -p bevy_cef_render_process -e normal --target all --prefix none \
+            | sed 's/ .*//' | sort -u | grep -E '^bevy(_|$)' | grep -v '^bevy_cef' || true)
+          if [ -n "$bevy_crates" ]; then
+            echo "bevy_cef_render_process depends on Bevy crates:"
+            echo "$bevy_crates"
+            exit 1
+          fi
   all-doc-tests:
     runs-on: ubuntu-latest
     steps:
