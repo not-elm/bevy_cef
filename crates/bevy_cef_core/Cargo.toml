@@ -12,15 +12,14 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
-bevy = { workspace = true }
-bevy_remote = { workspace = true }
-uuid = { version = "1" }
+bevy = { workspace = true, optional = true }
+bevy_remote = { workspace = true, optional = true }
 cef = { workspace = true }
 cef-dll-sys = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-async-channel = { workspace = true }
-raw-window-handle = { workspace = true }
+async-channel = { workspace = true, optional = true }
+raw-window-handle = { workspace = true, optional = true }
 
 [features]
 default = ["browser"]
@@ -29,15 +28,19 @@ default = ["browser"]
 # `features = ["debug"]`) emits the same diagnostics the browser process does.
 debug = ["log"]
 # Routes the crate's internal diagnostics through `bevy::log`: gates the
-# `cef_error!`/`cef_warn!` wrapper macros and pulls in `bevy/bevy_log` so the
-# macros resolve even in a render-process build (which otherwise omits the
-# renderer features). Off by default — the macros then compile to no-ops.
-log = ["bevy/bevy_log"]
+# `cef_error!`/`cef_warn!` wrapper macros and pulls in `bevy` + `bevy_log` so the
+# macros resolve even in a render-process build (which otherwise has no Bevy
+# dependency). Off by default — the macros then compile to no-ops.
+log = ["dep:bevy", "bevy/bevy_log"]
 # Enables the browser-process side of the integration: webview lifecycle,
-# materials, input handling, asset scheme, etc. Pulls in the Bevy renderer
-# features needed by that code. Disable this for the render-process subprocess
-# binary, which only needs `bevy::platform` for shared types.
+# materials, input handling, asset scheme, BRP, etc. Pulls in Bevy, bevy_remote
+# and the renderer features needed by that code. Disable this for the
+# render-process binaries, which then depend on no Bevy crate.
 browser = [
+    "dep:bevy",
+    "dep:bevy_remote",
+    "dep:async-channel",
+    "dep:raw-window-handle",
     "bevy/bevy_asset",
     "bevy/bevy_log",
     "bevy/bevy_pbr",
