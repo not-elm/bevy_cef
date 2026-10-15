@@ -3,6 +3,15 @@
 ### Breaking Changes
 
 - Support Bevy 0.20 (wgpu 30). bevy_cef now requires Rust 1.97.1 or later.
+- Update CEF to 154.5.0+154.0.34 (Chromium 154.0.8037.98). Reinstall the CEF framework and the
+  render process (`bevy_cef_render_process`, or `bevy_cef_debug_render_process` on macOS) with
+  the Makefile setup command (`make setup-macos`, `make setup-windows` or `make setup-linux`).
+  - On Linux, run `cargo clean` after reinstalling. Otherwise the build may keep the old CEF
+    files in `target/`, because it only copies files that are newer than the copies already there.
+  - macOS release apps must be re-bundled with the CEF 154 framework and a 0.14
+    `bevy_cef_render_process`.
+  - An app built against CEF 154 that finds the old runtime aborts at startup with
+    `Request for unsupported CEF API version 15400`.
 - Shaders are WESL. The webview sampling helper moved from the naga_oil module `webview::util`
   to the WESL module `bevy_cef::webview::util`. Migrate custom webview material shaders:
 
@@ -20,12 +29,22 @@
   `PointerRelease`, `PointerMove`, `PointerScroll`, …) instead of `Pointer<Press>`,
   `Pointer<Release>`, and so on.
 
+### Changed
+
+- CEF 154 removed `CefRegisterExtension`, so the render process now injects `window.cef` and
+  `CefExtensions` from `on_context_created`. The Rust and JavaScript APIs are unchanged.
+  `window.cef` can now be used at the top level of extensions and preload scripts, extensions
+  run in name order. Errors thrown by extensions and preload scripts are now reported to the
+  page console as `<message> (<url>:<line>:<column>)`, and from there to the Bevy log.
+  Top-level `let`/`const`/`class` declarations in extension code share the page's global
+  lexical scope, so a page that declares the same name fails with a `SyntaxError`.
+
 ### Fixed
 
 - Windows/Linux: mesh webview material preparation (standard and `WebviewExtendedMaterial<E>`)
   is ordered after image preparation, so a resized static page no longer keeps a stale texture.
-- `cef` and `cef-dll-sys` are pinned to `=152.3.0+152.0.6`, so the Rust bindings always match the
-  CEF 152.0.6 runtime that `export-cef-dir` installs. Previously Cargo could resolve newer 152.x
+- `cef` and `cef-dll-sys` are pinned to `=154.5.0+154.0.34`, so the Rust bindings always match the
+  CEF 154.0.34 runtime that `export-cef-dir` installs. Previously Cargo could resolve newer 152.x
   bindings in applications that depend on bevy_cef.
 
 ### Known Limitations

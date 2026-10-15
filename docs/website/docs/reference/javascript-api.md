@@ -137,6 +137,6 @@ Because BRP is async, it is the only IPC pattern that supports request/response 
 
 ## Availability
 
-The `window.cef` object is available after the page's JavaScript context is created. It is safe to use in inline `<script>` tags, `DOMContentLoaded` handlers, and dynamically loaded scripts. It is not available during CEF extension execution (use `CefExtensions` for code that must run before context creation).
+The `window.cef` object is defined as soon as a frame's JavaScript context is created, before any other script runs. In each context, `window.cef` comes first, then `CefExtensions` (in name order), then `PreloadScripts`, then the page's own scripts. All of them can use it, as can inline `<script>` tags, `DOMContentLoaded` handlers, and dynamically loaded scripts.
 
 If you need to run JavaScript before the page's own scripts, use the `PreloadScripts` component on the Rust side rather than relying on `window.cef` availability timing.

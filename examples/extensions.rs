@@ -1,4 +1,4 @@
-//! Example demonstrating custom JavaScript extensions via CEF's register_extension.
+//! Example demonstrating custom JavaScript extensions with `CefExtensions`.
 //!
 //! This example shows how to create global JavaScript APIs that are available
 //! in all webviews before any page scripts run.
@@ -18,7 +18,7 @@ fn main() {
                     var myGame = {
                         version: "1.0.0",
                         sendScore: function(score) {
-                            window.cef.emit('score_update', { score: score });
+                            window.cef.emit({ score: score });
                         }
                     };
                 "#,
