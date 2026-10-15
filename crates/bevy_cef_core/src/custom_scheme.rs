@@ -8,6 +8,16 @@
 //! callback is swallowed (best-effort defaults). No panic crosses the FFI
 //! boundary.
 
+// NOTE: The factory and handler half of this module serves only the browser process, so it is
+// dead code in render-process builds; a browser build still reports genuinely dead items.
+#![cfg_attr(
+    not(feature = "browser"),
+    expect(
+        dead_code,
+        reason = "browser-only scheme factories are unused in render-process builds"
+    )
+)]
+
 use crate::macros::{cef_error, cef_warn};
 use crate::util::{CUSTOM_SCHEMES_SWITCH, IntoString, read_switch_json};
 use cef::rc::Rc;

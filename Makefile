@@ -8,15 +8,16 @@ fix-lint:
 	cargo clippy --fix --allow-dirty --allow-staged --workspace --all --all-features
 	cargo fmt --all
 
+# The development render process keeps its symbols so panic backtraces name functions.
 install-debug-render-process:
-	cargo install --locked --path ./crates/bevy_cef_debug_render_process --force
+	CARGO_PROFILE_RELEASE_STRIP=false cargo install --locked --path ./crates/bevy_cef_debug_render_process --force
 	cp "$(CARGO_BIN)/$(BIN)" "$(CEF_LIB)/$(BIN)"
 
 setup-macos:
 	brew install cmake ninja
 	cargo install --locked export-cef-dir@154.5.0+154.0.34 --force
 	export-cef-dir --force "$(HOME)/.local/share/cef"
-	cargo install --locked --path crates/bevy_cef_debug_render_process
+	CARGO_PROFILE_RELEASE_STRIP=false cargo install --locked --path crates/bevy_cef_debug_render_process
 	cp "$(CARGO_BIN)/$(BIN)" "$(CEF_LIB)/$(BIN)"
 
 setup-windows:

@@ -46,6 +46,7 @@ const sidebars: SidebarsConfig = {
         'guides/preload-scripts',
         'guides/extensions',
         'guides/zoom-and-audio',
+        'guides/app-size',
       ],
     },
     'concepts',

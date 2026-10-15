@@ -39,8 +39,9 @@ unexpected_cfgs = { level = "warn", check-cfg = [
 
 [workspace.dependencies]
 # Bare minimum. Each member crate enables exactly the bevy features it uses.
-# The render-process binaries only need `bevy::platform` (always available).
-# The browser-side library and top-level crate light up renderer features.
+# The release render process depends on no Bevy crate; the debug one pulls Bevy
+# only through `bevy_cef_core/log` (`bevy` with `bevy_log`). The browser-side library and
+# top-level crate light up renderer features.
 bevy = { version = "0.20", default-features = false }
 bevy_remote = "0.20"
 cef = { version = "=154.5.0+154.0.34" }
@@ -87,3 +88,12 @@ default = []
 serialize = ["bevy/serialize"]
 debug = ["bevy_cef_core/debug", "log"]
 log = ["bevy_cef_core/log"]
+
+# Size-oriented release profile. `crates/bevy_cef_render_process/Cargo.toml`
+# carries a copy that applies to `cargo install bevy_cef_render_process` from
+# crates.io; keep the two identical.
+[profile.release]
+strip = "symbols"
+lto = "fat"
+codegen-units = 1
+opt-level = "z"
