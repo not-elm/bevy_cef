@@ -1,6 +1,7 @@
 use crate::common::localhost::responser::{InlineHtmlId, InlineHtmlStore};
 use crate::common::{
-    HostWindow, IpcEventRawSender, ResolvedWebviewUri, WebviewDpr, WebviewSize, WebviewSource,
+    CefShutDown, HostWindow, IpcEventRawSender, ResolvedWebviewUri, WebviewDpr, WebviewSize,
+    WebviewSource,
 };
 use crate::cursor_icon::SystemCursorIconSender;
 use crate::prelude::PreloadScripts;
@@ -148,6 +149,7 @@ impl Plugin for WebviewPlugin {
                     resize.run_if(any_resized).in_set(WebviewSet::CommitResize),
                     create_webview
                         .run_if(added_webview)
+                        .run_if(not(resource_exists::<CefShutDown>))
                         .in_set(WebviewSet::CreateBrowser),
                     navigate_on_source_change,
                 ),

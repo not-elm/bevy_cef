@@ -78,6 +78,7 @@ pub enum EditCommand {
 #[derive(Default)]
 pub struct Browsers {
     browsers: HashMap<Entity, WebviewBrowser>,
+    live_browsers: SharedLiveBrowsers,
 }
 
 impl Browsers {
@@ -394,6 +395,38 @@ impl Browsers {
         }
     }
 
+    /// Returns how many browsers CEF has created and not yet closed, popups included.
+    ///
+    /// A closed browser leaves the count only once CEF reports it closed, which happens during
+    /// message-loop work.
+    pub fn live_browser_count(&self) -> usize {
+        self.live_browsers.borrow().len()
+    }
+
+    /// Force-closes every live browser, popups included, and forgets every webview's browser.
+    ///
+    /// The browsers leave [`Self::live_browser_count`] as CEF reports them closed.
+    pub fn close_all(&mut self) {
+        // NOTE: CEF may report a close from inside `close_browser`, and the life-span handler
+        // then mutably borrows the live list; iterate over a copy so no borrow is held.
+        let live: Vec<Browser> = self.live_browsers.borrow().clone();
+        for browser in live {
+            if let Some(host) = browser.host() {
+                host.close_browser(1);
+            }
+        }
+        self.browsers.clear();
+    }
+
+    /// Drops every CEF reference `Browsers` holds: the webview browsers and the live-browser
+    /// list.
+    ///
+    /// Must run before `cef::shutdown()`, so no reference outlives CEF.
+    pub fn release_all(&mut self) {
+        self.browsers.clear();
+        self.live_browsers.borrow_mut().clear();
+    }
+
     /// Drains the latest texture from each webview's view and popup slots.
     ///
     /// Non-macOS only: the CPU `OnPaint` path. macOS uses the GPU IOSurface path.
@@ -654,6 +687,7 @@ impl Browsers {
             ))
             .with_drag_handler(DragHandlerBuilder::build(webview, drag_regions_sender))
             .with_load_handler(LoadHandlerBuilder::build(webview, load_handler_sender))
+            .with_life_span_handler(LifeSpanHandlerBuilder::build(self.live_browsers.clone()))
             .with_message_handler(JsEmitEventHandler::new(webview, ipc_event_sender))
             .with_message_handler(BrpHandler::new(brp_sender))
             .build()

@@ -6,10 +6,12 @@ use crate::keyboard::CefKeyboardFilter;
 use crate::prelude::{
     BeginFrameInterval, WebviewExtendStandardMaterial, WebviewMaterial, WebviewUiMaterial,
 };
+use bevy::ecs::system::ScheduleSystem;
 use bevy::prelude::*;
 use bevy_cef_core::prelude::*;
 use cef::args::Args;
 use cef::{Settings, api_hash, execute_process, initialize, shutdown, sys};
+use std::time::{Duration, Instant};
 
 /// Why CEF did not start.
 #[derive(Debug, Clone)]
@@ -81,6 +83,11 @@ pub enum CefStatus {
 pub(crate) struct CefRootCachePath(
     #[expect(dead_code, reason = "read by the profile systems")] pub(crate) Option<String>,
 );
+
+/// Present once bevy_cef has called `cef::shutdown()`. The message pump, the shutdown system and
+/// browser creation do not run while it is present.
+#[derive(Resource)]
+pub(crate) struct CefShutDown;
 
 /// Controls the CEF message loop.
 ///
@@ -161,7 +168,10 @@ impl MessageLoopPlugin {
 
 impl Plugin for MessageLoopPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Main, cef_do_message_loop_work);
+        app.add_systems(
+            Main,
+            cef_do_message_loop_work.run_if(not(resource_exists::<CefShutDown>)),
+        );
 
         #[cfg(all(target_os = "macos", feature = "debug"))]
         app.add_systems(
@@ -169,9 +179,30 @@ impl Plugin for MessageLoopPlugin {
             macos::observe_terminate_request.before(cef_do_message_loop_work),
         );
 
-        app.insert_non_send(RunOnMainThread)
-            .add_systems(Update, cef_shutdown.run_if(on_message::<AppExit>));
+        app.insert_non_send(RunOnMainThread);
+        register_on_app_exit(
+            app,
+            shutdown_cef_on_exit.run_if(not(resource_exists::<CefShutDown>)),
+        );
     }
+}
+
+/// Adds `system` to `Main` after `Main::run_main` and the CEF message pump, running only in a
+/// frame in which an `AppExit` was written.
+///
+/// Such a system sees an `AppExit` written anywhere in the frame, `Last` included, before the
+/// runner exits without another frame.
+pub(crate) fn register_on_app_exit<M>(
+    app: &mut App,
+    system: impl IntoScheduleConfigs<ScheduleSystem, M>,
+) {
+    app.add_systems(
+        Main,
+        system
+            .after(Main::run_main)
+            .after(cef_do_message_loop_work)
+            .run_if(on_message::<AppExit>),
+    );
 }
 
 /// Adds the minimal state an app needs when CEF failed to start: the failure in [`CefStatus`],
@@ -329,8 +360,30 @@ fn cef_do_message_loop_work(
     }
 }
 
-fn cef_shutdown(_: NonSend<RunOnMainThread>) {
+/// Closes every browser, waits up to 3 s for CEF to report them closed, releases bevy_cef's CEF
+/// references and shuts CEF down, all within the exiting frame.
+///
+/// Browsers still open at the time limit are logged with `warn!`, and the shutdown continues.
+fn shutdown_cef_on_exit(mut browsers: NonSendMut<Browsers>, mut commands: Commands) {
+    const SHUTDOWN_TIME_LIMIT: Duration = Duration::from_secs(3);
+    const PUMP_INTERVAL: Duration = Duration::from_millis(5);
+
+    browsers.close_all();
+    let deadline = Instant::now() + SHUTDOWN_TIME_LIMIT;
+    while browsers.live_browser_count() > 0 {
+        if Instant::now() >= deadline {
+            warn!(
+                "bevy_cef: {} browser(s) still open after {SHUTDOWN_TIME_LIMIT:?}; shutting CEF down anyway",
+                browsers.live_browser_count()
+            );
+            break;
+        }
+        cef::do_message_loop_work();
+        std::thread::sleep(PUMP_INTERVAL);
+    }
+    browsers.release_all();
     shutdown();
+    commands.insert_resource(CefShutDown);
 }
 
 #[allow(clippy::needless_doctest_main)]
@@ -574,5 +627,33 @@ mod tests {
         app.add_systems(Startup, setup);
 
         app.update();
+    }
+
+    /// Asserts that a system registered with `register_on_app_exit` runs in the same update in
+    /// which a `Last` system writes `AppExit`.
+    ///
+    /// Case: the user closes the last window, so Bevy's `exit_on_all_closed` writes
+    /// `AppExit::Success` from `Last`, and the winit runner exits without another frame.
+    #[test]
+    fn an_app_exit_written_in_last_reaches_the_exit_system() {
+        #[derive(Resource, Default)]
+        struct ExitSystemRan(bool);
+
+        fn mark_ran(mut ran: ResMut<ExitSystemRan>) {
+            ran.0 = true;
+        }
+
+        fn write_exit(mut exit: MessageWriter<AppExit>) {
+            exit.write(AppExit::Success);
+        }
+
+        let mut app = App::new();
+        app.init_resource::<ExitSystemRan>()
+            .add_systems(Last, write_exit);
+        register_on_app_exit(&mut app, mark_ran);
+
+        app.update();
+
+        assert!(app.world().resource::<ExitSystemRan>().0);
     }
 }
