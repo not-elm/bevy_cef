@@ -29,6 +29,7 @@ use crate::browser_process::display_handler::{
     TitleChangedSenderInner,
 };
 use crate::browser_process::drag_handler::{DragHandlerBuilder, DraggableRegionSenderInner};
+use crate::browser_process::initial_zoom::{InitialZoom, SharedInitialZoom, ZoomRequest};
 use crate::browser_process::load_handler::{LoadHandlerBuilder, LoadHandlerSenderInner};
 pub use keyboard::*;
 
@@ -47,6 +48,7 @@ pub struct WebviewBrowser {
     pub host: BrowserHost,
     pub size: SharedViewSize,
     pub dpr: SharedDpr,
+    pub initial_zoom: SharedInitialZoom,
     #[cfg(not(target_os = "macos"))]
     pub view_slot: SharedTexture,
     #[cfg(not(target_os = "macos"))]
@@ -99,10 +101,13 @@ impl Browsers {
         title_changed_sender: TitleChangedSenderInner,
         initialize_scripts: &[String],
         _window_handle: Option<RawWindowHandle>,
+        initial_zoom: f64,
     ) {
         let mut context = Self::request_context(requester);
         let size: SharedViewSize = Rc::new(Cell::new(webview_size));
         let dpr: SharedDpr = Rc::new(Cell::new(initial_dpr));
+        let initial_zoom: SharedInitialZoom =
+            Rc::new(Cell::new(InitialZoom::waiting(initial_zoom)));
         #[cfg(not(target_os = "macos"))]
         let view_slot: SharedTexture = Rc::new(Cell::new(None));
         #[cfg(not(target_os = "macos"))]
@@ -148,6 +153,7 @@ impl Browsers {
                 #[cfg(target_os = "macos")]
                 latest_iosurface.clone(),
                 title_changed_sender,
+                initial_zoom.clone(),
             )),
             Some(&uri.into()),
             Some(&BrowserSettings {
@@ -164,6 +170,7 @@ impl Browsers {
             client: browser,
             size,
             dpr,
+            initial_zoom,
             #[cfg(not(target_os = "macos"))]
             view_slot,
             #[cfg(not(target_os = "macos"))]
@@ -548,7 +555,12 @@ impl Browsers {
     /// - [`SetZoomLevel`](https://cef-builds.spotifycdn.com/docs/122.0/classCefBrowserHost.html#af2b7bf250ac78345117cd575190f2f7b)
     pub fn set_zoom_level(&self, webview: &Entity, zoom_level: f64) {
         if let Some(browser) = self.browsers.get(webview) {
-            browser.host.set_zoom_level(zoom_level);
+            let mut state = browser.initial_zoom.get();
+            let request = state.request(zoom_level);
+            browser.initial_zoom.set(state);
+            if request == ZoomRequest::SendNow {
+                browser.host.set_zoom_level(zoom_level);
+            }
         }
     }
 
@@ -671,6 +683,7 @@ impl Browsers {
         #[cfg(target_os = "macos")]
         latest_iosurface: crate::browser_process::accelerated_paint::SharedRetainedIoSurface,
         title_changed_sender: TitleChangedSenderInner,
+        initial_zoom: SharedInitialZoom,
     ) -> Client {
         #[cfg(target_os = "macos")]
         let render_handler =
@@ -686,7 +699,11 @@ impl Browsers {
                 title_changed_sender,
             ))
             .with_drag_handler(DragHandlerBuilder::build(webview, drag_regions_sender))
-            .with_load_handler(LoadHandlerBuilder::build(webview, load_handler_sender))
+            .with_load_handler(LoadHandlerBuilder::build(
+                webview,
+                load_handler_sender,
+                initial_zoom,
+            ))
             .with_life_span_handler(LifeSpanHandlerBuilder::build(self.live_browsers.clone()))
             .with_message_handler(JsEmitEventHandler::new(webview, ipc_event_sender))
             .with_message_handler(BrpHandler::new(brp_sender))

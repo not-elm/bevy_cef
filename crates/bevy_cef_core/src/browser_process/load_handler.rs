@@ -2,10 +2,14 @@
 //!
 //! Mirrors the `DragHandlerBuilder` pattern (`drag_handler.rs`).
 
+use crate::browser_process::initial_zoom::SharedInitialZoom;
 use async_channel::Sender;
 use bevy::prelude::Entity;
 use cef::rc::{Rc, RcImpl};
-use cef::{Browser, CefString, Errorcode, Frame, ImplFrame, ImplLoadHandler, WrapLoadHandler, sys};
+use cef::{
+    Browser, CefString, Errorcode, Frame, ImplBrowser, ImplBrowserHost, ImplFrame, ImplLoadHandler,
+    TransitionType, WrapLoadHandler, sys,
+};
 use std::os::raw::c_int;
 
 /// Messages sent from the CEF load handler to the Bevy drain system.
@@ -39,14 +43,20 @@ pub struct LoadHandlerBuilder {
     object: *mut RcImpl<sys::_cef_load_handler_t, Self>,
     webview: Entity,
     sender: LoadHandlerSenderInner,
+    initial_zoom: SharedInitialZoom,
 }
 
 impl LoadHandlerBuilder {
-    pub fn build(webview: Entity, sender: LoadHandlerSenderInner) -> cef::LoadHandler {
+    pub fn build(
+        webview: Entity,
+        sender: LoadHandlerSenderInner,
+        initial_zoom: SharedInitialZoom,
+    ) -> cef::LoadHandler {
         cef::LoadHandler::new(Self {
             object: core::ptr::null_mut(),
             webview,
             sender,
+            initial_zoom,
         })
     }
 }
@@ -71,6 +81,7 @@ impl Clone for LoadHandlerBuilder {
             object,
             webview: self.webview,
             sender: self.sender.clone(),
+            initial_zoom: self.initial_zoom.clone(),
         }
     }
 }
@@ -82,6 +93,28 @@ impl WrapLoadHandler for LoadHandlerBuilder {
 }
 
 impl ImplLoadHandler for LoadHandlerBuilder {
+    fn on_load_start(
+        &self,
+        browser: Option<&mut Browser>,
+        frame: Option<&mut Frame>,
+        _transition_type: TransitionType,
+    ) {
+        let (Some(browser), Some(frame)) = (browser, frame) else {
+            return;
+        };
+        if frame.is_main() == 0 {
+            return;
+        }
+        let mut state = self.initial_zoom.get();
+        let held = state.commit();
+        self.initial_zoom.set(state);
+        if let Some(level) = held
+            && let Some(host) = browser.host()
+        {
+            host.set_zoom_level(level);
+        }
+    }
+
     fn on_loading_state_change(
         &self,
         _browser: Option<&mut Browser>,

@@ -1,7 +1,7 @@
 use crate::common::localhost::responser::{InlineHtmlId, InlineHtmlStore};
 use crate::common::{
     CefShutDown, HostWindow, IpcEventRawSender, ResolvedWebviewUri, WebviewDpr, WebviewSize,
-    WebviewSource,
+    WebviewSource, ZoomLevel,
 };
 use crate::cursor_icon::SystemCursorIconSender;
 use crate::prelude::PreloadScripts;
@@ -247,6 +247,7 @@ fn create_webview(
             &WebviewDpr,
             &PreloadScripts,
             Option<&HostWindow>,
+            Option<&ZoomLevel>,
         ),
         Added<ResolvedWebviewUri>,
     >,
@@ -254,7 +255,7 @@ fn create_webview(
 ) {
     WINIT_WINDOWS.with(|winit_windows| {
         let winit_windows = winit_windows.borrow();
-        for (entity, uri, size, dpr, initialize_scripts, host_window) in webviews.iter() {
+        for (entity, uri, size, dpr, initialize_scripts, host_window, zoom) in webviews.iter() {
             let host_window = host_window
                 .and_then(|w| winit_windows.get_window(w.0))
                 .or_else(|| winit_windows.get_window(primary_window.single().ok()?))
@@ -277,6 +278,7 @@ fn create_webview(
                 title_changed_sender.0.clone(),
                 &initialize_scripts.0,
                 host_window,
+                zoom.map_or(0.0, |zoom| zoom.0),
             );
         }
     });
