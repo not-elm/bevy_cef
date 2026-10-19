@@ -98,6 +98,14 @@ impl ImplBrowserProcessHandler for BrowserProcessHandlerBuilder {
         }
     }
 
+    fn on_already_running_app_relaunch(
+        &self,
+        _: Option<&mut CommandLine>,
+        _: Option<&CefString>,
+    ) -> std::os::raw::c_int {
+        1
+    }
+
     fn on_schedule_message_pump_work(&self, delay_ms: i64) {
         let _ = self
             .message_loop_working_requester

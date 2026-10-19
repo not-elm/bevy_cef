@@ -15,8 +15,8 @@ mod webview;
 mod zoom;
 
 use crate::common::{
-    LocalHostPlugin, MessageLoopPlugin, SandboxMode, WebviewCoreComponentsPlugin, WebviewDpiPlugin,
-    resolve_no_sandbox,
+    CefRootCachePath, CefStatus, LocalHostPlugin, MessageLoopPlugin, SandboxMode,
+    WebviewCoreComponentsPlugin, WebviewDpiPlugin, add_failed_startup, resolve_no_sandbox,
 };
 use crate::cursor_icon::SystemCursorIconPlugin;
 use crate::drag::DragPlugin;
@@ -34,6 +34,7 @@ use bevy_cef_core::prelude::{
 use bevy_remote::RemotePlugin;
 
 pub mod prelude {
+    pub use crate::common::{CefStartupError, CefStatus};
     pub use crate::focus::FocusedWebview;
     pub use crate::keyboard::{CefKeyboardFilter, KeyboardDeliverSet, ModifiersState};
     pub use crate::profile::{ProfileName, ProfileNameError, WebviewProfile};
@@ -65,7 +66,7 @@ pub struct CefPlugin {
 
 impl Plugin for CefPlugin {
     fn build(&self, app: &mut App) {
-        // NOTE: Must run before MessageLoopPlugin::build, which calls cef_initialize.
+        // NOTE: Must run before MessageLoopPlugin::start, which calls cef_initialize.
         // CEF's OnRegisterCustomSchemes fires during initialize; schemes registered
         // afterward are silently ignored.
         bevy_cef_core::prelude::init_registered_schemes(self.custom_schemes.clone());
@@ -109,28 +110,36 @@ impl Plugin for CefPlugin {
             );
         }
 
-        app.add_plugins((
-            LocalHostPlugin,
-            MessageLoopPlugin {
-                config: effective_config,
-                extensions: self.extensions.clone(),
-                root_cache_path: self.root_cache_path.clone(),
-                no_sandbox,
-            },
-            WebviewCoreComponentsPlugin,
-            WebviewDpiPlugin,
-            WebviewPlugin,
-            IpcPlugin,
-            KeyboardPlugin,
-            FocusPlugin,
-            SystemCursorIconPlugin,
-            DragPlugin,
-            ResizePlugin,
-            NavigationPlugin,
-            TitlePlugin,
-            ZoomPlugin,
-            AudioMutePlugin,
-        ));
+        let message_loop = MessageLoopPlugin {
+            config: effective_config,
+            extensions: self.extensions.clone(),
+            root_cache_path: self.root_cache_path.clone(),
+            no_sandbox,
+        };
+        if let Err(e) = message_loop.start(app) {
+            error!("bevy_cef: CEF failed to start: {e}");
+            add_failed_startup(app, e, self.root_cache_path.clone());
+            return;
+        }
+        app.insert_resource(CefStatus::Running)
+            .insert_resource(CefRootCachePath(self.root_cache_path.clone()))
+            .add_plugins((
+                LocalHostPlugin,
+                message_loop,
+                WebviewCoreComponentsPlugin,
+                WebviewDpiPlugin,
+                WebviewPlugin,
+                IpcPlugin,
+                KeyboardPlugin,
+                FocusPlugin,
+                SystemCursorIconPlugin,
+                DragPlugin,
+                ResizePlugin,
+                NavigationPlugin,
+                TitlePlugin,
+                ZoomPlugin,
+                AudioMutePlugin,
+            ));
         if !app.is_plugin_added::<RemotePlugin>() {
             app.add_plugins(RemotePlugin::default());
         }
