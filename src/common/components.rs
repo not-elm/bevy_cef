@@ -4,6 +4,7 @@ use bevy_cef_core::prelude::RetainedIoSurface;
 use bevy_cef_core::prelude::{HOST_CEF, SCHEME_CEF};
 use serde::{Deserialize, Serialize};
 
+use crate::profile::WebviewProfile;
 use crate::title::WebviewTitle;
 
 pub(crate) struct WebviewCoreComponentsPlugin;
@@ -17,7 +18,8 @@ impl Plugin for WebviewCoreComponentsPlugin {
             .register_type::<AudioMuted>()
             .register_type::<PreloadScripts>()
             .register_type::<WebviewDpr>()
-            .register_type::<WebviewTextureTarget>();
+            .register_type::<WebviewTextureTarget>()
+            .register_type::<WebviewProfile>();
     }
 }
 
