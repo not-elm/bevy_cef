@@ -2,6 +2,10 @@ use crate::RunOnMainThread;
 use crate::common::WebviewCoreComponentsPlugin;
 use crate::common::ipc::js_emit::IpcRawEventPlugin;
 use crate::focus::FocusedWebview;
+use crate::keyboard::CefKeyboardFilter;
+use crate::prelude::{
+    BeginFrameInterval, WebviewExtendStandardMaterial, WebviewMaterial, WebviewUiMaterial,
+};
 use bevy::prelude::*;
 use bevy_cef_core::prelude::*;
 use cef::args::Args;
@@ -172,13 +176,27 @@ impl Plugin for MessageLoopPlugin {
 
 /// Adds the minimal state an app needs when CEF failed to start: the failure in [`CefStatus`],
 /// the [`CefRootCachePath`], and the resources and messages that user-added bevy_cef plugins
-/// read. No plugin that calls into CEF is added.
+/// read, and the public resources, markers and assets an app's own systems can name. No plugin
+/// that calls into CEF and no system is added; the assets are registered only when `AssetPlugin`
+/// is present.
 pub(crate) fn add_failed_startup(app: &mut App, error: CefStartupError, root: Option<String>) {
     app.insert_resource(CefStatus::Failed(error))
         .insert_resource(CefRootCachePath(root))
         .add_plugins((WebviewCoreComponentsPlugin, IpcRawEventPlugin))
         .add_message::<RenderTextureMessage>()
-        .init_resource::<FocusedWebview>();
+        .init_resource::<FocusedWebview>()
+        .init_resource::<CefKeyboardFilter>()
+        .init_resource::<BeginFrameInterval>()
+        .insert_non_send(RunOnMainThread);
+
+    // NOTE: `init_asset` panics without an `AssetServer`; the skipped plugins assume
+    // `AssetPlugin` as well, but a failed start must not add a second panic.
+    if app.world().contains_resource::<AssetServer>() {
+        app.init_asset::<WebviewMaterial>()
+            .init_asset::<WebviewExtendStandardMaterial>()
+            .init_asset::<WebviewUiMaterial>()
+            .init_asset::<CefResponse>();
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -526,6 +544,35 @@ mod tests {
             CefStatus::Failed(_)
         ));
         assert!(!app.world().contains_non_send::<Browsers>());
+        app.update();
+    }
+
+    /// Asserts that after a failed start, a Startup system written like the examples can still
+    /// take the webview material assets and the keyboard filter, so `update` does not panic.
+    ///
+    /// Case: an app with `AssetPlugin` whose setup system spawns a webview mesh with
+    /// `ResMut<Assets<WebviewExtendStandardMaterial>>` runs while another process holds the root
+    /// cache directory.
+    #[test]
+    fn a_failed_start_keeps_example_startup_systems_running() {
+        fn setup(
+            _materials: ResMut<Assets<WebviewExtendStandardMaterial>>,
+            _ui_materials: ResMut<Assets<WebviewUiMaterial>>,
+            _filter: Res<CefKeyboardFilter>,
+            _interval: Res<BeginFrameInterval>,
+            _marker: NonSend<RunOnMainThread>,
+        ) {
+        }
+
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default()));
+        add_failed_startup(
+            &mut app,
+            CefStartupError::Initialize { exit_code: 21 },
+            None,
+        );
+        app.add_systems(Startup, setup);
+
         app.update();
     }
 }
