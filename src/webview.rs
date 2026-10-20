@@ -4,10 +4,14 @@ use crate::common::{
     WebviewSource, ZoomLevel,
 };
 use crate::cursor_icon::SystemCursorIconSender;
-use crate::prelude::PreloadScripts;
+use crate::drag::DraggableRegionSender;
+use crate::navigation::{AddressChangedSender, LoadHandlerSender};
+use crate::prelude::{PreloadScripts, WebviewProfile};
+use crate::title::TitleChangedSender;
 use crate::webview::mesh::MeshWebviewPlugin;
 use crate::webview::ui::UiWebviewPlugin;
 use bevy::ecs::lifecycle::HookContext;
+use bevy::ecs::system::SystemParam;
 use bevy::ecs::world::DeferredWorld;
 use bevy::input::mouse::MouseScrollUnit;
 use bevy::prelude::*;
@@ -17,7 +21,7 @@ use bevy::winit::WINIT_WINDOWS;
 use bevy_cef_core::prelude::*;
 use bevy_remote::BrpSender;
 #[allow(deprecated)]
-use raw_window_handle::HasRawWindowHandle;
+use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -151,7 +155,11 @@ impl Plugin for WebviewPlugin {
                         .run_if(added_webview)
                         .run_if(not(resource_exists::<CefShutDown>))
                         .in_set(WebviewSet::CreateBrowser),
-                    navigate_on_source_change,
+                    // NOTE: Must run before browser creation. A profile webview's browser is
+                    // created with the latest of its source and its stored `RequestNavigate`;
+                    // navigating it in the same frame would replace a newer navigation with an
+                    // older source.
+                    navigate_on_source_change.before(WebviewSet::CreateBrowser),
                 ),
             )
             .add_observer(apply_request_show_devtool)
@@ -204,11 +212,85 @@ pub(crate) fn scroll_delta(unit: MouseScrollUnit, x: f32, y: f32) -> Vec2 {
     }
 }
 
+/// The resources a browser is created with, shared by every system that creates browsers.
+#[derive(SystemParam)]
+pub(crate) struct BrowserCreation<'w, 's> {
+    requester: Res<'w, Requester>,
+    ipc_event_sender: Res<'w, IpcEventRawSender>,
+    brp_sender: Res<'w, BrpSender>,
+    cursor_icon_sender: Res<'w, SystemCursorIconSender>,
+    drag_regions_sender: Res<'w, DraggableRegionSender>,
+    load_handler_sender: Res<'w, LoadHandlerSender>,
+    address_changed_sender: Res<'w, AddressChangedSender>,
+    title_changed_sender: Res<'w, TitleChangedSender>,
+    primary_window: Query<'w, 's, Entity, With<PrimaryWindow>>,
+}
+
+/// The webview values a browser is created with.
+pub(crate) struct CreateArgs<'a> {
+    pub(crate) uri: &'a str,
+    pub(crate) size: Vec2,
+    pub(crate) dpr: f32,
+    pub(crate) preload: &'a [String],
+    pub(crate) zoom: f64,
+    /// The window to parent the browser to; `None` means the primary window.
+    pub(crate) host_window: Option<Entity>,
+}
+
+impl BrowserCreation<'_, '_> {
+    /// Creates the browser of `webview` in `browsers`, on the context of the profile with cache
+    /// path `profile`, or on a fresh in-memory context when `profile` is `None`.
+    ///
+    /// The host window is resolved to a raw window handle now, so a window closed earlier is
+    /// not used.
+    pub(crate) fn create(
+        &self,
+        browsers: &mut Browsers,
+        webview: Entity,
+        args: CreateArgs,
+        profile: Option<&str>,
+    ) -> Result<(), CreateBrowserError> {
+        browsers.create_browser(
+            webview,
+            args.uri,
+            args.size,
+            args.dpr,
+            self.requester.clone(),
+            self.ipc_event_sender.0.clone(),
+            self.brp_sender.clone(),
+            self.cursor_icon_sender.clone(),
+            self.drag_regions_sender.0.clone(),
+            self.load_handler_sender.0.clone(),
+            self.address_changed_sender.0.clone(),
+            self.title_changed_sender.0.clone(),
+            args.preload,
+            self.window_handle(args.host_window),
+            args.zoom,
+            profile,
+        )
+    }
+
+    fn window_handle(&self, host_window: Option<Entity>) -> Option<RawWindowHandle> {
+        WINIT_WINDOWS.with(|winit_windows| {
+            let winit_windows = winit_windows.borrow();
+            host_window
+                .and_then(|window| winit_windows.get_window(window))
+                .or_else(|| winit_windows.get_window(self.primary_window.single().ok()?))
+                .and_then(|window| {
+                    #[allow(deprecated)]
+                    window.raw_window_handle().ok()
+                })
+        })
+    }
+}
+
 fn any_resized(webviews: Query<Entity, Changed<WebviewSize>>) -> bool {
     !webviews.is_empty()
 }
 
-fn added_webview(webviews: Query<Entity, Added<ResolvedWebviewUri>>) -> bool {
+fn added_webview(
+    webviews: Query<Entity, (Added<ResolvedWebviewUri>, Without<WebviewProfile>)>,
+) -> bool {
     !webviews.is_empty()
 }
 
@@ -228,17 +310,11 @@ fn send_external_begin_frame(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+/// Creates the browser of each newly resolved webview without a [`WebviewProfile`], on its own
+/// in-memory context.
 fn create_webview(
     mut browsers: NonSendMut<Browsers>,
-    requester: Res<Requester>,
-    ipc_event_sender: Res<IpcEventRawSender>,
-    brp_sender: Res<BrpSender>,
-    cursor_icon_sender: Res<SystemCursorIconSender>,
-    drag_regions_sender: Res<crate::drag::DraggableRegionSender>,
-    load_handler_sender: Res<crate::navigation::LoadHandlerSender>,
-    address_changed_sender: Res<crate::navigation::AddressChangedSender>,
-    title_changed_sender: Res<crate::title::TitleChangedSender>,
+    creation: BrowserCreation,
     webviews: Query<
         (
             Entity,
@@ -249,39 +325,22 @@ fn create_webview(
             Option<&HostWindow>,
             Option<&ZoomLevel>,
         ),
-        Added<ResolvedWebviewUri>,
+        (Added<ResolvedWebviewUri>, Without<WebviewProfile>),
     >,
-    primary_window: Query<Entity, With<PrimaryWindow>>,
 ) {
-    WINIT_WINDOWS.with(|winit_windows| {
-        let winit_windows = winit_windows.borrow();
-        for (entity, uri, size, dpr, initialize_scripts, host_window, zoom) in webviews.iter() {
-            let host_window = host_window
-                .and_then(|w| winit_windows.get_window(w.0))
-                .or_else(|| winit_windows.get_window(primary_window.single().ok()?))
-                .and_then(|w| {
-                    #[allow(deprecated)]
-                    w.raw_window_handle().ok()
-                });
-            browsers.create_browser(
-                entity,
-                &uri.0,
-                size.0,
-                dpr.0,
-                requester.clone(),
-                ipc_event_sender.0.clone(),
-                brp_sender.clone(),
-                cursor_icon_sender.clone(),
-                drag_regions_sender.0.clone(),
-                load_handler_sender.0.clone(),
-                address_changed_sender.0.clone(),
-                title_changed_sender.0.clone(),
-                &initialize_scripts.0,
-                host_window,
-                zoom.map_or(0.0, |zoom| zoom.0),
-            );
+    for (webview, uri, size, dpr, preload, host_window, zoom) in webviews.iter() {
+        let args = CreateArgs {
+            uri: &uri.0,
+            size: size.0,
+            dpr: dpr.0,
+            preload: &preload.0,
+            zoom: zoom.map_or(0.0, |zoom| zoom.0),
+            host_window: host_window.map(|window| window.0),
+        };
+        if let Err(error) = creation.create(&mut browsers, webview, args, None) {
+            error!("bevy_cef: failed to create the browser of webview {webview}: {error}");
         }
-    });
+    }
 }
 
 fn navigate_on_source_change(

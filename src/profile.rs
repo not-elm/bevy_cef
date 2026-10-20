@@ -1,8 +1,103 @@
+use crate::common::{
+    AudioMuted, CefRootCachePath, CefShutDown, HostWindow, ResolvedWebviewUri, WebviewDpr,
+    WebviewSize, WebviewSource, ZoomLevel,
+};
+use crate::focus::FocusedWebview;
+use crate::prelude::PreloadScripts;
+use crate::webview::{BrowserCreation, CreateArgs, WebviewSet};
+use bevy::ecs::change_detection::Tick;
+use bevy::ecs::system::SystemChangeTick;
 use bevy::prelude::*;
+use bevy_cef_core::prelude::{Browsers, ProfileContextError, Requester};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fs::{DirBuilder, File, remove_file};
 use std::path::{Path, PathBuf};
+
+/// Creates the browsers of webviews that carry a [`WebviewProfile`] on their profile's shared,
+/// disk-backed request context.
+pub(crate) struct ProfilePlugin;
+
+impl Plugin for ProfilePlugin {
+    fn build(&self, app: &mut App) {
+        app.register_type::<WebviewProfileError>().add_systems(
+            Update,
+            (
+                request_profile_browsers
+                    .run_if(added_profile_webview)
+                    .run_if(not(resource_exists::<CefShutDown>)),
+                create_ready_profile_browsers
+                    .run_if(any_pending_profile_ready)
+                    .run_if(not(resource_exists::<CefShutDown>)),
+            )
+                .chain()
+                .in_set(WebviewSet::CreateBrowser),
+        );
+    }
+}
+
+/// Reports that a webview with a [`WebviewProfile`] gets no browser.
+///
+/// Triggered on the webview entity. The webview is left without a browser; bevy_cef never falls
+/// back to in-memory storage.
+#[derive(Debug, EntityEvent, Clone, Reflect, Serialize, Deserialize)]
+pub struct WebviewProfileError {
+    #[event_target]
+    pub webview: Entity,
+    pub reason: WebviewProfileErrorReason,
+}
+
+/// Why a webview with a [`WebviewProfile`] gets no browser.
+#[derive(Debug, Clone, PartialEq, Reflect, Serialize, Deserialize)]
+pub enum WebviewProfileErrorReason {
+    /// The profile name is not a valid [`ProfileName`]; holds the validation message.
+    InvalidName(String),
+    /// `CefPlugin::root_cache_path` is unset, blank or not an absolute path.
+    NoRoot,
+    /// The profile directory could not be created or written; holds the I/O error message.
+    Directory(String),
+    /// CEF rejected the profile directory and would have kept the profile in memory.
+    DidNotLoad,
+    /// CEF did not create the profile's request context.
+    ContextCreation,
+    /// CEF did not create the browser.
+    BrowserCreation,
+}
+
+/// Marks a profile webview whose browser waits for its profile's context to finish
+/// initializing.
+///
+/// Removing the component (or despawning the entity) cancels the wait.
+#[derive(Component, Debug)]
+pub(crate) struct PendingProfileBrowser {
+    cache_path: String,
+    /// The latest `RequestNavigate` URL, with the change tick of the observer that stored it.
+    navigation: Option<(String, Tick)>,
+}
+
+impl PendingProfileBrowser {
+    /// Records `url` as the latest navigation request, made at `requested_at`.
+    pub(crate) fn store_navigation(&mut self, url: String, requested_at: Tick) {
+        self.navigation = Some((url, requested_at));
+    }
+}
+
+/// Returns the URL a waiting profile webview's browser is created with.
+///
+/// The stored navigation URL wins unless `source_changed` (the `WebviewSource` change tick) is
+/// newer than the navigation's tick, in which case `resolved` wins. `this_run` is the calling
+/// system's change tick.
+pub(crate) fn initial_url<'a>(
+    resolved: &'a str,
+    navigation: Option<&'a (String, Tick)>,
+    source_changed: Tick,
+    this_run: Tick,
+) -> &'a str {
+    match navigation {
+        Some((url, navigated)) if !source_changed.is_newer_than(*navigated, this_run) => url,
+        _ => resolved,
+    }
+}
 
 /// A validated profile name: 1 to [`ProfileName::MAX_LEN`] characters drawn from
 /// `a`-`z`, `0`-`9`, `-` and `_`.
@@ -24,9 +119,14 @@ impl ProfileName {
     }
 
     /// Re-checks the inner string, which reflection can overwrite with an invalid value.
-    #[cfg_attr(not(test), expect(dead_code, reason = "used by the profile systems"))]
     pub(crate) fn revalidate(&self) -> Result<(), ProfileNameError> {
         Self::validate(&self.0)
+    }
+
+    /// Wraps `name` without validating it, as a reflection write would.
+    #[cfg(test)]
+    pub(crate) fn unchecked(name: &str) -> Self {
+        Self(name.to_owned())
     }
 
     fn validate(name: &str) -> Result<(), ProfileNameError> {
@@ -123,7 +223,6 @@ impl WebviewProfile {
 
 /// Why a profile directory cannot be located.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(not(test), expect(dead_code, reason = "used by the profile systems"))]
 pub(crate) enum ProfileRootError {
     /// `root_cache_path` is unset or blank.
     Missing,
@@ -132,7 +231,6 @@ pub(crate) enum ProfileRootError {
 }
 
 /// Returns `<root>/profile-<name>`, joined onto the exact `root` string.
-#[cfg_attr(not(test), expect(dead_code, reason = "used by the profile systems"))]
 pub(crate) fn profile_dir(
     root: Option<&str>,
     name: &ProfileName,
@@ -151,7 +249,6 @@ pub(crate) fn profile_dir(
 ///
 /// On Unix the directory is created with mode `0o700`; on Windows it inherits
 /// the ACL of the root.
-#[cfg_attr(not(test), expect(dead_code, reason = "used by the profile systems"))]
 pub(crate) fn prepare_profile_dir(dir: &Path) -> std::io::Result<()> {
     let mut builder = DirBuilder::new();
     builder.recursive(true);
@@ -166,13 +263,190 @@ pub(crate) fn prepare_profile_dir(dir: &Path) -> std::io::Result<()> {
     remove_file(&probe)
 }
 
+/// Prepares the profile context of each newly resolved profile webview and marks the webview
+/// pending, or reports why it gets no browser.
+fn request_profile_browsers(
+    mut commands: Commands,
+    mut browsers: NonSendMut<Browsers>,
+    requester: Res<Requester>,
+    root: Res<CefRootCachePath>,
+    webviews: Query<(Entity, &WebviewProfile), Added<ResolvedWebviewUri>>,
+) {
+    for (webview, profile) in webviews.iter() {
+        match prepare_profile(&mut browsers, &requester, root.0.as_deref(), profile.name()) {
+            Ok(cache_path) => {
+                commands.entity(webview).try_insert(PendingProfileBrowser {
+                    cache_path,
+                    navigation: None,
+                });
+            }
+            Err(reason) => report_profile_error(&mut commands, webview, reason),
+        }
+    }
+}
+
+fn added_profile_webview(
+    webviews: Query<(), (Added<ResolvedWebviewUri>, With<WebviewProfile>)>,
+) -> bool {
+    !webviews.is_empty()
+}
+
+/// Whether some waiting profile webview's context has finished initializing.
+fn any_pending_profile_ready(
+    browsers: NonSend<Browsers>,
+    pending: Query<&PendingProfileBrowser>,
+) -> bool {
+    pending
+        .iter()
+        .any(|pending| browsers.is_profile_ready(&pending.cache_path))
+}
+
+/// Creates the browser of every waiting profile webview whose context is ready, from the
+/// webview's components as they are now.
+fn create_ready_profile_browsers(
+    mut commands: Commands,
+    mut browsers: NonSendMut<Browsers>,
+    creation: BrowserCreation,
+    focused: Res<FocusedWebview>,
+    ticks: SystemChangeTick,
+    webviews: Query<(
+        Entity,
+        &PendingProfileBrowser,
+        &ResolvedWebviewUri,
+        Ref<WebviewSource>,
+        &WebviewSize,
+        &WebviewDpr,
+        &PreloadScripts,
+        Option<&ZoomLevel>,
+        Option<&AudioMuted>,
+        Option<&HostWindow>,
+    )>,
+) {
+    for (webview, pending, resolved, source, size, dpr, preload, zoom, muted, host_window) in
+        webviews.iter()
+    {
+        if !browsers.is_profile_ready(&pending.cache_path) {
+            continue;
+        }
+        let args = CreateArgs {
+            uri: initial_url(
+                &resolved.0,
+                pending.navigation.as_ref(),
+                source.last_changed(),
+                ticks.this_run(),
+            ),
+            size: size.0,
+            dpr: dpr.0,
+            preload: &preload.0,
+            zoom: zoom.map_or(0.0, |zoom| zoom.0),
+            host_window: host_window.map(|window| window.0),
+        };
+        let created = creation.create(&mut browsers, webview, args, Some(&pending.cache_path));
+        commands
+            .entity(webview)
+            .try_remove::<PendingProfileBrowser>();
+        match created {
+            Ok(()) => {
+                if muted.is_some_and(|muted| muted.0) {
+                    browsers.set_audio_muted(&webview, true);
+                }
+                if focused.0 == Some(webview) {
+                    browsers.set_focus(&webview, true);
+                }
+            }
+            Err(error) => {
+                warn!(
+                    "bevy_cef: failed to create the browser of profile webview {webview}: {error}"
+                );
+                report_profile_error(
+                    &mut commands,
+                    webview,
+                    WebviewProfileErrorReason::BrowserCreation,
+                );
+            }
+        }
+    }
+}
+
+/// Validates `name`, prepares its directory under `root` and gets or creates its context.
+///
+/// Returns the profile's cache path, which keys its context in [`Browsers`].
+fn prepare_profile(
+    browsers: &mut Browsers,
+    requester: &Requester,
+    root: Option<&str>,
+    name: &ProfileName,
+) -> Result<String, WebviewProfileErrorReason> {
+    name.revalidate()
+        .map_err(|error| WebviewProfileErrorReason::InvalidName(error.to_string()))?;
+    let dir = profile_dir(root, name).map_err(|_| WebviewProfileErrorReason::NoRoot)?;
+    prepare_profile_dir(&dir)
+        .map_err(|error| WebviewProfileErrorReason::Directory(error.to_string()))?;
+    let cache_path = dir.to_string_lossy().into_owned();
+    browsers
+        .prepare_profile(&cache_path, requester.clone())
+        .map_err(|error| match error {
+            ProfileContextError::CreationFailed => WebviewProfileErrorReason::ContextCreation,
+            ProfileContextError::DidNotLoad => WebviewProfileErrorReason::DidNotLoad,
+        })?;
+    Ok(cache_path)
+}
+
+fn report_profile_error(
+    commands: &mut Commands,
+    webview: Entity,
+    reason: WebviewProfileErrorReason,
+) {
+    warn!("bevy_cef: profile webview {webview} gets no browser: {reason:?}");
+    commands.trigger(WebviewProfileError { webview, reason });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::navigation::{NavigationPlugin, RequestNavigate};
     use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[derive(Resource, Default)]
+    struct ReportedErrors(Vec<WebviewProfileError>);
 
     fn name(s: &str) -> ProfileName {
         ProfileName::try_from(s.to_owned()).unwrap()
+    }
+
+    fn profile_app(root: Option<String>) -> App {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, ProfilePlugin, NavigationPlugin))
+            .insert_non_send(Browsers::default())
+            .insert_resource(Requester(async_channel::unbounded().0))
+            .insert_resource(CefRootCachePath(root))
+            .init_resource::<ReportedErrors>()
+            .add_observer(
+                |error: On<WebviewProfileError>, mut reported: ResMut<ReportedErrors>| {
+                    reported.0.push(error.event().clone());
+                },
+            );
+        app
+    }
+
+    fn spawn_profile_webview(app: &mut App, profile: WebviewProfile) -> Entity {
+        app.world_mut()
+            .spawn((
+                WebviewSource::new("https://a.example"),
+                ResolvedWebviewUri("https://a.example".into()),
+                profile,
+            ))
+            .id()
+    }
+
+    fn reported_reasons(app: &App, webview: Entity) -> Vec<WebviewProfileErrorReason> {
+        app.world()
+            .resource::<ReportedErrors>()
+            .0
+            .iter()
+            .filter(|error| error.webview == webview)
+            .map(|error| error.reason.clone())
+            .collect()
     }
 
     fn unique_temp_path() -> PathBuf {
@@ -265,5 +539,136 @@ mod tests {
         std::fs::write(&path, b"x").unwrap();
         assert!(prepare_profile_dir(&path).is_err());
         std::fs::remove_file(&path).unwrap();
+    }
+
+    /// Asserts that a profile name that fails revalidation reports `InvalidName` and leaves
+    /// the webview without a pending browser.
+    ///
+    /// Case: a remote BRP client writes `"Bad"` into a webview's `WebviewProfile` through
+    /// reflection, which bypasses the name check that construction and deserialization run.
+    #[test]
+    fn an_invalid_name_reports_invalid_name() {
+        let root = unique_temp_path();
+        let mut app = profile_app(Some(root.to_str().unwrap().to_owned()));
+        let webview =
+            spawn_profile_webview(&mut app, WebviewProfile(ProfileName::unchecked("Bad")));
+
+        app.update();
+
+        let reasons = reported_reasons(&app, webview);
+        assert_eq!(reasons.len(), 1);
+        assert!(matches!(
+            reasons[0],
+            WebviewProfileErrorReason::InvalidName(_)
+        ));
+        assert!(app.world().get::<PendingProfileBrowser>(webview).is_none());
+        assert!(!root.exists());
+    }
+
+    /// Asserts that a profile webview reports `NoRoot` when `root_cache_path` is unset.
+    ///
+    /// Case: an app adds `CefPlugin::default()`, which leaves `root_cache_path` empty, and
+    /// spawns a webview with the profile `work`.
+    #[test]
+    fn a_missing_root_reports_no_root() {
+        let mut app = profile_app(None);
+        let webview = spawn_profile_webview(&mut app, WebviewProfile::new("work").unwrap());
+
+        app.update();
+
+        assert_eq!(
+            reported_reasons(&app, webview),
+            vec![WebviewProfileErrorReason::NoRoot]
+        );
+        assert!(app.world().get::<PendingProfileBrowser>(webview).is_none());
+    }
+
+    /// Asserts that a file sitting where the profile directory belongs reports a `Directory`
+    /// error and leaves the webview without a pending browser.
+    ///
+    /// Case: something wrote a plain file named `profile-work` into the root cache directory
+    /// before the app spawns a webview with the profile `work`.
+    #[test]
+    fn a_file_at_the_profile_path_reports_a_directory_error() {
+        let root = unique_temp_path();
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("profile-work"), b"x").unwrap();
+        let mut app = profile_app(Some(root.to_str().unwrap().to_owned()));
+        let webview = spawn_profile_webview(&mut app, WebviewProfile::new("work").unwrap());
+
+        app.update();
+
+        let reasons = reported_reasons(&app, webview);
+        assert_eq!(reasons.len(), 1);
+        assert!(matches!(
+            reasons[0],
+            WebviewProfileErrorReason::Directory(_)
+        ));
+        assert!(app.world().get::<PendingProfileBrowser>(webview).is_none());
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// Asserts that a `RequestNavigate` for a webview still waiting for its profile is stored
+    /// as the URL to create the browser with.
+    ///
+    /// Case: an app spawns a profile webview and, before the profile's context has finished
+    /// initializing, asks it to navigate to another page.
+    #[test]
+    fn request_navigate_while_pending_is_kept() {
+        let mut app = profile_app(None);
+        let webview = app
+            .world_mut()
+            .spawn(PendingProfileBrowser {
+                cache_path: "x".into(),
+                navigation: None,
+            })
+            .id();
+
+        app.world_mut().trigger(RequestNavigate {
+            webview,
+            url: "https://b.example".into(),
+        });
+
+        let pending = app.world().get::<PendingProfileBrowser>(webview).unwrap();
+        assert_eq!(
+            pending.navigation.as_ref().map(|(url, _)| url.as_str()),
+            Some("https://b.example")
+        );
+    }
+
+    /// Asserts that `initial_url` picks whichever of the source change and the stored
+    /// navigation happened last, and the resolved source when nothing navigated.
+    ///
+    /// Case: while a profile webview waits for its context, the app both sends a
+    /// `RequestNavigate` and changes the `WebviewSource`, in either order.
+    #[test]
+    fn a_source_change_after_request_navigate_wins() {
+        let this_run = Tick::new(100);
+        let navigation = ("https://nav.example".to_owned(), Tick::new(40));
+        assert_eq!(
+            initial_url(
+                "https://source.example",
+                Some(&navigation),
+                Tick::new(50),
+                this_run
+            ),
+            "https://source.example"
+        );
+
+        let navigation = ("https://nav.example".to_owned(), Tick::new(50));
+        assert_eq!(
+            initial_url(
+                "https://source.example",
+                Some(&navigation),
+                Tick::new(40),
+                this_run
+            ),
+            "https://nav.example"
+        );
+
+        assert_eq!(
+            initial_url("https://source.example", None, Tick::new(40), this_run),
+            "https://source.example"
+        );
     }
 }

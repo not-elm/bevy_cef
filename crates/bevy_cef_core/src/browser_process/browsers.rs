@@ -31,7 +31,9 @@ use crate::browser_process::display_handler::{
 use crate::browser_process::drag_handler::{DragHandlerBuilder, DraggableRegionSenderInner};
 use crate::browser_process::initial_zoom::{InitialZoom, SharedInitialZoom, ZoomRequest};
 use crate::browser_process::load_handler::{LoadHandlerBuilder, LoadHandlerSenderInner};
+use crate::browser_process::profiles::{ProfileContext, ProfileContextError};
 pub use keyboard::*;
+use std::fmt;
 
 /// Whether bevy_cef drives CEF compositing with `SendExternalBeginFrame`.
 ///
@@ -77,13 +79,45 @@ pub enum EditCommand {
     Redo,
 }
 
+/// Why [`Browsers::create_browser`] did not create a browser.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CreateBrowserError {
+    /// CEF returned no browser, or a browser without a host.
+    NullBrowser,
+    /// No context was prepared for the requested profile with [`Browsers::prepare_profile`].
+    UnknownProfile,
+}
+
+impl fmt::Display for CreateBrowserError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NullBrowser => write!(f, "CEF did not create the browser"),
+            Self::UnknownProfile => write!(f, "no request context was prepared for the profile"),
+        }
+    }
+}
+
+impl std::error::Error for CreateBrowserError {}
+
 #[derive(Default)]
 pub struct Browsers {
     browsers: HashMap<Entity, WebviewBrowser>,
     live_browsers: SharedLiveBrowsers,
+    /// One shared request context per profile, keyed by the profile's cache path.
+    profiles: HashMap<String, ProfileContext>,
 }
 
 impl Browsers {
+    /// Creates a browser for `webview` and stores it in the entity map.
+    ///
+    /// With `profile: None` the browser gets its own fresh in-memory request context. With
+    /// `Some(cache_path)` it uses the profile context [`Self::prepare_profile`] registered for
+    /// that cache path, which should be ready (see [`Self::is_profile_ready`]).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CreateBrowserError::UnknownProfile`] when no context is registered for
+    /// `profile`, and [`CreateBrowserError::NullBrowser`] when CEF creates no browser.
     #[allow(clippy::too_many_arguments)]
     pub fn create_browser(
         &mut self,
@@ -102,8 +136,18 @@ impl Browsers {
         initialize_scripts: &[String],
         _window_handle: Option<RawWindowHandle>,
         initial_zoom: f64,
-    ) {
-        let mut context = Self::request_context(requester);
+        profile: Option<&str>,
+    ) -> Result<(), CreateBrowserError> {
+        let mut context = match profile {
+            Some(cache_path) => Some(
+                self.profiles
+                    .get(cache_path)
+                    .ok_or(CreateBrowserError::UnknownProfile)?
+                    .context
+                    .clone(),
+            ),
+            None => Self::request_context(requester),
+        };
         let size: SharedViewSize = Rc::new(Cell::new(webview_size));
         let dpr: SharedDpr = Rc::new(Cell::new(initial_dpr));
         let initial_zoom: SharedInitialZoom =
@@ -163,8 +207,8 @@ impl Browsers {
             Self::create_extra_info(initialize_scripts).as_mut(),
             context.as_mut(),
         )
-        .expect("Failed to create browser");
-        let host = browser.host().expect("Failed to get browser host");
+        .ok_or(CreateBrowserError::NullBrowser)?;
+        let host = browser.host().ok_or(CreateBrowserError::NullBrowser)?;
         let webview_browser = WebviewBrowser {
             host,
             client: browser,
@@ -180,6 +224,58 @@ impl Browsers {
         };
 
         self.browsers.insert(webview, webview_browser);
+        Ok(())
+    }
+
+    /// Gets or creates the shared request context for the profile stored at `cache_path`.
+    ///
+    /// A new context is created with `persist_session_cookies` on, gets the `cef://localhost`
+    /// and custom scheme factories, and is registered under `cache_path` until
+    /// [`Self::release_all`]. `cache_path` must be an absolute direct child of the root cache
+    /// path. Browsers can be created on the context once [`Self::is_profile_ready`] returns
+    /// `true`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ProfileContextError::CreationFailed`] when CEF creates no context, and
+    /// [`ProfileContextError::DidNotLoad`] when CEF replaced `cache_path` with in-memory
+    /// storage. Neither registers a context.
+    pub fn prepare_profile(
+        &mut self,
+        cache_path: &str,
+        requester: Requester,
+    ) -> Result<(), ProfileContextError> {
+        if self.profiles.contains_key(cache_path) {
+            return Ok(());
+        }
+        let ready = Rc::new(Cell::new(false));
+        let mut context = cef::request_context_create_context(
+            Some(&RequestContextSettings {
+                cache_path: cache_path.into(),
+                persist_session_cookies: 1,
+                ..Default::default()
+            }),
+            Some(&mut RequestContextHandlerBuilder::build_with_ready(
+                ready.clone(),
+            )),
+        )
+        .ok_or(ProfileContextError::CreationFailed)?;
+        if context.cache_path().into_string().is_empty() {
+            return Err(ProfileContextError::DidNotLoad);
+        }
+        Self::register_scheme_factories(&mut context, requester);
+        self.profiles
+            .insert(cache_path.to_owned(), ProfileContext { context, ready });
+        Ok(())
+    }
+
+    /// Whether the profile context registered for `cache_path` has finished initializing.
+    ///
+    /// Returns `false` when no context is registered for `cache_path`.
+    pub fn is_profile_ready(&self, cache_path: &str) -> bool {
+        self.profiles
+            .get(cache_path)
+            .is_some_and(ProfileContext::is_ready)
     }
 
     pub fn send_external_begin_frame(&self) {
@@ -425,13 +521,14 @@ impl Browsers {
         self.browsers.clear();
     }
 
-    /// Drops every CEF reference `Browsers` holds: the webview browsers and the live-browser
-    /// list.
+    /// Drops every CEF reference `Browsers` holds: the webview browsers, the live-browser list
+    /// and the profile contexts.
     ///
     /// Must run before `cef::shutdown()`, so no reference outlives CEF.
     pub fn release_all(&mut self) {
         self.browsers.clear();
         self.live_browsers.borrow_mut().clear();
+        self.profiles.clear();
     }
 
     /// Drains the latest texture from each webview's view and popup slots.
@@ -575,6 +672,19 @@ impl Browsers {
         }
     }
 
+    /// Returns whether the audio of the specified webview is muted.
+    ///
+    /// Returns `None` when the webview has no browser.
+    ///
+    /// ## Reference
+    ///
+    /// - [`CefBrowserHost::IsAudioMuted`](https://cef-builds.spotifycdn.com/docs/122.0/classCefBrowserHost.html)
+    pub fn is_audio_muted(&self, webview: &Entity) -> Option<bool> {
+        self.browsers
+            .get(webview)
+            .map(|browser| browser.host.is_audio_muted() == 1)
+    }
+
     #[inline]
     pub fn reload(&self) {
         for browser in self.browsers.values() {
@@ -656,14 +766,18 @@ impl Browsers {
             Some(&mut RequestContextHandlerBuilder::build()),
         );
         if let Some(context) = context.as_mut() {
-            context.register_scheme_handler_factory(
-                Some(&SCHEME_CEF.into()),
-                Some(&HOST_CEF.into()),
-                Some(&mut LocalSchemaHandlerBuilder::build(requester)),
-            );
-            crate::custom_scheme::register_custom_scheme_factories(context);
+            Self::register_scheme_factories(context, requester);
         }
         context
+    }
+
+    fn register_scheme_factories(context: &mut RequestContext, requester: Requester) {
+        context.register_scheme_handler_factory(
+            Some(&SCHEME_CEF.into()),
+            Some(&HOST_CEF.into()),
+            Some(&mut LocalSchemaHandlerBuilder::build(requester)),
+        );
+        crate::custom_scheme::register_custom_scheme_factories(context);
     }
 
     #[allow(clippy::too_many_arguments)]

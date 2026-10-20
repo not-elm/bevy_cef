@@ -1,5 +1,7 @@
+use crate::profile::PendingProfileBrowser;
 use async_channel::Receiver;
 use bevy::ecs::event::EntityTrigger;
+use bevy::ecs::system::SystemChangeTick;
 use bevy::prelude::*;
 use bevy_cef_core::prelude::Browsers;
 use bevy_cef_core::prelude::{
@@ -195,7 +197,21 @@ fn apply_request_go_forward(trigger: On<RequestGoForward>, browsers: NonSend<Bro
     browsers.go_forward(&trigger.webview);
 }
 
-fn apply_request_navigate(trigger: On<RequestNavigate>, browsers: NonSend<Browsers>) {
+/// Navigates the webview's browser, and while a profile webview waits for its browser, stores
+/// the URL to create the browser with.
+fn apply_request_navigate(
+    trigger: On<RequestNavigate>,
+    browsers: NonSend<Browsers>,
+    mut pending: Query<&mut PendingProfileBrowser>,
+    ticks: SystemChangeTick,
+) {
+    if let Ok(mut pending) = pending.get_mut(trigger.webview) {
+        pending.store_navigation(trigger.url.clone(), ticks.this_run());
+    }
+    // NOTE: A browser can already exist while `PendingProfileBrowser` is still present: its
+    // removal is a deferred command, and this observer may run at a sync point between the
+    // creation and that removal. The stored URL is then discarded, so the browser itself must
+    // navigate. Without a browser this is a lookup that makes no CEF call.
     browsers.navigate(&trigger.webview, &trigger.url);
 }
 

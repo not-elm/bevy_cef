@@ -24,6 +24,7 @@ use crate::focus::FocusPlugin;
 use crate::keyboard::KeyboardPlugin;
 use crate::mute::AudioMutePlugin;
 use crate::prelude::{IpcPlugin, NavigationPlugin, WebviewPlugin};
+use crate::profile::ProfilePlugin;
 use crate::resize::plugin::ResizePlugin;
 use crate::title::TitlePlugin;
 use crate::zoom::ZoomPlugin;
@@ -37,7 +38,10 @@ pub mod prelude {
     pub use crate::common::{CefStartupError, CefStatus};
     pub use crate::focus::FocusedWebview;
     pub use crate::keyboard::{CefKeyboardFilter, KeyboardDeliverSet, ModifiersState};
-    pub use crate::profile::{ProfileName, ProfileNameError, WebviewProfile};
+    pub use crate::profile::{
+        ProfileName, ProfileNameError, WebviewProfile, WebviewProfileError,
+        WebviewProfileErrorReason,
+    };
     pub use crate::resize::components::{AspectLockMode, WebviewResizable};
     pub use crate::{CefPlugin, RunOnMainThread, navigation::*, title::*, webview::prelude::*};
     pub use bevy_cef_core::prelude::{
@@ -139,7 +143,8 @@ impl Plugin for CefPlugin {
                 TitlePlugin,
                 ZoomPlugin,
                 AudioMutePlugin,
-            ));
+            ))
+            .add_plugins(ProfilePlugin);
         if !app.is_plugin_added::<RemotePlugin>() {
             app.add_plugins(RemotePlugin::default());
         }

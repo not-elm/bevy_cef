@@ -80,9 +80,7 @@ pub enum CefStatus {
 
 /// The `root_cache_path` the plugin was configured with.
 #[derive(Resource)]
-pub(crate) struct CefRootCachePath(
-    #[expect(dead_code, reason = "read by the profile systems")] pub(crate) Option<String>,
-);
+pub(crate) struct CefRootCachePath(pub(crate) Option<String>);
 
 /// Present once bevy_cef has called `cef::shutdown()`. The message pump, the shutdown system and
 /// browser creation do not run while it is present.
