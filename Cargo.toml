@@ -89,6 +89,12 @@ serialize = ["bevy/serialize"]
 debug = ["bevy_cef_core/debug", "log"]
 log = ["bevy_cef_core/log"]
 
+# Re-runs itself as role processes, since CEF initializes once per process. Runs only with
+# `BEVY_CEF_PROCESS_TESTS=1`; otherwise it prints `skipped`.
+[[test]]
+name = "profile_persistence"
+harness = false
+
 # Size-oriented release profile. `crates/bevy_cef_render_process/Cargo.toml`
 # carries a copy that applies to `cargo install bevy_cef_render_process` from
 # crates.io; keep the two identical.
