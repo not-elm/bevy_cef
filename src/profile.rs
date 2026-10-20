@@ -8,31 +8,42 @@ use crate::webview::{BrowserCreation, CreateArgs, WebviewSet};
 use bevy::ecs::change_detection::Tick;
 use bevy::ecs::system::SystemChangeTick;
 use bevy::prelude::*;
+use bevy::time::common_conditions::on_real_timer;
 use bevy_cef_core::prelude::{Browsers, ProfileContextError, Requester};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fs::{DirBuilder, File, remove_file};
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 /// Creates the browsers of webviews that carry a [`WebviewProfile`] on their profile's shared,
-/// disk-backed request context.
-pub(crate) struct ProfilePlugin;
+/// disk-backed request context, and flushes the cookie stores of those contexts.
+pub(crate) struct ProfilePlugin {
+    pub(crate) cookie_flush_interval: Duration,
+}
 
 impl Plugin for ProfilePlugin {
     fn build(&self, app: &mut App) {
-        app.register_type::<WebviewProfileError>().add_systems(
-            Update,
-            (
-                request_profile_browsers
-                    .run_if(added_profile_webview)
-                    .run_if(not(resource_exists::<CefShutDown>)),
-                create_ready_profile_browsers
-                    .run_if(any_pending_profile_ready)
-                    .run_if(not(resource_exists::<CefShutDown>)),
+        app.register_type::<WebviewProfileError>()
+            .add_systems(
+                Update,
+                (
+                    request_profile_browsers
+                        .run_if(added_profile_webview)
+                        .run_if(not(resource_exists::<CefShutDown>)),
+                    create_ready_profile_browsers
+                        .run_if(any_pending_profile_ready)
+                        .run_if(not(resource_exists::<CefShutDown>)),
+                )
+                    .chain()
+                    .in_set(WebviewSet::CreateBrowser),
             )
-                .chain()
-                .in_set(WebviewSet::CreateBrowser),
-        );
+            .add_systems(
+                Update,
+                flush_profile_cookies
+                    .run_if(on_real_timer(self.cookie_flush_interval))
+                    .run_if(not(resource_exists::<CefShutDown>)),
+            );
     }
 }
 
@@ -285,6 +296,11 @@ fn request_profile_browsers(
     }
 }
 
+/// Requests a cookie-store flush on every profile context.
+fn flush_profile_cookies(browsers: NonSend<Browsers>) {
+    browsers.flush_profile_cookies();
+}
+
 fn added_profile_webview(
     webviews: Query<(), (Added<ResolvedWebviewUri>, With<WebviewProfile>)>,
 ) -> bool {
@@ -416,16 +432,22 @@ mod tests {
 
     fn profile_app(root: Option<String>) -> App {
         let mut app = App::new();
-        app.add_plugins((MinimalPlugins, ProfilePlugin, NavigationPlugin))
-            .insert_non_send(Browsers::default())
-            .insert_resource(Requester(async_channel::unbounded().0))
-            .insert_resource(CefRootCachePath(root))
-            .init_resource::<ReportedErrors>()
-            .add_observer(
-                |error: On<WebviewProfileError>, mut reported: ResMut<ReportedErrors>| {
-                    reported.0.push(error.event().clone());
-                },
-            );
+        app.add_plugins((
+            MinimalPlugins,
+            ProfilePlugin {
+                cookie_flush_interval: Duration::from_secs(5),
+            },
+            NavigationPlugin,
+        ))
+        .insert_non_send(Browsers::default())
+        .insert_resource(Requester(async_channel::unbounded().0))
+        .insert_resource(CefRootCachePath(root))
+        .init_resource::<ReportedErrors>()
+        .add_observer(
+            |error: On<WebviewProfileError>, mut reported: ResMut<ReportedErrors>| {
+                reported.0.push(error.event().clone());
+            },
+        );
         app
     }
 

@@ -2,6 +2,7 @@
 //!
 //! Mirrors the `DragHandlerBuilder` pattern (`drag_handler.rs`).
 
+use crate::browser_process::cookie_flush::CookieFlusher;
 use crate::browser_process::initial_zoom::SharedInitialZoom;
 use async_channel::Sender;
 use bevy::prelude::Entity;
@@ -44,6 +45,7 @@ pub struct LoadHandlerBuilder {
     webview: Entity,
     sender: LoadHandlerSenderInner,
     initial_zoom: SharedInitialZoom,
+    cookie_flusher: Option<CookieFlusher>,
 }
 
 impl LoadHandlerBuilder {
@@ -51,12 +53,14 @@ impl LoadHandlerBuilder {
         webview: Entity,
         sender: LoadHandlerSenderInner,
         initial_zoom: SharedInitialZoom,
+        cookie_flusher: Option<CookieFlusher>,
     ) -> cef::LoadHandler {
         cef::LoadHandler::new(Self {
             object: core::ptr::null_mut(),
             webview,
             sender,
             initial_zoom,
+            cookie_flusher,
         })
     }
 }
@@ -82,6 +86,7 @@ impl Clone for LoadHandlerBuilder {
             webview: self.webview,
             sender: self.sender.clone(),
             initial_zoom: self.initial_zoom.clone(),
+            cookie_flusher: self.cookie_flusher.clone(),
         }
     }
 }
@@ -141,6 +146,9 @@ impl ImplLoadHandler for LoadHandlerBuilder {
         if let Some(frame) = frame
             && frame.is_main() != 0
         {
+            if let Some(flusher) = &self.cookie_flusher {
+                flusher.request();
+            }
             let _ = self.sender.send_blocking(LoadHandlerMessage::Finished {
                 webview: self.webview,
                 http_status_code,

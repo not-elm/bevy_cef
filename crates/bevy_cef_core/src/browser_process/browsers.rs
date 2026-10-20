@@ -24,6 +24,7 @@ mod devtool_render_handler;
 mod keyboard;
 
 use crate::browser_process::browsers::devtool_render_handler::DevToolRenderHandlerBuilder;
+use crate::browser_process::cookie_flush::CookieFlusher;
 use crate::browser_process::display_handler::{
     AddressChangedSenderInner, DisplayHandlerBuilder, SystemCursorIconSenderInner,
     TitleChangedSenderInner,
@@ -138,15 +139,15 @@ impl Browsers {
         initial_zoom: f64,
         profile: Option<&str>,
     ) -> Result<(), CreateBrowserError> {
-        let mut context = match profile {
-            Some(cache_path) => Some(
-                self.profiles
+        let (mut context, cookie_flusher) = match profile {
+            Some(cache_path) => {
+                let profile = self
+                    .profiles
                     .get(cache_path)
-                    .ok_or(CreateBrowserError::UnknownProfile)?
-                    .context
-                    .clone(),
-            ),
-            None => Self::request_context(requester),
+                    .ok_or(CreateBrowserError::UnknownProfile)?;
+                (Some(profile.context.clone()), Some(profile.flusher.clone()))
+            }
+            None => (Self::request_context(requester), None),
         };
         let size: SharedViewSize = Rc::new(Cell::new(webview_size));
         let dpr: SharedDpr = Rc::new(Cell::new(initial_dpr));
@@ -198,6 +199,7 @@ impl Browsers {
                 latest_iosurface.clone(),
                 title_changed_sender,
                 initial_zoom.clone(),
+                cookie_flusher,
             )),
             Some(&uri.into()),
             Some(&BrowserSettings {
@@ -264,9 +266,24 @@ impl Browsers {
             return Err(ProfileContextError::DidNotLoad);
         }
         Self::register_scheme_factories(&mut context, requester);
-        self.profiles
-            .insert(cache_path.to_owned(), ProfileContext { context, ready });
+        self.profiles.insert(
+            cache_path.to_owned(),
+            ProfileContext {
+                flusher: CookieFlusher::new(context.clone()),
+                context,
+                ready,
+            },
+        );
         Ok(())
+    }
+
+    /// Requests a cookie-store flush on every profile context.
+    ///
+    /// A context with a flush in flight queues one follow-up instead of starting another.
+    pub fn flush_profile_cookies(&self) {
+        for profile in self.profiles.values() {
+            profile.flusher.request();
+        }
     }
 
     /// Whether the profile context registered for `cache_path` has finished initializing.
@@ -798,6 +815,7 @@ impl Browsers {
         latest_iosurface: crate::browser_process::accelerated_paint::SharedRetainedIoSurface,
         title_changed_sender: TitleChangedSenderInner,
         initial_zoom: SharedInitialZoom,
+        cookie_flusher: Option<CookieFlusher>,
     ) -> Client {
         #[cfg(target_os = "macos")]
         let render_handler =
@@ -817,6 +835,7 @@ impl Browsers {
                 webview,
                 load_handler_sender,
                 initial_zoom,
+                cookie_flusher,
             ))
             .with_life_span_handler(LifeSpanHandlerBuilder::build(self.live_browsers.clone()))
             .with_message_handler(JsEmitEventHandler::new(webview, ipc_event_sender))

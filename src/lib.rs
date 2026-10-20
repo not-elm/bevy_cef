@@ -33,6 +33,7 @@ use bevy_cef_core::prelude::{
     CefCustomScheme, CefExtensions, CommandLineConfig, effective_command_line_config, switches,
 };
 use bevy_remote::RemotePlugin;
+use std::time::Duration;
 
 pub mod prelude {
     pub use crate::common::{CefStartupError, CefStatus};
@@ -52,7 +53,6 @@ pub mod prelude {
 
 pub struct RunOnMainThread;
 
-#[derive(Default)]
 pub struct CefPlugin {
     pub command_line_config: CommandLineConfig,
     pub extensions: CefExtensions,
@@ -66,6 +66,23 @@ pub struct CefPlugin {
     /// Controls Chromium's OS-level sandbox. Defaults to the current per-platform
     /// behavior; see [`SandboxMode`].
     pub sandbox: SandboxMode,
+    /// How often the cookie stores of profile contexts are flushed to disk, measured in
+    /// wall-clock time. A flush also follows every main-frame load end in a profile webview.
+    /// Defaults to 5 seconds.
+    pub cookie_flush_interval: Duration,
+}
+
+impl Default for CefPlugin {
+    fn default() -> Self {
+        Self {
+            command_line_config: Default::default(),
+            extensions: Default::default(),
+            root_cache_path: Default::default(),
+            custom_schemes: Default::default(),
+            sandbox: Default::default(),
+            cookie_flush_interval: Duration::from_secs(5),
+        }
+    }
 }
 
 impl Plugin for CefPlugin {
@@ -144,7 +161,9 @@ impl Plugin for CefPlugin {
                 ZoomPlugin,
                 AudioMutePlugin,
             ))
-            .add_plugins(ProfilePlugin);
+            .add_plugins(ProfilePlugin {
+                cookie_flush_interval: self.cookie_flush_interval,
+            });
         if !app.is_plugin_added::<RemotePlugin>() {
             app.add_plugins(RemotePlugin::default());
         }
