@@ -31,8 +31,11 @@ impl Plugin for ProfilePlugin {
                     request_profile_browsers
                         .run_if(added_profile_webview)
                         .run_if(not(resource_exists::<CefShutDown>)),
+                    // NOTE: The executor evaluates run conditions on whichever thread ticks it,
+                    // so a condition must not read the `NonSend` `Browsers`; doing so panics off
+                    // the main thread. The system itself checks which contexts are ready.
                     create_ready_profile_browsers
-                        .run_if(any_pending_profile_ready)
+                        .run_if(any_with_component::<PendingProfileBrowser>)
                         .run_if(not(resource_exists::<CefShutDown>)),
                 )
                     .chain()
@@ -305,16 +308,6 @@ fn added_profile_webview(
     webviews: Query<(), (Added<ResolvedWebviewUri>, With<WebviewProfile>)>,
 ) -> bool {
     !webviews.is_empty()
-}
-
-/// Whether some waiting profile webview's context has finished initializing.
-fn any_pending_profile_ready(
-    browsers: NonSend<Browsers>,
-    pending: Query<&PendingProfileBrowser>,
-) -> bool {
-    pending
-        .iter()
-        .any(|pending| browsers.is_profile_ready(&pending.cache_path))
 }
 
 /// Creates the browser of every waiting profile webview whose context is ready, from the
