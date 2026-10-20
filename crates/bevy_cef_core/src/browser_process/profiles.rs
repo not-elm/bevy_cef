@@ -1,6 +1,6 @@
 //! The shared request contexts of named, disk-backed profiles.
 
-use crate::browser_process::cookie_flush::CookieFlusher;
+use crate::browser_process::cookie_flush::ProfileFlusher;
 use cef::RequestContext;
 use std::cell::Cell;
 use std::fmt;
@@ -34,8 +34,8 @@ pub(crate) struct ProfileContext {
     pub(crate) context: RequestContext,
     /// Set to `true` by the context's handler once CEF reports it initialized.
     pub(crate) ready: Rc<Cell<bool>>,
-    /// Flushes the context's cookie store; held only here and by the profile's load handlers.
-    pub(crate) flusher: CookieFlusher,
+    /// The sole strong owner of the context's flush target; load handlers hold weak handles.
+    pub(crate) flusher: ProfileFlusher,
 }
 
 impl ProfileContext {

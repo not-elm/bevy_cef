@@ -24,7 +24,7 @@ mod devtool_render_handler;
 mod keyboard;
 
 use crate::browser_process::browsers::devtool_render_handler::DevToolRenderHandlerBuilder;
-use crate::browser_process::cookie_flush::CookieFlusher;
+use crate::browser_process::cookie_flush::{CookieFlusher, ProfileFlusher};
 use crate::browser_process::display_handler::{
     AddressChangedSenderInner, DisplayHandlerBuilder, SystemCursorIconSenderInner,
     TitleChangedSenderInner,
@@ -145,7 +145,10 @@ impl Browsers {
                     .profiles
                     .get(cache_path)
                     .ok_or(CreateBrowserError::UnknownProfile)?;
-                (Some(profile.context.clone()), Some(profile.flusher.clone()))
+                (
+                    Some(profile.context.clone()),
+                    Some(profile.flusher.handle()),
+                )
             }
             None => (Self::request_context(requester), None),
         };
@@ -269,7 +272,7 @@ impl Browsers {
         self.profiles.insert(
             cache_path.to_owned(),
             ProfileContext {
-                flusher: CookieFlusher::new(context.clone()),
+                flusher: ProfileFlusher::new(context.clone()),
                 context,
                 ready,
             },
