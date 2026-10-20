@@ -1418,6 +1418,13 @@ mod scenarios {
         holder.wait_for_line(READY)?;
         #[cfg(windows)]
         let windows_before = holder.visible_windows();
+        #[cfg(windows)]
+        ensure!(
+            !windows_before.is_empty(),
+            "the window enumeration found no visible window for the holder's PID, although \
+             winit's event-target window is always visible, so the window check would prove \
+             nothing"
+        );
         let second = harness.run(Role::new("second"))?;
         let (running, root_in_use, detail) =
             second.result("status result", |result| match result {
