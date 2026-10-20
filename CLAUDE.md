@@ -32,7 +32,8 @@ CefPlugin (root — accepts CommandLineConfig, CefExtensions, root_cache_path)
 - `WebviewExtendStandardMaterial`: Material for 3D mesh rendering
 - `Sprite` (Bevy): 2D sprite display. Bevy 0.20 renders it through `Mesh2d` + `SpriteMeshMaterial`; bevy_cef touches that material when the webview image is reallocated or Bevy reassigns the material
 - `HostWindow`: Optional parent window (defaults to PrimaryWindow)
-- `ZoomLevel`: f64 zoom (0.0 = default)
+- `ZoomLevel`: f64 zoom request (0.0 = default), applied at the first main-frame commit; shared per site and remembered in a profile
+- `WebviewProfile`: optional named disk profile (`WebviewProfile::new(name)`, validated); lives at `<root_cache_path>/profile-NAME`; read once at browser creation; webviews of one name share one context; failures arrive as `WebviewProfileError`; startup failure is reported in `CefStatus`
 - `AudioMuted`: bool audio control
 - `PreloadScripts`: Vec<String> scripts executed before page scripts
 - `CefExtensions`: Custom JS evaluated in every frame's V8 context (global to all webviews), in name order, after `window.cef` is bound and before `PreloadScripts`. Both are injected in `on_context_created`, because CEF 154 removed `CefRegisterExtension`
@@ -63,6 +64,7 @@ Navigation and DevTools use Bevy's trigger/observer pattern. These require expli
 ### Key Non-Obvious Patterns
 - **NonSend resources**: `Browsers` and CEF library loaders are `NonSend` — CEF is not thread-safe
 - **Message loop**: Every platform (Windows included) uses CEF's `external_message_pump` mode; `cef_do_message_loop_work()` runs from a system in the `Main` schedule when CEF requests work (4 ms minimum interval, 30 Hz max-delay fallback). `multi_threaded_message_loop` is not used — CEF does not support it on macOS.
+- **Shutdown**: `shutdown_cef_on_exit` runs in `Main` after `Main::run_main` and after `cef_do_message_loop_work`, on `AppExit` (`register_on_app_exit`). A window close writes `AppExit` from `Last` and the winit runner then exits without another frame, so an `Update` system would never see it. The whole sequence (close browsers, pump until closed or 3 s, release bevy_cef's CEF references, `shutdown()`) therefore runs as one blocking call.
 - **Begin frames**: macOS/Linux drive compositing with `send_external_begin_frame` (`BeginFrameInterval`, default 30 fps). Windows lets CEF composite on its own (`EXTERNAL_BEGIN_FRAME == false`); externally driven begin frames stall the webview there once DevTools opens.
 - **Pointer interaction**: Custom `WebviewPointer` SystemParam converts screen-space pointer → webview UV via AABB/mesh bounds + camera transforms; alpha channel hit-testing for transparent pixels
 - **Localhost scheme**: Static assets via Bevy asset system; inline HTML via `cef://localhost/__inline__/{id}` with auto-cleanup on component remove

@@ -4,7 +4,7 @@ sidebar_position: 8
 
 # Zoom & Audio
 
-bevy_cef provides per-webview zoom and audio mute controls through simple ECS components. Changes are reactive -- Bevy's change detection automatically propagates updates to the underlying CEF browser.
+bevy_cef provides zoom and audio mute controls through simple ECS components. Changes are reactive -- Bevy's change detection automatically propagates updates to the underlying CEF browser.
 
 ## Zoom Level
 
@@ -48,6 +48,20 @@ fn change_zoom_level(
     }
 }
 ```
+
+### When Zoom Is Applied
+
+`ZoomLevel` is a request. The zoom is applied when the webview's first main frame commits, because Chromium ignores a zoom set before the page has a renderer. A non-default value present at spawn, or set before that commit, is applied then. After the first commit every change is sent immediately.
+
+A default `ZoomLevel(0.0)` is not sent at that point, so it does not reset a zoom the browser already remembers.
+
+### Profiles
+
+Without a profile, each webview has its own store, so its zoom is its own. In a [profile](./profiles.md), Chromium follows its own browser behavior instead:
+
+- Zoom is shared per site. Webviews of one profile that show the same host share one zoom level, so changing `ZoomLevel` on one changes what the other displays.
+- The profile remembers the zoom of each site across restarts. A webview that starts with the default `ZoomLevel(0.0)` shows the remembered zoom for its site.
+- The component can therefore differ from the zoom actually shown, because another webview or a remembered level changed it. bevy_cef does not provide a way to read the effective zoom.
 
 ## Audio Mute
 

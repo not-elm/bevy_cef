@@ -45,6 +45,7 @@ const sidebars: SidebarsConfig = {
         'guides/custom-materials',
         'guides/preload-scripts',
         'guides/extensions',
+        'guides/profiles',
         'guides/zoom-and-audio',
         'guides/app-size',
       ],
