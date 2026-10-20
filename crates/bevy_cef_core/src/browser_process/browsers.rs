@@ -289,6 +289,11 @@ impl Browsers {
         }
     }
 
+    /// Whether a profile context is registered for `cache_path`, initialized or not.
+    pub fn has_profile(&self, cache_path: &str) -> bool {
+        self.profiles.contains_key(cache_path)
+    }
+
     /// Whether the profile context registered for `cache_path` has finished initializing.
     ///
     /// Returns `false` when no context is registered for `cache_path`.
@@ -518,7 +523,7 @@ impl Browsers {
         }
     }
 
-    /// Returns how many browsers CEF has created and not yet closed, popups included.
+    /// Returns how many browsers CEF has created and not yet closed, popups and DevTools included.
     ///
     /// A closed browser leaves the count only once CEF reports it closed, which happens during
     /// message-loop work.
@@ -526,7 +531,8 @@ impl Browsers {
         self.live_browsers.borrow().len()
     }
 
-    /// Force-closes every live browser, popups included, and forgets every webview's browser.
+    /// Force-closes every live browser, popups and DevTools included, and forgets every webview's
+    /// browser.
     ///
     /// The browsers leave [`Self::live_browser_count`] as CEF reports them closed.
     pub fn close_all(&mut self) {
@@ -570,7 +576,13 @@ impl Browsers {
         };
         browser.host.show_dev_tools(
             Some(&WindowInfo::default()),
-            Some(&mut ClientHandlerBuilder::new(DevToolRenderHandlerBuilder::build()).build()),
+            Some(
+                &mut ClientHandlerBuilder::new(DevToolRenderHandlerBuilder::build())
+                    .with_life_span_handler(LifeSpanHandlerBuilder::build(
+                        self.live_browsers.clone(),
+                    ))
+                    .build(),
+            ),
             Some(&BrowserSettings::default()),
             None,
         );

@@ -4,7 +4,7 @@ use cef::rc::{Rc, RcImpl};
 use cef::{Browser, ImplBrowser, ImplLifeSpanHandler, WrapLifeSpanHandler, sys};
 use std::cell::RefCell;
 
-/// The browsers CEF has created and not yet closed, popups included.
+/// The browsers CEF has created and not yet closed, popups and DevTools included.
 pub type SharedLiveBrowsers = std::rc::Rc<RefCell<Vec<Browser>>>;
 
 /// Adds each created browser to a [`SharedLiveBrowsers`] list and removes it when CEF closes it.

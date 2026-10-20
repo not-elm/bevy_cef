@@ -23,6 +23,7 @@ CefPlugin (root — accepts CommandLineConfig, CefExtensions, root_cache_path)
 ├── IpcPlugin (IpcRawEventPlugin + HostEmitPlugin)
 ├── KeyboardPlugin, SystemCursorIconPlugin, NavigationPlugin
 ├── ZoomPlugin, AudioMutePlugin
+├── ProfilePlugin (profile webviews on shared disk-backed contexts, cookie flushes)
 └── RemotePlugin (auto-added for BRP if not present)
 ```
 
@@ -122,7 +123,8 @@ If the render process binary is not installed, call `bevy_cef::prelude::early_ex
 
 Unit tests live in `bevy_cef_core`; CI runs them on Windows, Linux and macOS. Runtime behavior is checked through examples:
 - `cargo test --workspace --all-features`
-- Examples: simple, inline_html, js_emit, host_emit, brp, navigation, zoom_level, sprite, devtool, custom_material, custom_scheme, preload_scripts, extensions, headless_texture, hidpi, resize, toolbar_drag, ui_webview
+- Examples: simple, inline_html, js_emit, host_emit, brp, navigation, zoom_level, sprite, devtool, custom_material, custom_scheme, preload_scripts, extensions, headless_texture, hidpi, resize, toolbar_drag, ui_webview, profile
+- `tests/profile_persistence.rs` (`harness = false`) re-runs itself as role processes against one CEF root; it runs only with `BEVY_CEF_PROCESS_TESTS=1` (Windows and Linux) and prints `skipped` otherwise
 
 ## Workspace Structure
 

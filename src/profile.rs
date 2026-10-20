@@ -113,21 +113,27 @@ pub(crate) struct MuteAfterFirstCommit {
     committed: bool,
 }
 
-/// Returns the URL a waiting profile webview's browser is created with.
+/// Returns the URL a waiting profile webview's browser is created with, or `None` while the
+/// latest `WebviewSource` change has not been resolved yet.
 ///
-/// The stored navigation URL wins unless `source_changed` (the `WebviewSource` change tick) is
-/// newer than the navigation's tick, in which case `resolved` wins. `this_run` is the calling
-/// system's change tick.
+/// `source_changed` is the `WebviewSource` change tick and `resolved_changed` the change tick of
+/// `resolved`, which is resolved from the source one schedule later. Once the source is
+/// resolved, the stored navigation URL wins unless the source changed after the navigation's
+/// tick, in which case `resolved` wins. `this_run` is the calling system's change tick.
 pub(crate) fn initial_url<'a>(
     resolved: &'a str,
+    resolved_changed: Tick,
     navigation: Option<&'a (String, Tick)>,
     source_changed: Tick,
     this_run: Tick,
-) -> &'a str {
-    match navigation {
+) -> Option<&'a str> {
+    if source_changed.is_newer_than(resolved_changed, this_run) {
+        return None;
+    }
+    Some(match navigation {
         Some((url, navigated)) if !source_changed.is_newer_than(*navigated, this_run) => url,
         _ => resolved,
-    }
+    })
 }
 
 /// A validated profile name: 1 to [`ProfileName::MAX_LEN`] characters drawn from
@@ -359,6 +365,9 @@ fn added_profile_webview(
 
 /// Creates the browser of every waiting profile webview whose context is ready, from the
 /// webview's components as they are now.
+///
+/// A webview whose `WebviewSource` changed after its last resolution keeps waiting until the
+/// change is resolved.
 fn create_ready_profile_browsers(
     mut commands: Commands,
     mut browsers: NonSendMut<Browsers>,
@@ -368,7 +377,7 @@ fn create_ready_profile_browsers(
     webviews: Query<(
         Entity,
         &PendingProfileBrowser,
-        &ResolvedWebviewUri,
+        Ref<ResolvedWebviewUri>,
         Ref<WebviewSource>,
         &WebviewSize,
         &WebviewDpr,
@@ -384,13 +393,17 @@ fn create_ready_profile_browsers(
         if !browsers.is_profile_ready(&pending.cache_path) {
             continue;
         }
+        let Some(uri) = initial_url(
+            &resolved.0,
+            resolved.last_changed(),
+            pending.navigation.as_ref(),
+            source.last_changed(),
+            ticks.this_run(),
+        ) else {
+            continue;
+        };
         let args = CreateArgs {
-            uri: initial_url(
-                &resolved.0,
-                pending.navigation.as_ref(),
-                source.last_changed(),
-                ticks.this_run(),
-            ),
+            uri,
             size: size.0,
             dpr: dpr.0,
             preload: &preload.0,
@@ -453,7 +466,8 @@ fn reapply_mute_after_first_commit(
     }
 }
 
-/// Validates `name`, prepares its directory under `root` and gets or creates its context.
+/// Validates `name` and gets or creates its context, preparing its directory under `root` when
+/// no context is registered for it yet.
 ///
 /// Returns the profile's cache path, which keys its context in [`Browsers`].
 fn prepare_profile(
@@ -465,9 +479,12 @@ fn prepare_profile(
     name.revalidate()
         .map_err(|error| WebviewProfileErrorReason::InvalidName(error.to_string()))?;
     let dir = profile_dir(root, name).map_err(|_| WebviewProfileErrorReason::NoRoot)?;
+    let cache_path = dir.to_string_lossy().into_owned();
+    if browsers.has_profile(&cache_path) {
+        return Ok(cache_path);
+    }
     prepare_profile_dir(&dir)
         .map_err(|error| WebviewProfileErrorReason::Directory(error.to_string()))?;
-    let cache_path = dir.to_string_lossy().into_owned();
     browsers
         .prepare_profile(&cache_path, requester.clone())
         .map_err(|error| match error {
@@ -775,31 +792,74 @@ mod tests {
     #[test]
     fn a_source_change_after_request_navigate_wins() {
         let this_run = Tick::new(100);
+        let resolved_changed = Tick::new(60);
         let navigation = ("https://nav.example".to_owned(), Tick::new(40));
         assert_eq!(
             initial_url(
                 "https://source.example",
+                resolved_changed,
                 Some(&navigation),
                 Tick::new(50),
                 this_run
             ),
-            "https://source.example"
+            Some("https://source.example")
         );
 
         let navigation = ("https://nav.example".to_owned(), Tick::new(50));
         assert_eq!(
             initial_url(
                 "https://source.example",
+                resolved_changed,
                 Some(&navigation),
                 Tick::new(40),
                 this_run
             ),
-            "https://nav.example"
+            Some("https://nav.example")
         );
 
         assert_eq!(
-            initial_url("https://source.example", None, Tick::new(40), this_run),
-            "https://source.example"
+            initial_url(
+                "https://source.example",
+                resolved_changed,
+                None,
+                Tick::new(40),
+                this_run
+            ),
+            Some("https://source.example")
+        );
+    }
+
+    /// Asserts that `initial_url` returns nothing while the latest `WebviewSource` change is
+    /// newer than its resolved URL, whether or not a navigation is stored.
+    ///
+    /// Case: while a profile webview waits for its context, the app changes the
+    /// `WebviewSource` in `Update`, and the context reports ready later in that frame, before
+    /// the next `PreUpdate` resolves the new source.
+    #[test]
+    fn an_unresolved_source_change_defers_creation() {
+        let this_run = Tick::new(100);
+        let resolved_changed = Tick::new(30);
+        let source_changed = Tick::new(40);
+        let navigation = ("https://nav.example".to_owned(), Tick::new(50));
+        assert_eq!(
+            initial_url(
+                "https://old.example",
+                resolved_changed,
+                Some(&navigation),
+                source_changed,
+                this_run
+            ),
+            None
+        );
+        assert_eq!(
+            initial_url(
+                "https://old.example",
+                resolved_changed,
+                None,
+                source_changed,
+                this_run
+            ),
+            None
         );
     }
 

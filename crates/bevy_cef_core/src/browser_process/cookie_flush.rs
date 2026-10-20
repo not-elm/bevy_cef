@@ -13,7 +13,7 @@ use std::rc::Weak;
 /// Where a context's flush stands: none running, or one running with an optional follow-up
 /// queued.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum FlushState {
+enum FlushState {
     /// No flush is running.
     Idle,
     /// A flush is running.
@@ -28,7 +28,7 @@ impl FlushState {
     ///
     /// While a flush is in flight the request only sets `again`, so any number of requests
     /// collapse into one follow-up.
-    pub fn request(&mut self) -> bool {
+    fn request(&mut self) -> bool {
         match self {
             Self::Idle => {
                 *self = Self::InFlight { again: false };
@@ -42,7 +42,7 @@ impl FlushState {
     }
 
     /// Records that the running flush finished and returns whether a follow-up should start now.
-    pub fn complete(&mut self) -> bool {
+    fn complete(&mut self) -> bool {
         match self {
             Self::InFlight { again: true } => {
                 *self = Self::InFlight { again: false };
@@ -59,7 +59,7 @@ impl FlushState {
     /// was in flight.
     ///
     /// The state becomes `Idle`, discarding any queued follow-up.
-    pub fn abandon(&mut self) -> bool {
+    fn abandon(&mut self) -> bool {
         let was_in_flight = matches!(self, Self::InFlight { .. });
         *self = Self::Idle;
         was_in_flight
