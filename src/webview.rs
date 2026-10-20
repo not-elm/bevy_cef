@@ -249,7 +249,7 @@ impl BrowserCreation<'_, '_> {
         webview: Entity,
         args: CreateArgs,
         profile: Option<&str>,
-    ) -> Result<(), CreateBrowserError> {
+    ) -> CefCoreResult {
         browsers.create_browser(
             webview,
             args.uri,

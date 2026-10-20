@@ -34,6 +34,5 @@ pub use life_span_handler::*;
 pub use load_handler::*;
 pub use localhost::*;
 pub use message_pump::*;
-pub use profiles::*;
 pub use renderer_handler::*;
 pub use request_context_handler::*;

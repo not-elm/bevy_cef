@@ -10,7 +10,7 @@ use bevy::ecs::change_detection::Tick;
 use bevy::ecs::system::SystemChangeTick;
 use bevy::prelude::*;
 use bevy::time::common_conditions::on_real_timer;
-use bevy_cef_core::prelude::{Browsers, ProfileContextError, Requester};
+use bevy_cef_core::prelude::{Browsers, CefCoreError, ProfileContextError, Requester};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fs::{DirBuilder, File, remove_file};
@@ -84,6 +84,19 @@ pub enum WebviewProfileErrorReason {
     ContextCreation,
     /// CEF did not create the browser.
     BrowserCreation,
+}
+
+impl WebviewProfileErrorReason {
+    /// The reason a profile webview gets no browser when [`Browsers`] fails with `error`.
+    fn from_core(error: CefCoreError) -> Self {
+        match error {
+            CefCoreError::CreateBrowser(_) => Self::BrowserCreation,
+            CefCoreError::ProfileContext(ProfileContextError::CreationFailed) => {
+                Self::ContextCreation
+            }
+            CefCoreError::ProfileContext(ProfileContextError::DidNotLoad) => Self::DidNotLoad,
+        }
+    }
 }
 
 /// Marks a profile webview whose browser waits for its profile's context to finish
@@ -433,7 +446,7 @@ fn create_ready_profile_browsers(
                 report_profile_error(
                     &mut commands,
                     webview,
-                    WebviewProfileErrorReason::BrowserCreation,
+                    WebviewProfileErrorReason::from_core(error),
                 );
             }
         }
@@ -487,10 +500,7 @@ fn prepare_profile(
         .map_err(|error| WebviewProfileErrorReason::Directory(error.to_string()))?;
     browsers
         .prepare_profile(&cache_path, requester.clone())
-        .map_err(|error| match error {
-            ProfileContextError::CreationFailed => WebviewProfileErrorReason::ContextCreation,
-            ProfileContextError::DidNotLoad => WebviewProfileErrorReason::DidNotLoad,
-        })?;
+        .map_err(WebviewProfileErrorReason::from_core)?;
     Ok(cache_path)
 }
 
@@ -507,6 +517,7 @@ fn report_profile_error(
 mod tests {
     use super::*;
     use crate::navigation::{NavigationPlugin, RequestNavigate};
+    use bevy_cef_core::prelude::CreateBrowserError;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     #[derive(Resource, Default)]
@@ -895,6 +906,35 @@ mod tests {
 
         commit_main_frame(&mut app, webview);
         assert!(app.world().get::<MuteAfterFirstCommit>(webview).is_none());
+    }
+
+    /// Asserts that each failure of `Browsers` maps to the reason a profile webview reports.
+    ///
+    /// Case: CEF fails to create a profile's context, falls back to in-memory storage, or
+    /// creates no browser on a ready context.
+    #[test]
+    fn core_failures_map_to_their_profile_error_reason() {
+        let cases = [
+            (
+                CefCoreError::from(ProfileContextError::CreationFailed),
+                WebviewProfileErrorReason::ContextCreation,
+            ),
+            (
+                CefCoreError::from(ProfileContextError::DidNotLoad),
+                WebviewProfileErrorReason::DidNotLoad,
+            ),
+            (
+                CefCoreError::from(CreateBrowserError::NullBrowser),
+                WebviewProfileErrorReason::BrowserCreation,
+            ),
+            (
+                CefCoreError::from(CreateBrowserError::UnknownProfile),
+                WebviewProfileErrorReason::BrowserCreation,
+            ),
+        ];
+        for (error, reason) in cases {
+            assert_eq!(WebviewProfileErrorReason::from_core(error), reason);
+        }
     }
 
     fn commit_main_frame(app: &mut App, webview: Entity) {

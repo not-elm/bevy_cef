@@ -20,6 +20,7 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 async-channel = { workspace = true, optional = true }
 raw-window-handle = { workspace = true, optional = true }
+thiserror = { workspace = true, optional = true }
 
 [features]
 default = ["browser"]
@@ -41,6 +42,7 @@ browser = [
     "dep:bevy_remote",
     "dep:async-channel",
     "dep:raw-window-handle",
+    "dep:thiserror",
     "bevy/bevy_asset",
     "bevy/bevy_log",
     "bevy/bevy_pbr",

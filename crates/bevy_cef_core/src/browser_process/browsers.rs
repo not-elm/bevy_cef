@@ -32,9 +32,9 @@ use crate::browser_process::display_handler::{
 use crate::browser_process::drag_handler::{DragHandlerBuilder, DraggableRegionSenderInner};
 use crate::browser_process::initial_zoom::{InitialZoom, SharedInitialZoom, ZoomRequest};
 use crate::browser_process::load_handler::{LoadHandlerBuilder, LoadHandlerSenderInner};
-use crate::browser_process::profiles::{ProfileContext, ProfileContextError};
+use crate::browser_process::profiles::ProfileContext;
+use crate::error::{CefCoreResult, CreateBrowserError, ProfileContextError};
 pub use keyboard::*;
-use std::fmt;
 
 /// Whether bevy_cef drives CEF compositing with `SendExternalBeginFrame`.
 ///
@@ -80,26 +80,6 @@ pub enum EditCommand {
     Redo,
 }
 
-/// Why [`Browsers::create_browser`] did not create a browser.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CreateBrowserError {
-    /// CEF returned no browser, or a browser without a host.
-    NullBrowser,
-    /// No context was prepared for the requested profile with [`Browsers::prepare_profile`].
-    UnknownProfile,
-}
-
-impl fmt::Display for CreateBrowserError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::NullBrowser => write!(f, "CEF did not create the browser"),
-            Self::UnknownProfile => write!(f, "no request context was prepared for the profile"),
-        }
-    }
-}
-
-impl std::error::Error for CreateBrowserError {}
-
 #[derive(Default)]
 pub struct Browsers {
     browsers: HashMap<Entity, WebviewBrowser>,
@@ -117,8 +97,8 @@ impl Browsers {
     ///
     /// # Errors
     ///
-    /// Returns [`CreateBrowserError::UnknownProfile`] when no context is registered for
-    /// `profile`, and [`CreateBrowserError::NullBrowser`] when CEF creates no browser.
+    /// Fails with [`CreateBrowserError::UnknownProfile`] when no context is registered for
+    /// `profile`, and with [`CreateBrowserError::NullBrowser`] when CEF creates no browser.
     #[allow(clippy::too_many_arguments)]
     pub fn create_browser(
         &mut self,
@@ -138,7 +118,7 @@ impl Browsers {
         _window_handle: Option<RawWindowHandle>,
         initial_zoom: f64,
         profile: Option<&str>,
-    ) -> Result<(), CreateBrowserError> {
+    ) -> CefCoreResult {
         let (mut context, cookie_flusher) = match profile {
             Some(cache_path) => {
                 let profile = self
@@ -242,14 +222,10 @@ impl Browsers {
     ///
     /// # Errors
     ///
-    /// Returns [`ProfileContextError::CreationFailed`] when CEF creates no context, and
+    /// Fails with [`ProfileContextError::CreationFailed`] when CEF creates no context, and with
     /// [`ProfileContextError::DidNotLoad`] when CEF replaced `cache_path` with in-memory
     /// storage. Neither registers a context.
-    pub fn prepare_profile(
-        &mut self,
-        cache_path: &str,
-        requester: Requester,
-    ) -> Result<(), ProfileContextError> {
+    pub fn prepare_profile(&mut self, cache_path: &str, requester: Requester) -> CefCoreResult {
         if self.profiles.contains_key(cache_path) {
             return Ok(());
         }
@@ -266,7 +242,7 @@ impl Browsers {
         )
         .ok_or(ProfileContextError::CreationFailed)?;
         if context.cache_path().into_string().is_empty() {
-            return Err(ProfileContextError::DidNotLoad);
+            return Err(ProfileContextError::DidNotLoad.into());
         }
         Self::register_scheme_factories(&mut context, requester);
         self.profiles.insert(
