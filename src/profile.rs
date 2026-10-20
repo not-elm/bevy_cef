@@ -3,6 +3,7 @@ use crate::common::{
     WebviewSize, WebviewSource, ZoomLevel,
 };
 use crate::focus::FocusedWebview;
+use crate::navigation::AddressChanged;
 use crate::prelude::PreloadScripts;
 use crate::webview::{BrowserCreation, CreateArgs, WebviewSet};
 use bevy::ecs::change_detection::Tick;
@@ -43,10 +44,16 @@ impl Plugin for ProfilePlugin {
             )
             .add_systems(
                 Update,
-                flush_profile_cookies
-                    .run_if(on_real_timer(self.cookie_flush_interval))
-                    .run_if(not(resource_exists::<CefShutDown>)),
-            );
+                (
+                    flush_profile_cookies
+                        .run_if(on_real_timer(self.cookie_flush_interval))
+                        .run_if(not(resource_exists::<CefShutDown>)),
+                    reapply_mute_after_first_commit
+                        .run_if(any_with_component::<MuteAfterFirstCommit>)
+                        .run_if(not(resource_exists::<CefShutDown>)),
+                ),
+            )
+            .add_observer(note_first_commit);
     }
 }
 
@@ -94,6 +101,15 @@ impl PendingProfileBrowser {
     pub(crate) fn store_navigation(&mut self, url: String, requested_at: Tick) {
         self.navigation = Some((url, requested_at));
     }
+}
+
+/// Marks a profile webview whose [`AudioMuted`] is applied again once its first main-frame
+/// navigation has committed, since Chromium resets a browser's mute at that commit.
+///
+/// Removed after the mute is re-applied, so later commits are not affected.
+#[derive(Component, Debug, Default)]
+pub(crate) struct MuteAfterFirstCommit {
+    committed: bool,
 }
 
 /// Returns the URL a waiting profile webview's browser is created with.
@@ -359,6 +375,9 @@ fn create_ready_profile_browsers(
                 if muted.is_some_and(|muted| muted.0) {
                     browsers.set_audio_muted(&webview, true);
                 }
+                commands
+                    .entity(webview)
+                    .try_insert(MuteAfterFirstCommit::default());
                 if focused.0 == Some(webview) {
                     browsers.set_focus(&webview, true);
                 }
@@ -373,6 +392,30 @@ fn create_ready_profile_browsers(
                     WebviewProfileErrorReason::BrowserCreation,
                 );
             }
+        }
+    }
+}
+
+/// Records the first main-frame commit of a profile webview that still has to re-apply its mute.
+fn note_first_commit(changed: On<AddressChanged>, mut webviews: Query<&mut MuteAfterFirstCommit>) {
+    if let Ok(mut reapply) = webviews.get_mut(changed.webview) {
+        reapply.committed = true;
+    }
+}
+
+/// Sends the current [`AudioMuted`] of each profile webview whose first main-frame commit has
+/// happened, then stops tracking it.
+fn reapply_mute_after_first_commit(
+    mut commands: Commands,
+    browsers: NonSend<Browsers>,
+    webviews: Query<(Entity, &MuteAfterFirstCommit, &AudioMuted)>,
+) {
+    for (webview, reapply, muted) in webviews.iter() {
+        if reapply.committed {
+            browsers.set_audio_muted(&webview, muted.0);
+            commands
+                .entity(webview)
+                .try_remove::<MuteAfterFirstCommit>();
         }
     }
 }
@@ -685,5 +728,31 @@ mod tests {
             initial_url("https://source.example", None, Tick::new(40), this_run),
             "https://source.example"
         );
+    }
+
+    /// Asserts that a profile webview keeps waiting to re-apply its mute until its first
+    /// main-frame commit, and stops tracking it after that commit.
+    ///
+    /// Case: a profile webview muted while it waited for its context gets its browser, and its
+    /// first page then commits, which resets the browser's mute in Chromium.
+    #[test]
+    fn the_mute_is_reapplied_once_at_the_first_commit() {
+        let mut app = profile_app(None);
+        let webview = app
+            .world_mut()
+            .spawn((AudioMuted(true), MuteAfterFirstCommit::default()))
+            .id();
+
+        app.update();
+        assert!(app.world().get::<MuteAfterFirstCommit>(webview).is_some());
+
+        app.world_mut().trigger(AddressChanged {
+            webview,
+            url: "https://a.example".into(),
+            can_go_back: false,
+            can_go_forward: false,
+        });
+        app.update();
+        assert!(app.world().get::<MuteAfterFirstCommit>(webview).is_none());
     }
 }
