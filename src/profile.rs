@@ -404,15 +404,17 @@ fn note_first_commit(changed: On<AddressChanged>, mut webviews: Query<&mut MuteA
 }
 
 /// Sends the current [`AudioMuted`] of each profile webview whose first main-frame commit has
-/// happened, then stops tracking it.
+/// happened, then stops tracking it. A webview without `AudioMuted` is only no longer tracked.
 fn reapply_mute_after_first_commit(
     mut commands: Commands,
     browsers: NonSend<Browsers>,
-    webviews: Query<(Entity, &MuteAfterFirstCommit, &AudioMuted)>,
+    webviews: Query<(Entity, &MuteAfterFirstCommit, Option<&AudioMuted>)>,
 ) {
     for (webview, reapply, muted) in webviews.iter() {
         if reapply.committed {
-            browsers.set_audio_muted(&webview, muted.0);
+            if let Some(muted) = muted {
+                browsers.set_audio_muted(&webview, muted.0);
+            }
             commands
                 .entity(webview)
                 .try_remove::<MuteAfterFirstCommit>();
@@ -746,6 +748,25 @@ mod tests {
         app.update();
         assert!(app.world().get::<MuteAfterFirstCommit>(webview).is_some());
 
+        commit_main_frame(&mut app, webview);
+        assert!(app.world().get::<MuteAfterFirstCommit>(webview).is_none());
+    }
+
+    /// Asserts that the first main-frame commit stops tracking a profile webview's mute even
+    /// when the webview no longer has an `AudioMuted`.
+    ///
+    /// Case: an app removes `AudioMuted` from a profile webview after its browser is created and
+    /// before its first page commits.
+    #[test]
+    fn the_first_commit_clears_the_marker_without_audio_muted() {
+        let mut app = profile_app(None);
+        let webview = app.world_mut().spawn(MuteAfterFirstCommit::default()).id();
+
+        commit_main_frame(&mut app, webview);
+        assert!(app.world().get::<MuteAfterFirstCommit>(webview).is_none());
+    }
+
+    fn commit_main_frame(app: &mut App, webview: Entity) {
         app.world_mut().trigger(AddressChanged {
             webview,
             url: "https://a.example".into(),
@@ -753,6 +774,5 @@ mod tests {
             can_go_forward: false,
         });
         app.update();
-        assert!(app.world().get::<MuteAfterFirstCommit>(webview).is_none());
     }
 }
