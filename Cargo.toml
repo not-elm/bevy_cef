@@ -72,6 +72,13 @@ bevy = { workspace = true, default-features = true, features = [
 ] }
 bevy_cef = { path = ".", features = ["debug"] }
 
+# `tests/profile_persistence.rs` checks that a process opens no visible window.
+[target.'cfg(windows)'.dev-dependencies]
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = { version = "0.2" }
 

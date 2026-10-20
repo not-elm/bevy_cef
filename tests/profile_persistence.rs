@@ -29,6 +29,8 @@ const REREPORT: &str = "BEVY_CEF_TEST_REREPORT";
 const ZOOM_AFTER: &str = "BEVY_CEF_TEST_ZOOM_AFTER";
 /// When set, a page role ends with `std::process::exit(0)` 3 s after its report.
 const KILL: &str = "BEVY_CEF_TEST_KILL";
+/// When set, a page role exits by closing its primary window instead of writing `AppExit`.
+const CLOSE_WINDOW: &str = "BEVY_CEF_TEST_CLOSE_WINDOW";
 /// Prefixes each result line a role prints.
 const RESULT_PREFIX: &str = "RESULT ";
 /// The line the `holder` role prints once its page has reported.
@@ -77,8 +79,8 @@ struct PageReport {
 enum RoleResult {
     /// A report from a page, in arrival order.
     Report(PageReport),
-    /// Whether the webview still had no browser when its state was changed.
-    ChangedWhileWaiting { waiting: bool },
+    /// Whether the current webview still had no browser.
+    Waiting { waiting: bool },
     /// `Browsers::is_audio_muted` for the current webview.
     Muted { muted: Option<bool> },
     /// The state 2 s after a waiting webview was despawned.
@@ -300,6 +302,12 @@ mod child {
     use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
     use std::thread;
     use std::time::{Duration, Instant};
+    #[cfg(windows)]
+    use windows_sys::Win32::Foundation::{BOOL, HWND, LPARAM};
+    #[cfg(windows)]
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        EnumWindows, GetWindowThreadProcessId, IsWindowVisible,
+    };
 
     /// How long a role may run before it is killed and its scenario fails.
     const DEFAULT_TIMEOUT: Duration = Duration::from_secs(60);
@@ -434,6 +442,11 @@ mod child {
         pub fn remove(&self) {
             let _ = fs::remove_dir_all(&self.base);
         }
+
+        /// Removes the root cache directory and keeps the logs, ignoring failures.
+        pub fn remove_root(&self) {
+            let _ = fs::remove_dir_all(&self.root);
+        }
     }
 
     /// A role process that has been started.
@@ -496,6 +509,44 @@ mod child {
                 }
                 Err(error) => Err(self.failure(&format!("printed a malformed result: {error}"))),
             }
+        }
+
+        /// Whether the role process has not exited yet.
+        #[cfg(windows)]
+        pub fn is_running(&mut self) -> bool {
+            matches!(self.child.try_wait(), Ok(None))
+        }
+
+        /// Returns the handles of the visible top-level windows that belong to the role process.
+        #[cfg(windows)]
+        pub fn visible_windows(&self) -> Vec<usize> {
+            struct Search {
+                pid: u32,
+                visible: Vec<usize>,
+            }
+
+            unsafe extern "system" fn visit(window: HWND, search: LPARAM) -> BOOL {
+                // SAFETY: `search` is the `Search` that `visible_windows` passes to
+                // `EnumWindows`, which lives until the enumeration returns.
+                let search = unsafe { &mut *(search as *mut Search) };
+                let mut owner = 0;
+                // SAFETY: `window` comes from `EnumWindows`, and `owner` is a valid out pointer.
+                unsafe { GetWindowThreadProcessId(window, &mut owner) };
+                // SAFETY: `window` comes from `EnumWindows`.
+                if owner == search.pid && unsafe { IsWindowVisible(window) } != 0 {
+                    search.visible.push(window as usize);
+                }
+                1
+            }
+
+            let mut search = Search {
+                pid: self.child.id(),
+                visible: Vec::new(),
+            };
+            // SAFETY: `visit` matches `WNDENUMPROC` and only dereferences `search`, which outlives
+            // this call.
+            unsafe { EnumWindows(Some(visit), &mut search as *mut Search as LPARAM) };
+            search.visible
         }
 
         fn stdout(&self) -> impl Iterator<Item = &str> {
@@ -664,11 +715,11 @@ mod child {
 /// steps.
 mod role {
     use super::{
-        FLUSH_SECS, KILL, PORT, PROFILE, PageReport, READY, REREPORT, RESULT_PREFIX, ROOT,
-        RoleResult, TOKEN, ZOOM, ZOOM_AFTER,
+        CLOSE_WINDOW, FLUSH_SECS, KILL, PORT, PROFILE, PageReport, READY, REREPORT, RESULT_PREFIX,
+        ROOT, RoleResult, TOKEN, ZOOM, ZOOM_AFTER,
     };
     use bevy::prelude::*;
-    use bevy::window::{ExitCondition, WindowResolution};
+    use bevy::window::{ExitCondition, PrimaryWindow, WindowCloseRequested, WindowResolution};
     use bevy_cef::prelude::*;
     use bevy_cef_core::prelude::Browsers;
     use std::collections::{HashSet, VecDeque};
@@ -685,7 +736,12 @@ mod role {
             profile: env.profile.clone(),
             webview: None,
             despawned: None,
-            exit_requested: false,
+            ending: None,
+        };
+        let exit_condition = if env.close_window {
+            ExitCondition::OnPrimaryClosed
+        } else {
+            ExitCondition::DontExit
         };
         // NOTE: The winit runner pumps the native message loop that CEF's process singleton
         // answers a second process through; without it the second process waits, then kills
@@ -699,7 +755,7 @@ mod role {
                         resolution: WindowResolution::default().with_scale_factor_override(1.0),
                         ..default()
                     }),
-                    exit_condition: ExitCondition::DontExit,
+                    exit_condition,
                     ..default()
                 }),
                 CefPlugin {
@@ -714,7 +770,7 @@ mod role {
             .add_observer(print_report)
             .add_observer(note_load_finished)
             .add_systems(First, run_script)
-            .add_systems(Last, exit_when_requested)
+            .add_systems(Last, end_when_requested)
             .run()
             .report()
     }
@@ -730,6 +786,7 @@ mod role {
         rereport: bool,
         zoom_after: Option<f64>,
         kill: bool,
+        close_window: bool,
     }
 
     impl RoleEnv {
@@ -753,6 +810,7 @@ mod role {
                 rereport: var(REREPORT).is_some(),
                 zoom_after: number(ZOOM_AFTER),
                 kill: var(KILL).is_some(),
+                close_window: var(CLOSE_WINDOW).is_some(),
             }
         }
 
@@ -776,6 +834,7 @@ mod role {
                             size: Vec2::new(800., 600.),
                         },
                         Step::NextFrame,
+                        Step::RecordWaiting,
                         Step::ChangeWhileWaiting,
                         Step::AwaitReports(1),
                     ];
@@ -783,10 +842,13 @@ mod role {
                     steps.extend([Step::RecordMuted, Step::Exit]);
                     steps
                 }
-                "exit_while_pending" => vec![Step::spawn(Mode::Get), Step::ExitNow],
+                "exit_while_pending" => {
+                    vec![Step::spawn(Mode::Get), Step::RecordWaiting, Step::Exit]
+                }
                 "despawn_then_respawn" => vec![
                     Step::spawn(Mode::Get),
                     Step::NextFrame,
+                    Step::RecordWaiting,
                     Step::Despawn,
                     Step::Sleep(Duration::from_secs(2)),
                     Step::RecordAfterDespawn,
@@ -807,7 +869,7 @@ mod role {
         }
 
         /// One page webview that reports, optionally reports again and changes its zoom, and
-        /// then exits 1 s later through `AppExit` or is killed 3 s later.
+        /// then exits 1 s later through `AppExit` or a window close, or is killed 3 s later.
         fn page_steps(&self, mode: Mode) -> Vec<Step> {
             let mut steps = vec![
                 Step::Spawn {
@@ -827,7 +889,12 @@ mod role {
                 steps.extend([Step::Sleep(Duration::from_secs(3)), Step::Kill]);
             } else {
                 // The settle time outlasts the `late` cookie the page sets 500 ms after `load`.
-                steps.extend([Step::Sleep(Duration::from_secs(1)), Step::Exit]);
+                steps.push(Step::Sleep(Duration::from_secs(1)));
+                steps.push(if self.close_window {
+                    Step::CloseWindow
+                } else {
+                    Step::Exit
+                });
             }
             steps
         }
@@ -860,8 +927,9 @@ mod role {
         /// Asks the page to report again.
         RequestReport,
         SetZoom(f64),
-        /// Sets the size to 640×480, mutes the audio and sets the zoom to 1.0, and records
-        /// whether the webview still had no browser.
+        /// Records whether the webview still has no browser.
+        RecordWaiting,
+        /// Sets the size to 640×480, mutes the audio and sets the zoom to 1.0.
         ChangeWhileWaiting,
         Despawn,
         RecordMuted,
@@ -869,12 +937,20 @@ mod role {
         RecordAfterDespawn,
         RecordStatus,
         PrintReady,
-        /// Exits through a `Last` system writing `AppExit`.
+        /// Writes `AppExit` from `Last` in this frame.
         Exit,
-        /// Writes `AppExit` in this frame.
-        ExitNow,
+        /// Requests closing the primary window from `Last`; the role exits once Bevy has closed
+        /// it.
+        CloseWindow,
         /// Exits the process without `AppExit`.
         Kill,
+    }
+
+    /// How a role that has finished its steps ends.
+    #[derive(Clone, Copy)]
+    enum Ending {
+        AppExit,
+        CloseWindow,
     }
 
     impl Step {
@@ -916,7 +992,7 @@ mod role {
         profile: Option<WebviewProfile>,
         webview: Option<Entity>,
         despawned: Option<Entity>,
-        exit_requested: bool,
+        ending: Option<Ending>,
     }
 
     impl Script {
@@ -944,12 +1020,12 @@ mod role {
     fn run_script(
         mut commands: Commands,
         mut script: ResMut<Script>,
-        mut exit: MessageWriter<AppExit>,
         mut webviews: Query<(&mut WebviewSize, &mut AudioMuted, &mut ZoomLevel)>,
         browsers: Option<NonSend<Browsers>>,
         observed: Res<Observed>,
         status: Res<CefStatus>,
     ) {
+        let cef = || browsers.as_deref().expect("CEF is running");
         while let Some(step) = script.steps.front().cloned() {
             let flow = match step {
                 Step::Spawn { mode, zoom, size } => {
@@ -985,19 +1061,18 @@ mod role {
                     zoom.0 = level;
                     Flow::Next
                 }
+                Step::RecordWaiting => {
+                    let waiting = cef().is_audio_muted(&script.webview()).is_none();
+                    print_result(&RoleResult::Waiting { waiting });
+                    Flow::Next
+                }
                 Step::ChangeWhileWaiting => {
-                    let webview = script.webview();
-                    let waiting = browsers
-                        .as_deref()
-                        .expect("CEF is running")
-                        .is_audio_muted(&webview)
-                        .is_none();
-                    let (mut size, mut muted, mut zoom) =
-                        webviews.get_mut(webview).expect("the webview exists");
+                    let (mut size, mut muted, mut zoom) = webviews
+                        .get_mut(script.webview())
+                        .expect("the webview exists");
                     size.0 = Vec2::new(640., 480.);
                     muted.0 = true;
                     zoom.0 = 1.0;
-                    print_result(&RoleResult::ChangedWhileWaiting { waiting });
                     Flow::Next
                 }
                 Step::Despawn => {
@@ -1008,20 +1083,14 @@ mod role {
                     Flow::Next
                 }
                 Step::RecordMuted => {
-                    let muted = browsers
-                        .as_deref()
-                        .expect("CEF is running")
-                        .is_audio_muted(&script.webview());
+                    let muted = cef().is_audio_muted(&script.webview());
                     print_result(&RoleResult::Muted { muted });
                     Flow::Next
                 }
                 Step::RecordAfterDespawn => {
                     let despawned = script.despawned.expect("a webview was despawned");
                     print_result(&RoleResult::AfterDespawn {
-                        live_browsers: browsers
-                            .as_deref()
-                            .expect("CEF is running")
-                            .live_browser_count(),
+                        live_browsers: cef().live_browser_count(),
                         load_finished: observed.load_finished.contains(&despawned),
                     });
                     Flow::Next
@@ -1046,11 +1115,11 @@ mod role {
                     Flow::Next
                 }
                 Step::Exit => {
-                    script.exit_requested = true;
+                    script.ending = Some(Ending::AppExit);
                     Flow::Next
                 }
-                Step::ExitNow => {
-                    exit.write(AppExit::Success);
+                Step::CloseWindow => {
+                    script.ending = Some(Ending::CloseWindow);
                     Flow::Next
                 }
                 Step::Kill => std::process::exit(0),
@@ -1066,10 +1135,24 @@ mod role {
         }
     }
 
-    /// Writes `AppExit` from `Last`, the schedule a window close writes it from.
-    fn exit_when_requested(script: Res<Script>, mut exit: MessageWriter<AppExit>) {
-        if script.exit_requested {
-            exit.write(AppExit::Success);
+    /// Ends the role from `Last`, the schedule a window close writes `AppExit` from: it writes
+    /// `AppExit`, or requests closing the primary window until Bevy has despawned it.
+    fn end_when_requested(
+        mut exit: MessageWriter<AppExit>,
+        mut close_requests: MessageWriter<WindowCloseRequested>,
+        script: Res<Script>,
+        primary_window: Query<Entity, With<PrimaryWindow>>,
+    ) {
+        match script.ending {
+            Some(Ending::AppExit) => {
+                exit.write(AppExit::Success);
+            }
+            Some(Ending::CloseWindow) => {
+                for window in &primary_window {
+                    close_requests.write(WindowCloseRequested { window });
+                }
+            }
+            None => {}
         }
     }
 
@@ -1094,9 +1177,12 @@ mod role {
 
 /// The scenarios and the orchestrator that runs them.
 mod scenarios {
-    use super::child::{Harness, Role};
+    #[cfg(windows)]
+    use super::child::Running;
+    use super::child::{Finished, Harness, Role};
     use super::{
-        FLUSH_SECS, KILL, PageReport, READY, REREPORT, RoleResult, ZOOM, ZOOM_AFTER, server,
+        CLOSE_WINDOW, FLUSH_SECS, KILL, PageReport, READY, REREPORT, RoleResult, ZOOM, ZOOM_AFTER,
+        server,
     };
     use std::collections::BTreeMap;
     use std::process::ExitCode;
@@ -1120,20 +1206,23 @@ mod scenarios {
     ];
 
     /// Runs every scenario whose name contains the first non-flag argument, if any, and fails
-    /// when one fails. The root and logs are removed only when all pass.
+    /// when one fails or none matches. Everything is removed when all pass; after a failure only
+    /// the role logs are kept.
     pub fn run_all() -> ExitCode {
         let filter = std::env::args().skip(1).find(|arg| !arg.starts_with('-'));
+        let selected: Vec<(&str, Scenario)> = SCENARIOS
+            .into_iter()
+            .filter(|(name, _)| filter.as_deref().is_none_or(|filter| name.contains(filter)))
+            .collect();
+        if selected.is_empty() {
+            println!("no scenario matches {filter:?}");
+            return ExitCode::FAILURE;
+        }
         let harness = Harness::new(server::start());
         let started = Instant::now();
         let mut passed = 0;
         let mut failed = Vec::new();
-        for (name, scenario) in SCENARIOS {
-            if filter
-                .as_deref()
-                .is_some_and(|filter| !name.contains(filter))
-            {
-                continue;
-            }
+        for (name, scenario) in selected {
             let scenario_started = Instant::now();
             match scenario(&harness) {
                 Ok(()) => {
@@ -1158,6 +1247,7 @@ mod scenarios {
             harness.remove();
             ExitCode::SUCCESS
         } else {
+            harness.remove_root();
             println!(
                 "failed: {failed:?}; role logs: {}",
                 harness.logs().display()
@@ -1167,15 +1257,18 @@ mod scenarios {
     }
 
     /// Cookies (HttpOnly, session and JS), localStorage and IndexedDB survive a restart in a
-    /// profile. The `late` cookie is set after the load-end flush, and the hour-long interval
-    /// never fires, so only the `shutdown()` of the window-close exit path can have written it.
+    /// profile. The `set` role exits by closing its primary window, so Bevy despawns the window,
+    /// winit drops it, and the `AppExit` that follows runs `shutdown()`. The `late` cookie is set
+    /// after the load-end flush and the hour-long interval never fires, so only that
+    /// `shutdown()` can have written it.
     fn persist(harness: &Harness) -> Result<(), String> {
         let token = harness.token("persist");
         harness.run(
             Role::new("set")
                 .profile("a")
                 .token(&token)
-                .option(FLUSH_SECS, 3600),
+                .option(FLUSH_SECS, 3600)
+                .option(CLOSE_WINDOW, 1),
         )?;
         let get = harness.run(Role::new("get").profile("a"))?;
         let report = get.report(0)?;
@@ -1193,10 +1286,22 @@ mod scenarios {
         ensure_storage(report, &token)
     }
 
-    /// A different profile name sees none of profile `a`'s state.
+    /// A different profile name sees none of the state profile `a` stored.
     fn isolation(harness: &Harness) -> Result<(), String> {
+        let token = harness.token("isolation");
+        let set = harness.run(Role::new("set").profile("a").token(&token))?;
+        ensure_set_stored(set.report(0)?, &token)?;
         let get = harness.run(Role::new("get").profile("b"))?;
-        ensure_nothing_kept(get.report(0)?)
+        let report = get.report(0)?;
+        let isolated = !report.server_cookies.contains(&token)
+            && !report.js_cookies.contains(&token)
+            && report.local_storage.as_deref() != Some(token.as_str())
+            && report.indexed_db.as_deref() != Some(token.as_str());
+        ensure!(
+            isolated,
+            "profile b sees state that profile a stored: {report:?}"
+        );
+        Ok(())
     }
 
     /// Two webviews of one profile in one process share localStorage.
@@ -1215,12 +1320,7 @@ mod scenarios {
     fn no_profile_keeps_nothing(harness: &Harness) -> Result<(), String> {
         let token = harness.token("no_profile_keeps_nothing");
         let set = harness.run(Role::new("set").token(&token))?;
-        let stored = set.report(0)?;
-        ensure!(
-            cookie_map(&stored.server_cookies).get("sid") == Some(&token.as_str()),
-            "the set page did not store its state: {stored:?}"
-        );
-        ensure_storage(stored, &token)?;
+        ensure_set_stored(set.report(0)?, &token)?;
         let get = harness.run(Role::new("get"))?;
         ensure_nothing_kept(get.report(0)?)
     }
@@ -1259,14 +1359,7 @@ mod scenarios {
     /// once its browser exists.
     fn state_while_pending(harness: &Harness) -> Result<(), String> {
         let run = harness.run(Role::new("state_while_pending").profile("a"))?;
-        let waiting = run.result("changed_while_waiting result", |result| match result {
-            RoleResult::ChangedWhileWaiting { waiting } => Some(*waiting),
-            _ => None,
-        })?;
-        ensure!(
-            waiting,
-            "the browser already existed when the state changed"
-        );
+        ensure_was_waiting(&run, "when its state changed")?;
         let first = run.report(0)?;
         let width_in_dips = first.inner_width * first.device_pixel_ratio;
         let size_applied = (width_in_dips - 640.0).abs() < 1.0;
@@ -1288,18 +1381,19 @@ mod scenarios {
 
     /// Exiting while a profile webview waits for its context still exits cleanly.
     fn exit_while_pending(harness: &Harness) -> Result<(), String> {
-        harness.run(
+        let run = harness.run(
             Role::new("exit_while_pending")
                 .profile("a")
                 .timeout(Duration::from_secs(10)),
         )?;
-        Ok(())
+        ensure_was_waiting(&run, "when AppExit was written")
     }
 
     /// Despawning a waiting webview leaves no browser behind, and the profile still serves a
     /// webview spawned afterwards.
     fn despawn_then_respawn(harness: &Harness) -> Result<(), String> {
         let run = harness.run(Role::new("despawn_then_respawn").profile("a"))?;
+        ensure_was_waiting(&run, "when it was despawned")?;
         let (live_browsers, load_finished) =
             run.result("after_despawn result", |result| match result {
                 RoleResult::AfterDespawn {
@@ -1317,15 +1411,14 @@ mod scenarios {
         Ok(())
     }
 
-    /// A second process on the same root reports that the root is in use, and both processes
-    /// exit cleanly.
+    /// A second process on the same root reports that the root is in use, the first process
+    /// opens no visible window, and both processes exit cleanly.
     fn second_process(harness: &Harness) -> Result<(), String> {
         let mut holder = harness.start(Role::new("holder").profile("a"));
         holder.wait_for_line(READY)?;
-        let second = harness.run(Role::new("second"));
-        let holder = holder.finish();
-        let second = second?;
-        holder?;
+        #[cfg(windows)]
+        let windows_before = holder.visible_windows();
+        let second = harness.run(Role::new("second"))?;
         let (running, root_in_use, detail) =
             second.result("status result", |result| match result {
                 RoleResult::Status {
@@ -1339,6 +1432,36 @@ mod scenarios {
             !running && root_in_use,
             "the second process did not report the root in use: running {running}, {detail}"
         );
+        #[cfg(windows)]
+        ensure_no_new_visible_window(&mut holder, &windows_before)?;
+        holder.finish()?;
+        Ok(())
+    }
+
+    /// Checks, about 1 s after the second process exited, that the still-running holder has no
+    /// visible top-level window beyond `before`, the ones it had before the second process
+    /// started.
+    ///
+    /// The holder's primary window is hidden, but winit's own event-target window is a
+    /// transparent window that `IsWindowVisible` reports as visible, so the check compares
+    /// against `before` instead of expecting none.
+    #[cfg(windows)]
+    fn ensure_no_new_visible_window(holder: &mut Running, before: &[usize]) -> Result<(), String> {
+        std::thread::sleep(Duration::from_secs(1));
+        ensure!(
+            holder.is_running(),
+            "the holder exited before its windows were checked"
+        );
+        let opened = holder
+            .visible_windows()
+            .into_iter()
+            .filter(|window| !before.contains(window))
+            .count();
+        ensure!(
+            opened == 0,
+            "the holder opened {opened} visible top-level window(s) after the second process \
+             started"
+        );
         Ok(())
     }
 
@@ -1348,6 +1471,27 @@ mod scenarios {
             .split(';')
             .filter_map(|pair| pair.trim().split_once('='))
             .collect()
+    }
+
+    /// Checks that a `set` page's own report shows the `sid` cookie, localStorage and IndexedDB it
+    /// stored.
+    fn ensure_set_stored(report: &PageReport, token: &str) -> Result<(), String> {
+        ensure!(
+            cookie_map(&report.server_cookies).get("sid") == Some(&token),
+            "the set page did not store its state: {report:?}"
+        );
+        ensure_storage(report, token)
+    }
+
+    /// Checks that the role's `waiting` result shows the webview had no browser yet; `when`
+    /// names the moment in the error.
+    fn ensure_was_waiting(run: &Finished, when: &str) -> Result<(), String> {
+        let waiting = run.result("waiting result", |result| match result {
+            RoleResult::Waiting { waiting } => Some(*waiting),
+            _ => None,
+        })?;
+        ensure!(waiting, "the webview already had a browser {when}");
+        Ok(())
     }
 
     fn ensure_storage(report: &PageReport, token: &str) -> Result<(), String> {
