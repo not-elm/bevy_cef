@@ -460,11 +460,11 @@ impl Browsers {
     }
 
     pub fn emit_event(&self, webview: &Entity, id: impl Into<String>, event: &serde_json::Value) {
-        if let Some(mut process_message) =
-            process_message_create(Some(&PROCESS_MESSAGE_HOST_EMIT.into()))
-            && let Some(argument_list) = process_message.argument_list()
-            && let Some(browser) = self.browsers.get(webview)
+        if let Some(browser) = self.browsers.get(webview)
             && let Some(frame) = browser.client.main_frame()
+            && let Some(mut process_message) =
+                process_message_create(Some(&PROCESS_MESSAGE_HOST_EMIT.into()))
+            && let Some(argument_list) = process_message.argument_list()
         {
             argument_list.set_string(0, Some(&id.into().as_str().into()));
             argument_list.set_string(1, Some(&event.to_string().as_str().into()));

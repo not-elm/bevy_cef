@@ -51,6 +51,7 @@ impl Plugin for ProfilePlugin {
                     reapply_mute_after_first_commit
                         .run_if(any_with_component::<MuteAfterFirstCommit>)
                         .run_if(not(resource_exists::<CefShutDown>)),
+                    warn_late_profiles.run_if(not(resource_exists::<CefShutDown>)),
                 ),
             )
             .add_observer(note_first_commit);
@@ -277,6 +278,8 @@ pub(crate) fn profile_dir(
 
 /// Creates `dir` (and its parents) and checks that it is writable.
 ///
+/// A failure to remove the write-check file is logged and does not fail the preparation.
+///
 /// On Unix the directory is created with mode `0o700`; on Windows it inherits
 /// the ACL of the root.
 pub(crate) fn prepare_profile_dir(dir: &Path) -> std::io::Result<()> {
@@ -290,7 +293,13 @@ pub(crate) fn prepare_profile_dir(dir: &Path) -> std::io::Result<()> {
     builder.create(dir)?;
     let probe = dir.join(".bevy_cef_write_check");
     File::create(&probe)?;
-    remove_file(&probe)
+    if let Err(error) = remove_file(&probe) {
+        warn!(
+            "could not remove the write-check file {}: {error}",
+            probe.display()
+        );
+    }
+    Ok(())
 }
 
 /// Prepares the profile context of each newly resolved profile webview and marks the webview
@@ -318,6 +327,28 @@ fn request_profile_browsers(
 /// Requests a cookie-store flush on every profile context.
 fn flush_profile_cookies(browsers: NonSend<Browsers>) {
     browsers.flush_profile_cookies();
+}
+
+/// Logs a warning for each webview that received a [`WebviewProfile`] after its browser was
+/// already requested.
+fn warn_late_profiles(webviews: Query<(Entity, Ref<ResolvedWebviewUri>), Added<WebviewProfile>>) {
+    for webview in late_profile_webviews(&webviews) {
+        warn!(
+            "{webview} received a WebviewProfile after its browser was requested; the profile is ignored and the webview keeps running in memory"
+        );
+    }
+}
+
+/// Returns the webviews in `webviews` whose [`ResolvedWebviewUri`] was added before their
+/// [`WebviewProfile`].
+fn late_profile_webviews(
+    webviews: &Query<(Entity, Ref<ResolvedWebviewUri>), Added<WebviewProfile>>,
+) -> Vec<Entity> {
+    webviews
+        .iter()
+        .filter(|(_, uri)| !uri.is_added())
+        .map(|(webview, _)| webview)
+        .collect()
 }
 
 fn added_profile_webview(
@@ -463,6 +494,9 @@ mod tests {
 
     #[derive(Resource, Default)]
     struct ReportedErrors(Vec<WebviewProfileError>);
+
+    #[derive(Resource, Default)]
+    struct LateProfiles(Vec<Entity>);
 
     fn name(s: &str) -> ProfileName {
         ProfileName::try_from(s.to_owned()).unwrap()
@@ -666,6 +700,43 @@ mod tests {
         ));
         assert!(app.world().get::<PendingProfileBrowser>(webview).is_none());
         std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// Asserts that a profile inserted a frame after the webview's URL was resolved is detected
+    /// as late, while a profile added together with the URL is not.
+    ///
+    /// Case: an app spawns one webview with its profile in the same bundle and another that
+    /// gets its profile inserted only after the first frame has run.
+    #[test]
+    fn a_profile_inserted_after_the_uri_is_detected_as_late() {
+        let mut app = profile_app(None);
+        app.init_resource::<LateProfiles>().add_systems(
+            Update,
+            |webviews: Query<(Entity, Ref<ResolvedWebviewUri>), Added<WebviewProfile>>,
+             mut late: ResMut<LateProfiles>| {
+                late.0.extend(late_profile_webviews(&webviews));
+            },
+        );
+        let together = spawn_profile_webview(&mut app, WebviewProfile::new("work").unwrap());
+        let later = app
+            .world_mut()
+            .spawn((
+                WebviewSource::new("https://a.example"),
+                ResolvedWebviewUri("https://a.example".into()),
+            ))
+            .id();
+
+        app.update();
+        assert!(app.world().resource::<LateProfiles>().0.is_empty());
+
+        app.world_mut()
+            .entity_mut(later)
+            .insert(WebviewProfile::new("work").unwrap());
+        app.update();
+
+        let late = &app.world().resource::<LateProfiles>().0;
+        assert_eq!(late, &vec![later]);
+        assert!(!late.contains(&together));
     }
 
     /// Asserts that a `RequestNavigate` for a webview still waiting for its profile is stored

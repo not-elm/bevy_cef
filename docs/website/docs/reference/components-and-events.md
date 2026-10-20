@@ -15,7 +15,7 @@ This page lists all public components, events, and resources provided by bevy_ce
 | `WebviewExtendStandardMaterial` | Material | Material for rendering webview textures on 3D meshes. Extends Bevy's `StandardMaterial` with webview texture support. Used via `MeshMaterial3d<WebviewExtendStandardMaterial>`. | [Your First Webview](../getting-started/your-first-webview.md) |
 | `HostWindow` | Component | Associates a webview with a specific window entity. Defaults to `PrimaryWindow` if not provided. | -- |
 | `ZoomLevel` | Component | A request for the zoom level of the webview as an `f64`, applied at the first main-frame commit. `0.0` is the default (100%) zoom. Positive values zoom in, negative values zoom out. In a profile it is shared per site and remembered. | [Zoom & Audio](../guides/zoom-and-audio.md) |
-| `WebviewProfile` | Component | Gives the webview a named, disk-backed profile. Built with `WebviewProfile::new(name)`, which validates the name. Read once when the browser is created. | [Profiles](../guides/profiles.md) |
+| `WebviewProfile` | Component | Gives the webview a named, disk-backed profile. Built with `WebviewProfile::new(name)`, which validates the name. Read once, when the webview's browser is requested (when its URL is first resolved); changing or adding it later has no effect. | [Profiles](../guides/profiles.md) |
 | `AudioMuted` | Component | Controls whether audio is muted for the webview. A `bool` value. | -- |
 | `PreloadScripts` | Component | A `Vec<String>` of JavaScript code that executes before the page's own scripts load. Useful for injecting polyfills or configuration. | -- |
 

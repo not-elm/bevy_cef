@@ -33,7 +33,7 @@ CefPlugin (root — accepts CommandLineConfig, CefExtensions, root_cache_path)
 - `Sprite` (Bevy): 2D sprite display. Bevy 0.20 renders it through `Mesh2d` + `SpriteMeshMaterial`; bevy_cef touches that material when the webview image is reallocated or Bevy reassigns the material
 - `HostWindow`: Optional parent window (defaults to PrimaryWindow)
 - `ZoomLevel`: f64 zoom request (0.0 = default), applied at the first main-frame commit; shared per site and remembered in a profile
-- `WebviewProfile`: optional named disk profile (`WebviewProfile::new(name)`, validated); lives at `<root_cache_path>/profile-NAME`; read once at browser creation; webviews of one name share one context; failures arrive as `WebviewProfileError`; startup failure is reported in `CefStatus`
+- `WebviewProfile`: optional named disk profile (`WebviewProfile::new(name)`, validated); lives at `<root_cache_path>/profile-NAME`; read once when the webview's browser is requested (when its URL is first resolved); webviews of one name share one context; failures arrive as `WebviewProfileError`; startup failure is reported in `CefStatus`
 - `AudioMuted`: bool audio control
 - `PreloadScripts`: Vec<String> scripts executed before page scripts
 - `CefExtensions`: Custom JS evaluated in every frame's V8 context (global to all webviews), in name order, after `window.cef` is bound and before `PreloadScripts`. Both are injected in `on_context_created`, because CEF 154 removed `CefRegisterExtension`

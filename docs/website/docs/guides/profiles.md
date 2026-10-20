@@ -52,7 +52,7 @@ A profile named `NAME` is stored in `<root_cache_path>/profile-NAME`. The path i
 
 ### The component is read once
 
-`WebviewProfile` is read once, when the webview's browser is created. Changing it afterwards, inserting it later and removing it have no effect. To use a different profile, spawn a new webview.
+`WebviewProfile` is read once, when the webview's browser is requested, that is, when its URL is first resolved. Changing it afterwards, inserting it later and removing it have no effect; a later insert is logged as a warning. To use a different profile, spawn a new webview.
 
 ## Sharing within a process
 
@@ -144,4 +144,4 @@ bevy_cef does not change this behavior.
 - bevy_cef offers no API to list, delete or clear profiles. You can delete a profile directory while no process uses the root.
 - Contexts of profiles are kept until the app exits, not released when their last webview closes.
 - Popups open in the profile of the webview that opened them.
-- Windows and macOS are tested. Linux compiles and uses the same code path, but is not verified.
+- Windows and macOS are supported. Linux compiles and uses the same code path, but has not been verified.
