@@ -86,7 +86,7 @@ mod tests {
     /// Asserts that a host result mapped into a [`BrpReply`] serializes to exactly the JSON of
     /// the `bevy_remote::BrpResult` it came from.
     ///
-    /// Case: a 0.14.1 host answers a render process installed from 0.14.0, which decodes the
+    /// Case: a 0.15.0 host answers a render process installed from 0.14.0, which decodes the
     /// payload as `bevy_remote::BrpResult`.
     #[test]
     fn mapped_reply_serializes_like_bevy_remote() {
