@@ -7,6 +7,7 @@ mod focus;
 mod keyboard;
 mod mute;
 mod navigation;
+mod profile;
 mod resize;
 mod system_param;
 mod title;
@@ -14,8 +15,8 @@ mod webview;
 mod zoom;
 
 use crate::common::{
-    LocalHostPlugin, MessageLoopPlugin, SandboxMode, WebviewCoreComponentsPlugin, WebviewDpiPlugin,
-    resolve_no_sandbox,
+    CefRootCachePath, CefStatus, LocalHostPlugin, MessageLoopPlugin, SandboxMode,
+    WebviewCoreComponentsPlugin, WebviewDpiPlugin, add_failed_startup, resolve_no_sandbox,
 };
 use crate::cursor_icon::SystemCursorIconPlugin;
 use crate::drag::DragPlugin;
@@ -23,6 +24,7 @@ use crate::focus::FocusPlugin;
 use crate::keyboard::KeyboardPlugin;
 use crate::mute::AudioMutePlugin;
 use crate::prelude::{IpcPlugin, NavigationPlugin, WebviewPlugin};
+use crate::profile::ProfilePlugin;
 use crate::resize::plugin::ResizePlugin;
 use crate::title::TitlePlugin;
 use crate::zoom::ZoomPlugin;
@@ -31,10 +33,16 @@ use bevy_cef_core::prelude::{
     CefCustomScheme, CefExtensions, CommandLineConfig, effective_command_line_config, switches,
 };
 use bevy_remote::RemotePlugin;
+use std::time::Duration;
 
 pub mod prelude {
+    pub use crate::common::{CefStartupError, CefStatus};
     pub use crate::focus::FocusedWebview;
     pub use crate::keyboard::{CefKeyboardFilter, KeyboardDeliverSet, ModifiersState};
+    pub use crate::profile::{
+        ProfileName, ProfileNameError, WebviewProfile, WebviewProfileError,
+        WebviewProfileErrorReason,
+    };
     pub use crate::resize::components::{AspectLockMode, WebviewResizable};
     pub use crate::{CefPlugin, RunOnMainThread, navigation::*, title::*, webview::prelude::*};
     pub use bevy_cef_core::prelude::{
@@ -45,7 +53,6 @@ pub mod prelude {
 
 pub struct RunOnMainThread;
 
-#[derive(Default)]
 pub struct CefPlugin {
     pub command_line_config: CommandLineConfig,
     pub extensions: CefExtensions,
@@ -59,11 +66,28 @@ pub struct CefPlugin {
     /// Controls Chromium's OS-level sandbox. Defaults to the current per-platform
     /// behavior; see [`SandboxMode`].
     pub sandbox: SandboxMode,
+    /// How often the cookie stores of profile contexts are flushed to disk, measured in
+    /// wall-clock time. A flush also follows every main-frame load end in a profile webview.
+    /// Defaults to 5 seconds.
+    pub cookie_flush_interval: Duration,
+}
+
+impl Default for CefPlugin {
+    fn default() -> Self {
+        Self {
+            command_line_config: Default::default(),
+            extensions: Default::default(),
+            root_cache_path: Default::default(),
+            custom_schemes: Default::default(),
+            sandbox: Default::default(),
+            cookie_flush_interval: Duration::from_secs(5),
+        }
+    }
 }
 
 impl Plugin for CefPlugin {
     fn build(&self, app: &mut App) {
-        // NOTE: Must run before MessageLoopPlugin::build, which calls cef_initialize.
+        // NOTE: Must run before MessageLoopPlugin::start, which calls cef_initialize.
         // CEF's OnRegisterCustomSchemes fires during initialize; schemes registered
         // afterward are silently ignored.
         bevy_cef_core::prelude::init_registered_schemes(self.custom_schemes.clone());
@@ -107,28 +131,39 @@ impl Plugin for CefPlugin {
             );
         }
 
-        app.add_plugins((
-            LocalHostPlugin,
-            MessageLoopPlugin {
-                config: effective_config,
-                extensions: self.extensions.clone(),
-                root_cache_path: self.root_cache_path.clone(),
-                no_sandbox,
-            },
-            WebviewCoreComponentsPlugin,
-            WebviewDpiPlugin,
-            WebviewPlugin,
-            IpcPlugin,
-            KeyboardPlugin,
-            FocusPlugin,
-            SystemCursorIconPlugin,
-            DragPlugin,
-            ResizePlugin,
-            NavigationPlugin,
-            TitlePlugin,
-            ZoomPlugin,
-            AudioMutePlugin,
-        ));
+        let message_loop = MessageLoopPlugin {
+            config: effective_config,
+            extensions: self.extensions.clone(),
+            root_cache_path: self.root_cache_path.clone(),
+            no_sandbox,
+        };
+        if let Err(e) = message_loop.start(app) {
+            error!("bevy_cef: CEF failed to start: {e}");
+            add_failed_startup(app, e, self.root_cache_path.clone());
+            return;
+        }
+        app.insert_resource(CefStatus::Running)
+            .insert_resource(CefRootCachePath(self.root_cache_path.clone()))
+            .add_plugins((
+                LocalHostPlugin,
+                message_loop,
+                WebviewCoreComponentsPlugin,
+                WebviewDpiPlugin,
+                WebviewPlugin,
+                IpcPlugin,
+                KeyboardPlugin,
+                FocusPlugin,
+                SystemCursorIconPlugin,
+                DragPlugin,
+                ResizePlugin,
+                NavigationPlugin,
+                TitlePlugin,
+                ZoomPlugin,
+                AudioMutePlugin,
+            ))
+            .add_plugins(ProfilePlugin {
+                cookie_flush_interval: self.cookie_flush_interval,
+            });
         if !app.is_plugin_added::<RemotePlugin>() {
             app.add_plugins(RemotePlugin::default());
         }

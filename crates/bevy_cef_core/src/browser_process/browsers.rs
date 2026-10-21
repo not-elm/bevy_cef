@@ -24,12 +24,16 @@ mod devtool_render_handler;
 mod keyboard;
 
 use crate::browser_process::browsers::devtool_render_handler::DevToolRenderHandlerBuilder;
+use crate::browser_process::cookie_flush::{CookieFlusher, ProfileFlusher};
 use crate::browser_process::display_handler::{
     AddressChangedSenderInner, DisplayHandlerBuilder, SystemCursorIconSenderInner,
     TitleChangedSenderInner,
 };
 use crate::browser_process::drag_handler::{DragHandlerBuilder, DraggableRegionSenderInner};
+use crate::browser_process::initial_zoom::{InitialZoom, SharedInitialZoom, ZoomRequest};
 use crate::browser_process::load_handler::{LoadHandlerBuilder, LoadHandlerSenderInner};
+use crate::browser_process::profiles::ProfileContext;
+use crate::error::{CefCoreResult, CreateBrowserError, ProfileContextError};
 pub use keyboard::*;
 
 /// Whether bevy_cef drives CEF compositing with `SendExternalBeginFrame`.
@@ -47,6 +51,7 @@ pub struct WebviewBrowser {
     pub host: BrowserHost,
     pub size: SharedViewSize,
     pub dpr: SharedDpr,
+    pub initial_zoom: SharedInitialZoom,
     #[cfg(not(target_os = "macos"))]
     pub view_slot: SharedTexture,
     #[cfg(not(target_os = "macos"))]
@@ -78,9 +83,22 @@ pub enum EditCommand {
 #[derive(Default)]
 pub struct Browsers {
     browsers: HashMap<Entity, WebviewBrowser>,
+    live_browsers: SharedLiveBrowsers,
+    /// One shared request context per profile, keyed by the profile's cache path.
+    profiles: HashMap<String, ProfileContext>,
 }
 
 impl Browsers {
+    /// Creates a browser for `webview` and stores it in the entity map.
+    ///
+    /// With `profile: None` the browser gets its own fresh in-memory request context. With
+    /// `Some(cache_path)` it uses the profile context [`Self::prepare_profile`] registered for
+    /// that cache path, which should be ready (see [`Self::is_profile_ready`]).
+    ///
+    /// # Errors
+    ///
+    /// Fails with [`CreateBrowserError::UnknownProfile`] when no context is registered for
+    /// `profile`, and with [`CreateBrowserError::NullBrowser`] when CEF creates no browser.
     #[allow(clippy::too_many_arguments)]
     pub fn create_browser(
         &mut self,
@@ -98,10 +116,26 @@ impl Browsers {
         title_changed_sender: TitleChangedSenderInner,
         initialize_scripts: &[String],
         _window_handle: Option<RawWindowHandle>,
-    ) {
-        let mut context = Self::request_context(requester);
+        initial_zoom: f64,
+        profile: Option<&str>,
+    ) -> CefCoreResult {
+        let (mut context, cookie_flusher) = match profile {
+            Some(cache_path) => {
+                let profile = self
+                    .profiles
+                    .get(cache_path)
+                    .ok_or(CreateBrowserError::UnknownProfile)?;
+                (
+                    Some(profile.context.clone()),
+                    Some(profile.flusher.handle()),
+                )
+            }
+            None => (Self::request_context(requester), None),
+        };
         let size: SharedViewSize = Rc::new(Cell::new(webview_size));
         let dpr: SharedDpr = Rc::new(Cell::new(initial_dpr));
+        let initial_zoom: SharedInitialZoom =
+            Rc::new(Cell::new(InitialZoom::waiting(initial_zoom)));
         #[cfg(not(target_os = "macos"))]
         let view_slot: SharedTexture = Rc::new(Cell::new(None));
         #[cfg(not(target_os = "macos"))]
@@ -147,6 +181,8 @@ impl Browsers {
                 #[cfg(target_os = "macos")]
                 latest_iosurface.clone(),
                 title_changed_sender,
+                initial_zoom.clone(),
+                cookie_flusher,
             )),
             Some(&uri.into()),
             Some(&BrowserSettings {
@@ -156,13 +192,14 @@ impl Browsers {
             Self::create_extra_info(initialize_scripts).as_mut(),
             context.as_mut(),
         )
-        .expect("Failed to create browser");
-        let host = browser.host().expect("Failed to get browser host");
+        .ok_or(CreateBrowserError::NullBrowser)?;
+        let host = browser.host().ok_or(CreateBrowserError::NullBrowser)?;
         let webview_browser = WebviewBrowser {
             host,
             client: browser,
             size,
             dpr,
+            initial_zoom,
             #[cfg(not(target_os = "macos"))]
             view_slot,
             #[cfg(not(target_os = "macos"))]
@@ -172,6 +209,74 @@ impl Browsers {
         };
 
         self.browsers.insert(webview, webview_browser);
+        Ok(())
+    }
+
+    /// Gets or creates the shared request context for the profile stored at `cache_path`.
+    ///
+    /// A new context is created with `persist_session_cookies` on, gets the `cef://localhost`
+    /// and custom scheme factories, and is registered under `cache_path` until
+    /// [`Self::release_all`]. `cache_path` must be an absolute direct child of the root cache
+    /// path. Browsers can be created on the context once [`Self::is_profile_ready`] returns
+    /// `true`.
+    ///
+    /// # Errors
+    ///
+    /// Fails with [`ProfileContextError::CreationFailed`] when CEF creates no context, and with
+    /// [`ProfileContextError::DidNotLoad`] when CEF replaced `cache_path` with in-memory
+    /// storage. Neither registers a context.
+    pub fn prepare_profile(&mut self, cache_path: &str, requester: Requester) -> CefCoreResult {
+        if self.profiles.contains_key(cache_path) {
+            return Ok(());
+        }
+        let ready = Rc::new(Cell::new(false));
+        let mut context = cef::request_context_create_context(
+            Some(&RequestContextSettings {
+                cache_path: cache_path.into(),
+                persist_session_cookies: 1,
+                ..Default::default()
+            }),
+            Some(&mut RequestContextHandlerBuilder::build_with_ready(
+                ready.clone(),
+            )),
+        )
+        .ok_or(ProfileContextError::CreationFailed)?;
+        if context.cache_path().into_string().is_empty() {
+            return Err(ProfileContextError::DidNotLoad.into());
+        }
+        Self::register_scheme_factories(&mut context, requester);
+        self.profiles.insert(
+            cache_path.to_owned(),
+            ProfileContext {
+                flusher: ProfileFlusher::new(context.clone()),
+                context,
+                ready,
+            },
+        );
+        Ok(())
+    }
+
+    /// Requests a cookie-store flush on every profile context.
+    ///
+    /// A context with a flush in flight queues one follow-up instead of starting another.
+    pub fn flush_profile_cookies(&self) {
+        for profile in self.profiles.values() {
+            profile.flusher.request();
+        }
+    }
+
+    /// Whether a profile context is registered for `cache_path`, initialized or not.
+    pub fn has_profile(&self, cache_path: &str) -> bool {
+        self.profiles.contains_key(cache_path)
+    }
+
+    /// Whether the profile context registered for `cache_path` has finished initializing.
+    ///
+    /// Returns `false` when no context is registered for `cache_path`.
+    pub fn is_profile_ready(&self, cache_path: &str) -> bool {
+        self.profiles
+            .get(cache_path)
+            .is_some_and(ProfileContext::is_ready)
     }
 
     pub fn send_external_begin_frame(&self) {
@@ -336,11 +441,11 @@ impl Browsers {
     }
 
     pub fn emit_event(&self, webview: &Entity, id: impl Into<String>, event: &serde_json::Value) {
-        if let Some(mut process_message) =
-            process_message_create(Some(&PROCESS_MESSAGE_HOST_EMIT.into()))
-            && let Some(argument_list) = process_message.argument_list()
-            && let Some(browser) = self.browsers.get(webview)
+        if let Some(browser) = self.browsers.get(webview)
             && let Some(frame) = browser.client.main_frame()
+            && let Some(mut process_message) =
+                process_message_create(Some(&PROCESS_MESSAGE_HOST_EMIT.into()))
+            && let Some(argument_list) = process_message.argument_list()
         {
             argument_list.set_string(0, Some(&id.into().as_str().into()));
             argument_list.set_string(1, Some(&event.to_string().as_str().into()));
@@ -394,6 +499,40 @@ impl Browsers {
         }
     }
 
+    /// Returns how many browsers CEF has created and not yet closed, popups and DevTools included.
+    ///
+    /// A closed browser leaves the count only once CEF reports it closed, which happens during
+    /// message-loop work.
+    pub fn live_browser_count(&self) -> usize {
+        self.live_browsers.borrow().len()
+    }
+
+    /// Force-closes every live browser, popups and DevTools included, and forgets every webview's
+    /// browser.
+    ///
+    /// The browsers leave [`Self::live_browser_count`] as CEF reports them closed.
+    pub fn close_all(&mut self) {
+        // NOTE: CEF may report a close from inside `close_browser`, and the life-span handler
+        // then mutably borrows the live list; iterate over a copy so no borrow is held.
+        let live: Vec<Browser> = self.live_browsers.borrow().clone();
+        for browser in live {
+            if let Some(host) = browser.host() {
+                host.close_browser(1);
+            }
+        }
+        self.browsers.clear();
+    }
+
+    /// Drops every CEF reference `Browsers` holds: the webview browsers, the live-browser list
+    /// and the profile contexts.
+    ///
+    /// Must run before `cef::shutdown()`, so no reference outlives CEF.
+    pub fn release_all(&mut self) {
+        self.browsers.clear();
+        self.live_browsers.borrow_mut().clear();
+        self.profiles.clear();
+    }
+
     /// Drains the latest texture from each webview's view and popup slots.
     ///
     /// Non-macOS only: the CPU `OnPaint` path. macOS uses the GPU IOSurface path.
@@ -413,7 +552,13 @@ impl Browsers {
         };
         browser.host.show_dev_tools(
             Some(&WindowInfo::default()),
-            Some(&mut ClientHandlerBuilder::new(DevToolRenderHandlerBuilder::build()).build()),
+            Some(
+                &mut ClientHandlerBuilder::new(DevToolRenderHandlerBuilder::build())
+                    .with_life_span_handler(LifeSpanHandlerBuilder::build(
+                        self.live_browsers.clone(),
+                    ))
+                    .build(),
+            ),
             Some(&BrowserSettings::default()),
             None,
         );
@@ -515,7 +660,12 @@ impl Browsers {
     /// - [`SetZoomLevel`](https://cef-builds.spotifycdn.com/docs/122.0/classCefBrowserHost.html#af2b7bf250ac78345117cd575190f2f7b)
     pub fn set_zoom_level(&self, webview: &Entity, zoom_level: f64) {
         if let Some(browser) = self.browsers.get(webview) {
-            browser.host.set_zoom_level(zoom_level);
+            let mut state = browser.initial_zoom.get();
+            let request = state.request(zoom_level);
+            browser.initial_zoom.set(state);
+            if request == ZoomRequest::SendNow {
+                browser.host.set_zoom_level(zoom_level);
+            }
         }
     }
 
@@ -528,6 +678,19 @@ impl Browsers {
         if let Some(browser) = self.browsers.get(webview) {
             browser.host.set_audio_muted(muted as _);
         }
+    }
+
+    /// Returns whether the audio of the specified webview is muted.
+    ///
+    /// Returns `None` when the webview has no browser.
+    ///
+    /// ## Reference
+    ///
+    /// - [`CefBrowserHost::IsAudioMuted`](https://cef-builds.spotifycdn.com/docs/122.0/classCefBrowserHost.html)
+    pub fn is_audio_muted(&self, webview: &Entity) -> Option<bool> {
+        self.browsers
+            .get(webview)
+            .map(|browser| browser.host.is_audio_muted() == 1)
     }
 
     #[inline]
@@ -611,14 +774,18 @@ impl Browsers {
             Some(&mut RequestContextHandlerBuilder::build()),
         );
         if let Some(context) = context.as_mut() {
-            context.register_scheme_handler_factory(
-                Some(&SCHEME_CEF.into()),
-                Some(&HOST_CEF.into()),
-                Some(&mut LocalSchemaHandlerBuilder::build(requester)),
-            );
-            crate::custom_scheme::register_custom_scheme_factories(context);
+            Self::register_scheme_factories(context, requester);
         }
         context
+    }
+
+    fn register_scheme_factories(context: &mut RequestContext, requester: Requester) {
+        context.register_scheme_handler_factory(
+            Some(&SCHEME_CEF.into()),
+            Some(&HOST_CEF.into()),
+            Some(&mut LocalSchemaHandlerBuilder::build(requester)),
+        );
+        crate::custom_scheme::register_custom_scheme_factories(context);
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -638,6 +805,8 @@ impl Browsers {
         #[cfg(target_os = "macos")]
         latest_iosurface: crate::browser_process::accelerated_paint::SharedRetainedIoSurface,
         title_changed_sender: TitleChangedSenderInner,
+        initial_zoom: SharedInitialZoom,
+        cookie_flusher: Option<CookieFlusher>,
     ) -> Client {
         #[cfg(target_os = "macos")]
         let render_handler =
@@ -653,7 +822,13 @@ impl Browsers {
                 title_changed_sender,
             ))
             .with_drag_handler(DragHandlerBuilder::build(webview, drag_regions_sender))
-            .with_load_handler(LoadHandlerBuilder::build(webview, load_handler_sender))
+            .with_load_handler(LoadHandlerBuilder::build(
+                webview,
+                load_handler_sender,
+                initial_zoom,
+                cookie_flusher,
+            ))
+            .with_life_span_handler(LifeSpanHandlerBuilder::build(self.live_browsers.clone()))
             .with_message_handler(JsEmitEventHandler::new(webview, ipc_event_sender))
             .with_message_handler(BrpHandler::new(brp_sender))
             .build()

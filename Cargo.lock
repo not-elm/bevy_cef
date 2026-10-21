@@ -683,6 +683,7 @@ dependencies = [
  "raw-window-handle",
  "serde",
  "serde_json",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -711,6 +712,7 @@ dependencies = [
  "raw-window-handle",
  "serde",
  "serde_json",
+ "thiserror 2.0.18",
  "wgpu",
 ]
 

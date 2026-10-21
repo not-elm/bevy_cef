@@ -1,8 +1,91 @@
 use crate::RunOnMainThread;
+use crate::common::WebviewCoreComponentsPlugin;
+use crate::common::ipc::js_emit::IpcRawEventPlugin;
+use crate::focus::FocusedWebview;
+use crate::keyboard::CefKeyboardFilter;
+use crate::prelude::{
+    BeginFrameInterval, WebviewExtendStandardMaterial, WebviewMaterial, WebviewUiMaterial,
+};
+use bevy::ecs::system::ScheduleSystem;
 use bevy::prelude::*;
 use bevy_cef_core::prelude::*;
 use cef::args::Args;
 use cef::{Settings, api_hash, execute_process, initialize, shutdown, sys};
+use std::time::{Duration, Instant};
+
+/// Why CEF did not start.
+#[derive(Debug, Clone)]
+pub enum CefStartupError {
+    /// The root cache directory could not be created.
+    RootCacheDir {
+        /// The directory that could not be created.
+        path: String,
+        /// The I/O error message.
+        error: String,
+    },
+    /// The CEF library could not be loaded.
+    LibraryLoad,
+    /// `cef_initialize` returned failure.
+    Initialize {
+        /// The process exit code CEF reported through `cef_get_exit_code`.
+        exit_code: i32,
+    },
+}
+
+impl CefStartupError {
+    /// Whether another process holds or locks the root cache directory.
+    ///
+    /// True exactly for an [`Initialize`](Self::Initialize) failure whose exit code is
+    /// `CEF_RESULT_CODE_PROFILE_IN_USE` or `CEF_RESULT_CODE_NORMAL_EXIT_PROCESS_NOTIFIED`.
+    pub fn is_root_in_use(&self) -> bool {
+        match self {
+            Self::Initialize { exit_code } => {
+                *exit_code == sys::cef_resultcode_t::CEF_RESULT_CODE_PROFILE_IN_USE as i32
+                    || *exit_code
+                        == sys::cef_resultcode_t::CEF_RESULT_CODE_NORMAL_EXIT_PROCESS_NOTIFIED
+                            as i32
+            }
+            _ => false,
+        }
+    }
+}
+
+impl std::fmt::Display for CefStartupError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::RootCacheDir { path, error } => {
+                write!(
+                    f,
+                    "failed to create root_cache_path directory '{path}': {error}"
+                )
+            }
+            Self::LibraryLoad => write!(f, "failed to load the CEF library"),
+            Self::Initialize { exit_code } => {
+                write!(f, "cef_initialize failed with exit code {exit_code}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for CefStartupError {}
+
+/// Whether CEF started. Inserted by [`CefPlugin`](crate::CefPlugin) during `build`.
+#[derive(Resource, Debug, Clone)]
+pub enum CefStatus {
+    /// CEF initialized and every bevy_cef plugin was added.
+    Running,
+    /// CEF did not start; no plugin that calls into CEF was added.
+    Failed(CefStartupError),
+}
+
+/// The `root_cache_path` the plugin was configured with.
+#[derive(Resource)]
+pub(crate) struct CefRootCachePath(pub(crate) Option<String>);
+
+/// Present once bevy_cef has called `cef::shutdown()`. The message pump, the shutdown system and
+/// browser creation do not run while it is present.
+#[derive(Resource)]
+pub(crate) struct CefShutDown;
 
 /// Controls the CEF message loop.
 ///
@@ -21,13 +104,20 @@ pub struct MessageLoopPlugin {
     pub no_sandbox: bool,
 }
 
-impl Plugin for MessageLoopPlugin {
-    fn build(&self, app: &mut App) {
+impl MessageLoopPlugin {
+    /// Runs CEF initialization and inserts the `cef::App` and message-pump receiver as
+    /// non-send resources.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`CefStartupError`] when the root cache directory cannot be created, the CEF
+    /// library cannot be loaded (macOS), or `cef_initialize` fails.
+    pub(crate) fn start(&self, app: &mut App) -> Result<(), CefStartupError> {
         #[cfg(not(target_os = "macos"))]
         let render_process_binary = render_process_path();
 
         #[cfg(target_os = "macos")]
-        load_cef_library(app);
+        load_cef_library(app)?;
 
         let _ = api_hash(sys::CEF_API_VERSION_LAST, 0);
         let args = Args::new();
@@ -59,19 +149,27 @@ impl Plugin for MessageLoopPlugin {
             self.root_cache_path.as_deref(),
             render_process_binary.as_deref(),
             self.no_sandbox,
-        );
+        )?;
         #[cfg(target_os = "macos")]
         cef_initialize(
             &args,
             &mut cef_app,
             self.root_cache_path.as_deref(),
             self.no_sandbox,
-        );
+        )?;
 
         app.insert_non_send(cef_app);
-
         app.insert_non_send(MessageLoopWorkingReceiver(rx));
-        app.add_systems(Main, cef_do_message_loop_work);
+        Ok(())
+    }
+}
+
+impl Plugin for MessageLoopPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(
+            Main,
+            cef_do_message_loop_work.run_if(not(resource_exists::<CefShutDown>)),
+        );
 
         #[cfg(all(target_os = "macos", feature = "debug"))]
         app.add_systems(
@@ -79,20 +177,93 @@ impl Plugin for MessageLoopPlugin {
             macos::observe_terminate_request.before(cef_do_message_loop_work),
         );
 
-        app.insert_non_send(RunOnMainThread)
-            .add_systems(Update, cef_shutdown.run_if(on_message::<AppExit>));
+        app.insert_non_send(RunOnMainThread);
+        register_on_app_exit(
+            app,
+            shutdown_cef_on_exit.run_if(not(resource_exists::<CefShutDown>)),
+        );
+    }
+}
+
+/// Adds `system` to `Main` after `Main::run_main` and the CEF message pump, running only in a
+/// frame in which an `AppExit` was written.
+///
+/// Such a system sees an `AppExit` written anywhere in the frame, `Last` included, before the
+/// runner exits without another frame.
+pub(crate) fn register_on_app_exit<M>(
+    app: &mut App,
+    system: impl IntoScheduleConfigs<ScheduleSystem, M>,
+) {
+    app.add_systems(
+        Main,
+        system
+            .after(Main::run_main)
+            .after(cef_do_message_loop_work)
+            .run_if(on_message::<AppExit>),
+    );
+}
+
+/// Adds the minimal state an app needs when CEF failed to start: the failure in [`CefStatus`],
+/// the [`CefRootCachePath`], and the resources and messages that user-added bevy_cef plugins
+/// read, and the public resources, markers and assets an app's own systems can name. No plugin
+/// that calls into CEF and no system is added; the assets are registered only when `AssetPlugin`
+/// is present.
+pub(crate) fn add_failed_startup(app: &mut App, error: CefStartupError, root: Option<String>) {
+    app.insert_resource(CefStatus::Failed(error))
+        .insert_resource(CefRootCachePath(root))
+        .add_plugins((WebviewCoreComponentsPlugin, IpcRawEventPlugin))
+        .add_message::<RenderTextureMessage>()
+        .init_resource::<FocusedWebview>()
+        .init_resource::<CefKeyboardFilter>()
+        .init_resource::<BeginFrameInterval>()
+        .insert_non_send(RunOnMainThread);
+
+    // NOTE: `init_asset` panics without an `AssetServer`; the skipped plugins assume
+    // `AssetPlugin` as well, but a failed start must not add a second panic.
+    if app.world().contains_resource::<AssetServer>() {
+        app.init_asset::<WebviewMaterial>()
+            .init_asset::<WebviewExtendStandardMaterial>()
+            .init_asset::<WebviewUiMaterial>()
+            .init_asset::<CefResponse>();
     }
 }
 
 #[cfg(target_os = "macos")]
-fn load_cef_library(app: &mut App) {
+fn load_cef_library(app: &mut App) -> Result<(), CefStartupError> {
     macos::install_cef_app_protocol();
     #[cfg(all(target_os = "macos", feature = "debug"))]
     let loader = DebugLibraryLoader::new();
     #[cfg(all(target_os = "macos", not(feature = "debug")))]
-    let loader = cef::library_loader::LibraryLoader::new(&std::env::current_exe().unwrap(), false);
-    assert!(loader.load());
+    let loader = {
+        let exe = std::env::current_exe().map_err(|_| CefStartupError::LibraryLoad)?;
+        cef::library_loader::LibraryLoader::new(&exe, false)
+    };
+    if !loader.load() {
+        return Err(CefStartupError::LibraryLoad);
+    }
     app.insert_non_send(loader);
+    Ok(())
+}
+
+fn ensure_root_cache_dir(root_cache_path: Option<&str>) -> Result<(), CefStartupError> {
+    // Empty/whitespace paths are valid (CEF treats them as "use default"), so skip those.
+    if let Some(path) = root_cache_path.filter(|p| !p.trim().is_empty()) {
+        std::fs::create_dir_all(path).map_err(|e| CefStartupError::RootCacheDir {
+            path: path.to_string(),
+            error: e.to_string(),
+        })?;
+    }
+    Ok(())
+}
+
+fn initialize_result(initialized: i32) -> Result<(), CefStartupError> {
+    if initialized == 1 {
+        Ok(())
+    } else {
+        Err(CefStartupError::Initialize {
+            exit_code: cef::get_exit_code(),
+        })
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -101,13 +272,8 @@ fn cef_initialize(
     cef_app: &mut cef::App,
     root_cache_path: Option<&str>,
     no_sandbox: bool,
-) {
-    // Ensure the cache directory exists before CEF tries to use it.
-    // Empty/whitespace paths are valid (CEF treats them as "use default"), so skip those.
-    if let Some(path) = root_cache_path.filter(|p| !p.trim().is_empty()) {
-        std::fs::create_dir_all(path)
-            .unwrap_or_else(|e| panic!("failed to create root_cache_path directory '{path}': {e}"));
-    }
+) -> Result<(), CefStartupError> {
+    ensure_root_cache_dir(root_cache_path)?;
 
     let settings = Settings {
         #[cfg(feature = "debug")]
@@ -124,16 +290,12 @@ fn cef_initialize(
         disable_signal_handlers: true as _,
         ..Default::default()
     };
-    assert_eq!(
-        initialize(
-            Some(args.as_main_args()),
-            Some(&settings),
-            Some(cef_app),
-            std::ptr::null_mut(),
-        ),
-        1,
-        "cef_initialize failed: root_cache_path={root_cache_path:?}",
-    );
+    initialize_result(initialize(
+        Some(args.as_main_args()),
+        Some(&settings),
+        Some(cef_app),
+        std::ptr::null_mut(),
+    ))
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -143,13 +305,8 @@ fn cef_initialize(
     root_cache_path: Option<&str>,
     render_process_binary: Option<&std::path::Path>,
     no_sandbox: bool,
-) {
-    // Ensure the cache directory exists before CEF tries to use it.
-    // Empty/whitespace paths are valid (CEF treats them as "use default"), so skip those.
-    if let Some(path) = root_cache_path.filter(|p| !p.trim().is_empty()) {
-        std::fs::create_dir_all(path)
-            .unwrap_or_else(|e| panic!("failed to create root_cache_path directory '{path}': {e}"));
-    }
+) -> Result<(), CefStartupError> {
+    ensure_root_cache_dir(root_cache_path)?;
 
     let subprocess_path: String = render_process_binary
         .and_then(|p| p.to_str())
@@ -165,16 +322,12 @@ fn cef_initialize(
         disable_signal_handlers: false as _,
         ..Default::default()
     };
-    assert_eq!(
-        initialize(
-            Some(args.as_main_args()),
-            Some(&settings),
-            Some(cef_app),
-            std::ptr::null_mut(),
-        ),
-        1,
-        "cef_initialize failed: root_cache_path={root_cache_path:?}, subprocess={subprocess_path:?}",
-    );
+    initialize_result(initialize(
+        Some(args.as_main_args()),
+        Some(&settings),
+        Some(cef_app),
+        std::ptr::null_mut(),
+    ))
 }
 
 fn cef_do_message_loop_work(
@@ -205,8 +358,30 @@ fn cef_do_message_loop_work(
     }
 }
 
-fn cef_shutdown(_: NonSend<RunOnMainThread>) {
+/// Closes every browser, waits up to 3 s for CEF to report them closed, releases bevy_cef's CEF
+/// references and shuts CEF down, all within the exiting frame.
+///
+/// Browsers still open at the time limit are logged with `warn!`, and the shutdown continues.
+fn shutdown_cef_on_exit(mut browsers: NonSendMut<Browsers>, mut commands: Commands) {
+    const SHUTDOWN_TIME_LIMIT: Duration = Duration::from_secs(3);
+    const PUMP_INTERVAL: Duration = Duration::from_millis(5);
+
+    browsers.close_all();
+    let deadline = Instant::now() + SHUTDOWN_TIME_LIMIT;
+    while browsers.live_browser_count() > 0 {
+        if Instant::now() >= deadline {
+            warn!(
+                "bevy_cef: {} browser(s) still open after {SHUTDOWN_TIME_LIMIT:?}; shutting CEF down anyway",
+                browsers.live_browser_count()
+            );
+            break;
+        }
+        cef::do_message_loop_work();
+        std::thread::sleep(PUMP_INTERVAL);
+    }
+    browsers.release_all();
     shutdown();
+    commands.insert_resource(CefShutDown);
 }
 
 #[allow(clippy::needless_doctest_main)]
@@ -370,5 +545,113 @@ mod macos {
             info!("Termination intercepted, requesting AppExit");
             writer.write(AppExit::from_code(130));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::common::JsEmitEventPlugin;
+
+    /// Asserts that only an `Initialize` failure with exit code 21 or 24 reports the root as in
+    /// use, and every other error does not.
+    ///
+    /// Case: a second process starts against a root cache directory that the first process
+    /// already holds, and CEF exits initialization with its profile-in-use or
+    /// process-notified code.
+    #[test]
+    fn root_in_use_covers_codes_21_and_24() {
+        assert!(CefStartupError::Initialize { exit_code: 21 }.is_root_in_use());
+        assert!(CefStartupError::Initialize { exit_code: 24 }.is_root_in_use());
+        assert!(!CefStartupError::Initialize { exit_code: 1 }.is_root_in_use());
+        assert!(!CefStartupError::LibraryLoad.is_root_in_use());
+        assert!(
+            !CefStartupError::RootCacheDir {
+                path: "p".into(),
+                error: "e".into(),
+            }
+            .is_root_in_use()
+        );
+    }
+
+    /// Asserts that a failed startup publishes `CefStatus::Failed`, registers no CEF-backed
+    /// state, and lets the app keep updating.
+    ///
+    /// Case: an app that also added `JsEmitEventPlugin` starts while another process holds the
+    /// root cache directory, so `cef_initialize` returned 0.
+    #[test]
+    fn a_failed_start_adds_no_cef_systems() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        add_failed_startup(
+            &mut app,
+            CefStartupError::Initialize { exit_code: 21 },
+            Some("root".into()),
+        );
+        app.add_plugins(JsEmitEventPlugin::<serde_json::Value>::default());
+
+        assert!(matches!(
+            app.world().resource::<CefStatus>(),
+            CefStatus::Failed(_)
+        ));
+        assert!(!app.world().contains_non_send::<Browsers>());
+        app.update();
+    }
+
+    /// Asserts that after a failed start, a Startup system written like the examples can still
+    /// take the webview material assets and the keyboard filter, so `update` does not panic.
+    ///
+    /// Case: an app with `AssetPlugin` whose setup system spawns a webview mesh with
+    /// `ResMut<Assets<WebviewExtendStandardMaterial>>` runs while another process holds the root
+    /// cache directory.
+    #[test]
+    fn a_failed_start_keeps_example_startup_systems_running() {
+        fn setup(
+            _materials: ResMut<Assets<WebviewExtendStandardMaterial>>,
+            _ui_materials: ResMut<Assets<WebviewUiMaterial>>,
+            _filter: Res<CefKeyboardFilter>,
+            _interval: Res<BeginFrameInterval>,
+            _marker: NonSend<RunOnMainThread>,
+        ) {
+        }
+
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default()));
+        add_failed_startup(
+            &mut app,
+            CefStartupError::Initialize { exit_code: 21 },
+            None,
+        );
+        app.add_systems(Startup, setup);
+
+        app.update();
+    }
+
+    /// Asserts that a system registered with `register_on_app_exit` runs in the same update in
+    /// which a `Last` system writes `AppExit`.
+    ///
+    /// Case: the user closes the last window, so Bevy's `exit_on_all_closed` writes
+    /// `AppExit::Success` from `Last`, and the winit runner exits without another frame.
+    #[test]
+    fn an_app_exit_written_in_last_reaches_the_exit_system() {
+        #[derive(Resource, Default)]
+        struct ExitSystemRan(bool);
+
+        fn mark_ran(mut ran: ResMut<ExitSystemRan>) {
+            ran.0 = true;
+        }
+
+        fn write_exit(mut exit: MessageWriter<AppExit>) {
+            exit.write(AppExit::Success);
+        }
+
+        let mut app = App::new();
+        app.init_resource::<ExitSystemRan>()
+            .add_systems(Last, write_exit);
+        register_on_app_exit(&mut app, mark_ran);
+
+        app.update();
+
+        assert!(app.world().resource::<ExitSystemRan>().0);
     }
 }

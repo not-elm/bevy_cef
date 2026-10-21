@@ -1,5 +1,5 @@
 mod host_emit;
-mod js_emit;
+pub(crate) mod js_emit;
 
 use crate::common::ipc::js_emit::IpcRawEventPlugin;
 use bevy::prelude::*;

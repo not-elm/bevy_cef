@@ -2,6 +2,8 @@
 mod browser_process;
 #[cfg(target_os = "macos")]
 mod debug;
+#[cfg(feature = "browser")]
+mod error;
 
 pub mod custom_scheme;
 mod macros;
@@ -26,6 +28,8 @@ pub mod prelude {
     };
     #[cfg(target_os = "macos")]
     pub use crate::debug::*;
+    #[cfg(feature = "browser")]
+    pub use crate::error::{CefCoreError, CefCoreResult, CreateBrowserError, ProfileContextError};
     pub use crate::render_process::app::*;
     pub use crate::render_process::execute_render_process;
     pub use crate::render_process::render_process_handler::*;

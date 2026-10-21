@@ -4,6 +4,7 @@ use bevy_cef_core::prelude::RetainedIoSurface;
 use bevy_cef_core::prelude::{HOST_CEF, SCHEME_CEF};
 use serde::{Deserialize, Serialize};
 
+use crate::profile::WebviewProfile;
 use crate::title::WebviewTitle;
 
 pub(crate) struct WebviewCoreComponentsPlugin;
@@ -17,7 +18,8 @@ impl Plugin for WebviewCoreComponentsPlugin {
             .register_type::<AudioMuted>()
             .register_type::<PreloadScripts>()
             .register_type::<WebviewDpr>()
-            .register_type::<WebviewTextureTarget>();
+            .register_type::<WebviewTextureTarget>()
+            .register_type::<WebviewProfile>();
     }
 }
 
@@ -120,9 +122,14 @@ impl Default for WebviewDpr {
 #[cfg_attr(feature = "serialize", reflect(Serialize, Deserialize))]
 pub struct HostWindow(pub Entity);
 
-/// This component is used to specify the zoom level of the webview.
+/// This component is used to request the zoom level of the webview.
 ///
-/// Specify 0.0 to reset the zoom level to the default.
+/// The value is a request, applied at the webview's first main-frame commit; later changes are
+/// sent as they happen. A default `0.0` is not sent at the first commit, so it leaves a zoom the
+/// browser already remembers in place.
+///
+/// In a webview with a `WebviewProfile`, the zoom is shared per site by every webview of the
+/// profile and remembered across restarts, so the component can differ from the zoom shown.
 #[derive(Reflect, Component, Debug, Copy, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[reflect(Component, Debug, Serialize, Deserialize, Default)]
 pub struct ZoomLevel(pub f64);

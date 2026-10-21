@@ -51,6 +51,7 @@ bevy_cef_core = { path = "crates/bevy_cef_core", version = "0.14.0", default-fea
 async-channel = { version = "2.5" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1" }
+thiserror = "2"
 raw-window-handle = "0.6"
 clap = { version = "4", features = ["derive"] }
 anyhow = "1"
@@ -72,6 +73,13 @@ bevy = { workspace = true, default-features = true, features = [
 ] }
 bevy_cef = { path = ".", features = ["debug"] }
 
+# `tests/profile_persistence.rs` checks that a process opens no visible window.
+[target.'cfg(windows)'.dev-dependencies]
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = { version = "0.2" }
 
@@ -88,6 +96,12 @@ default = []
 serialize = ["bevy/serialize"]
 debug = ["bevy_cef_core/debug", "log"]
 log = ["bevy_cef_core/log"]
+
+# Re-runs itself as role processes, since CEF initializes once per process. Runs only with
+# `BEVY_CEF_PROCESS_TESTS=1`; otherwise it prints `skipped`.
+[[test]]
+name = "profile_persistence"
+harness = false
 
 # Size-oriented release profile. `crates/bevy_cef_render_process/Cargo.toml`
 # carries a copy that applies to `cargo install bevy_cef_render_process` from

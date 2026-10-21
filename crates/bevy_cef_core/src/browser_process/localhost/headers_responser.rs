@@ -24,6 +24,8 @@ impl HeadersResponser {
             .push(("Access-Control-Allow-Methods".to_string(), "*".to_string()));
         self.headers
             .push(("Access-Control-Allow-Headers".to_string(), "*".to_string()));
+        self.headers
+            .push(("Cache-Control".to_string(), "no-store".to_string()));
         if let Some(content_range) = content_range_header_value(&cef_response.data, range) {
             self.headers
                 .push(("Content-Range".to_string(), content_range));
@@ -238,5 +240,29 @@ mod tests {
             &Some((0, Some(5))),
         );
         assert_eq!(headers_responser.status_code, 206);
+    }
+
+    #[test]
+    fn prepare_sets_no_store() {
+        let data = b"Hello, World!";
+        let cache_control = ("Cache-Control".to_string(), "no-store".to_string());
+        let mut headers_responser = HeadersResponser::default();
+        headers_responser.prepare(
+            &CefResponse {
+                data: data.to_vec(),
+                ..default()
+            },
+            &None,
+        );
+        assert!(headers_responser.headers.contains(&cache_control));
+
+        headers_responser.prepare(
+            &CefResponse {
+                data: data.to_vec(),
+                ..default()
+            },
+            &Some((0, Some(5))),
+        );
+        assert!(headers_responser.headers.contains(&cache_control));
     }
 }

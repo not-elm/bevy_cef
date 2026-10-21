@@ -4,7 +4,7 @@ sidebar_position: 2
 
 # Plugin Configuration
 
-`CefPlugin` is the single entry point for adding bevy_cef to your application. It accepts five configuration fields and composes all internal sub-plugins automatically.
+`CefPlugin` is the single entry point for adding bevy_cef to your application. It accepts six configuration fields and composes all internal sub-plugins automatically.
 
 ## CefPlugin Fields
 
@@ -15,6 +15,7 @@ pub struct CefPlugin {
     pub root_cache_path: Option<String>,
     pub custom_schemes: Vec<CefCustomScheme>,
     pub sandbox: SandboxMode,
+    pub cookie_flush_interval: Duration,
 }
 ```
 
@@ -95,6 +96,39 @@ let plugin = CefPlugin {
 
 When set to `None` (the default), CEF uses an in-memory cache that is discarded when the application exits. Set this to a directory path if you need persistent browser state across application sessions.
 
+Named [profiles](../guides/profiles.md) require this to be a non-empty absolute path: a profile `NAME` lives at `<root_cache_path>/profile-NAME`. Webviews without a profile do not use the disk. One process at a time can use a root; see [CefStatus](#cefstatus) for what a second process sees.
+
+Creating the directory can fail. bevy_cef reports that through `CefStatus` rather than panicking.
+
+### cookie_flush_interval
+
+`cookie_flush_interval: Duration` sets how often the cookies of profile webviews are flushed to disk. It defaults to 5 seconds and is measured in wall-clock time, so pausing or scaling Bevy's `Time` does not stop it. A flush also follows each main-frame load in a profile webview.
+
+```rust
+use std::time::Duration;
+use bevy_cef::prelude::*;
+
+let plugin = CefPlugin {
+    cookie_flush_interval: Duration::from_secs(2),
+    ..default()
+};
+```
+
+A crash or a kill loses only the cookie changes since the last completed flush. A normal exit, including closing the window, persists everything. See [Profiles](../guides/profiles.md#cookies-and-crashes).
+
+### CefStatus
+
+`CefPlugin` inserts a `CefStatus` resource during `build`:
+
+| Variant | Meaning |
+|---------|---------|
+| `CefStatus::Running` | CEF initialized and every bevy_cef plugin was added. |
+| `CefStatus::Failed(CefStartupError)` | CEF did not start. No plugin that calls into CEF was added, and no CEF function is called afterwards. |
+
+`CefStartupError` is one of `RootCacheDir` (the root directory could not be created), `LibraryLoad` (macOS only: the CEF library could not be loaded) or `Initialize { exit_code }` (`cef_initialize` failed). `CefStartupError::is_root_in_use()` is true for an `Initialize` failure with exit code 21 or 24, which both mean that another process holds or locks the root. bevy_cef does not exit the app; your app reads the resource and decides.
+
+Take your own lock on the root before adding `CefPlugin` if you need to control what happens when two instances start. See [Profiles](../guides/profiles.md#one-process-per-root), including the Windows requirement on the first process's message loop.
+
 ### sandbox
 
 `sandbox: SandboxMode` controls Chromium's OS-level sandbox. The default,
@@ -125,7 +159,7 @@ For most use cases, the default configuration is sufficient:
 app.add_plugins((DefaultPlugins, CefPlugin::default()));
 ```
 
-This initializes CEF with no custom command-line arguments, no extensions, no custom schemes, an in-memory cache, and the platform-default sandbox (`SandboxMode::PlatformDefault`).
+This initializes CEF with no custom command-line arguments, no extensions, no custom schemes, an in-memory cache, a 5-second cookie flush interval, and the platform-default sandbox (`SandboxMode::PlatformDefault`).
 
 ## Sub-Plugin Tree
 
@@ -143,4 +177,5 @@ This initializes CEF with no custom command-line arguments, no extensions, no cu
 | `NavigationPlugin` | Registers observers for `RequestGoBack` and `RequestGoForward` events. |
 | `ZoomPlugin` | Watches for `ZoomLevel` changes and forwards them to CEF. |
 | `AudioMutePlugin` | Watches for `AudioMuted` changes and forwards them to CEF. |
+| `ProfilePlugin` | Creates the browsers of webviews that have a `WebviewProfile` and flushes their cookies. |
 | `RemotePlugin` | Adds Bevy's `RemotePlugin` if not already present, enabling BRP communication. |
