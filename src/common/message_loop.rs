@@ -115,6 +115,7 @@ impl MessageLoopPlugin {
     /// Returns a [`CefStartupError`] when the root cache directory cannot be created, the CEF
     /// library cannot be loaded (macOS), or `cef_initialize` fails.
     pub(crate) fn start(&self, app: &mut App) -> Result<(), CefStartupError> {
+        #[allow(unused_variables)]
         let (custom_framework_dir, custom_framework_binary, custom_subprocess) =
             resolve_custom_cef_paths(self.cef_path.as_deref(), self.subprocess_path.as_deref());
 

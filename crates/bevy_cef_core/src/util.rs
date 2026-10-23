@@ -74,7 +74,9 @@ pub fn resolve_custom_cef_paths(
             if path.file_name().and_then(|n| n.to_str()) == Some("Chromium Embedded Framework") {
                 framework_binary = Some(path.clone());
                 framework_dir = path.parent().map(PathBuf::from);
-            } else if path.file_name().and_then(|n| n.to_str()) == Some("Chromium Embedded Framework.framework") {
+            } else if path.file_name().and_then(|n| n.to_str())
+                == Some("Chromium Embedded Framework.framework")
+            {
                 framework_dir = Some(path.clone());
                 let bin = path.join("Chromium Embedded Framework");
                 if bin.exists() {
