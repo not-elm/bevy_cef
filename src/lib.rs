@@ -70,6 +70,12 @@ pub struct CefPlugin {
     /// wall-clock time. A flush also follows every main-frame load end in a profile webview.
     /// Defaults to 5 seconds.
     pub cookie_flush_interval: Duration,
+    /// Optional path to CEF directory or framework.
+    /// If `None`, checks the `CEF_FRAMEWORK_DIR` or `CEF_PATH` environment variables.
+    pub cef_path: Option<std::path::PathBuf>,
+    /// Optional path to the render process subprocess binary.
+    /// If `None`, checks the `CEF_SUBPROCESS_PATH` environment variable.
+    pub subprocess_path: Option<std::path::PathBuf>,
 }
 
 impl Default for CefPlugin {
@@ -81,6 +87,8 @@ impl Default for CefPlugin {
             custom_schemes: Default::default(),
             sandbox: Default::default(),
             cookie_flush_interval: Duration::from_secs(5),
+            cef_path: None,
+            subprocess_path: None,
         }
     }
 }
@@ -136,6 +144,8 @@ impl Plugin for CefPlugin {
             extensions: self.extensions.clone(),
             root_cache_path: self.root_cache_path.clone(),
             no_sandbox,
+            cef_path: self.cef_path.clone(),
+            subprocess_path: self.subprocess_path.clone(),
         };
         if let Err(e) = message_loop.start(app) {
             error!("bevy_cef: CEF failed to start: {e}");

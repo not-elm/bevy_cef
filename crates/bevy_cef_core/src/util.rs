@@ -52,11 +52,110 @@ pub fn debug_render_process_path() -> PathBuf {
     debug_chromium_libraries_path().join("bevy_cef_debug_render_process")
 }
 
-/// Returns the path to the render process binary next to the current executable.
+/// Resolves custom CEF paths: (framework_dir, framework_binary, subprocess_path)
+/// Checks explicit arguments, then `CEF_FRAMEWORK_DIR` or `CEF_PATH`, then `CEF_SUBPROCESS_PATH`.
+pub fn resolve_custom_cef_paths(
+    custom_cef_path: Option<&std::path::Path>,
+    custom_subprocess_path: Option<&std::path::Path>,
+) -> (Option<PathBuf>, Option<PathBuf>, Option<PathBuf>) {
+    let cef_path = custom_cef_path
+        .map(PathBuf::from)
+        .or_else(|| std::env::var("CEF_FRAMEWORK_DIR").ok().map(PathBuf::from))
+        .or_else(|| std::env::var("CEF_PATH").ok().map(PathBuf::from));
+
+    #[allow(unused_mut)]
+    let mut framework_dir = None;
+    #[allow(unused_mut)]
+    let mut framework_binary = None;
+
+    if let Some(ref path) = cef_path {
+        #[cfg(target_os = "macos")]
+        {
+            if path.file_name().and_then(|n| n.to_str()) == Some("Chromium Embedded Framework") {
+                framework_binary = Some(path.clone());
+                framework_dir = path.parent().map(PathBuf::from);
+            } else if path.file_name().and_then(|n| n.to_str()) == Some("Chromium Embedded Framework.framework") {
+                framework_dir = Some(path.clone());
+                let bin = path.join("Chromium Embedded Framework");
+                if bin.exists() {
+                    framework_binary = Some(bin);
+                }
+            } else {
+                let fw_dir = path.join("Chromium Embedded Framework.framework");
+                let fw_bin = fw_dir.join("Chromium Embedded Framework");
+                if fw_bin.exists() {
+                    framework_dir = Some(fw_dir);
+                    framework_binary = Some(fw_bin);
+                } else if path.join("Chromium Embedded Framework").exists() {
+                    framework_dir = Some(path.clone());
+                    framework_binary = Some(path.join("Chromium Embedded Framework"));
+                } else {
+                    framework_dir = Some(fw_dir);
+                    framework_binary = Some(fw_bin);
+                }
+            }
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            framework_dir = Some(path.clone());
+        }
+    }
+
+    let subprocess_path = custom_subprocess_path
+        .map(PathBuf::from)
+        .or_else(|| std::env::var("CEF_SUBPROCESS_PATH").ok().map(PathBuf::from))
+        .or_else(|| {
+            if let Some(ref path) = cef_path {
+                #[cfg(target_os = "windows")]
+                let binary_name = "bevy_cef_render_process.exe";
+                #[cfg(not(target_os = "windows"))]
+                let binary_name = "bevy_cef_render_process";
+
+                let direct = path.join(binary_name);
+                if direct.exists() {
+                    return Some(direct);
+                }
+                let in_lib = path.join("Libraries").join(binary_name);
+                if in_lib.exists() {
+                    return Some(in_lib);
+                }
+                let in_fw = path
+                    .join("Chromium Embedded Framework.framework")
+                    .join("Libraries")
+                    .join(binary_name);
+                if in_fw.exists() {
+                    return Some(in_fw);
+                }
+            }
+            None
+        });
+
+    (framework_dir, framework_binary, subprocess_path)
+}
+
+/// Returns the path to the render process binary.
+/// Checks `CEF_SUBPROCESS_PATH`, `CEF_PATH`, and next to the current executable.
 ///
 /// On Windows: `<exe_dir>/bevy_cef_render_process.exe`
 /// On macOS (release): `<exe_dir>/bevy_cef_render_process`
 pub fn render_process_path() -> Option<PathBuf> {
+    if let Ok(p) = std::env::var("CEF_SUBPROCESS_PATH") {
+        let path = PathBuf::from(p);
+        if path.exists() {
+            return Some(path);
+        }
+    }
+    if let Ok(cef_path) = std::env::var("CEF_PATH") {
+        let p = PathBuf::from(cef_path);
+        #[cfg(target_os = "windows")]
+        let binary_name = "bevy_cef_render_process.exe";
+        #[cfg(not(target_os = "windows"))]
+        let binary_name = "bevy_cef_render_process";
+        let path = p.join(binary_name);
+        if path.exists() {
+            return Some(path);
+        }
+    }
     let exe_dir = std::env::current_exe().ok()?.parent()?.to_path_buf();
     #[cfg(target_os = "windows")]
     let binary_name = "bevy_cef_render_process.exe";

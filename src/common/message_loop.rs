@@ -102,6 +102,8 @@ pub struct MessageLoopPlugin {
     pub extensions: CefExtensions,
     pub root_cache_path: Option<String>,
     pub no_sandbox: bool,
+    pub cef_path: Option<std::path::PathBuf>,
+    pub subprocess_path: Option<std::path::PathBuf>,
 }
 
 impl MessageLoopPlugin {
@@ -113,11 +115,14 @@ impl MessageLoopPlugin {
     /// Returns a [`CefStartupError`] when the root cache directory cannot be created, the CEF
     /// library cannot be loaded (macOS), or `cef_initialize` fails.
     pub(crate) fn start(&self, app: &mut App) -> Result<(), CefStartupError> {
+        let (custom_framework_dir, custom_framework_binary, custom_subprocess) =
+            resolve_custom_cef_paths(self.cef_path.as_deref(), self.subprocess_path.as_deref());
+
         #[cfg(not(target_os = "macos"))]
-        let render_process_binary = render_process_path();
+        let render_process_binary = custom_subprocess.or_else(render_process_path);
 
         #[cfg(target_os = "macos")]
-        load_cef_library(app)?;
+        load_cef_library(app, custom_framework_binary.as_deref())?;
 
         let _ = api_hash(sys::CEF_API_VERSION_LAST, 0);
         let args = Args::new();
@@ -155,6 +160,8 @@ impl MessageLoopPlugin {
             &args,
             &mut cef_app,
             self.root_cache_path.as_deref(),
+            custom_framework_dir.as_deref(),
+            custom_subprocess.as_deref(),
             self.no_sandbox,
         )?;
 
@@ -229,15 +236,48 @@ pub(crate) fn add_failed_startup(app: &mut App, error: CefStartupError, root: Op
 }
 
 #[cfg(target_os = "macos")]
-fn load_cef_library(app: &mut App) -> Result<(), CefStartupError> {
+pub enum MacLibraryLoader {
+    Custom(CustomLibraryLoader),
+    #[cfg(not(feature = "debug"))]
+    Default(cef::library_loader::LibraryLoader),
+    #[cfg(feature = "debug")]
+    Debug(DebugLibraryLoader),
+}
+
+#[cfg(target_os = "macos")]
+impl MacLibraryLoader {
+    pub fn load(&self) -> bool {
+        match self {
+            Self::Custom(l) => l.load(),
+            #[cfg(not(feature = "debug"))]
+            Self::Default(l) => l.load(),
+            #[cfg(feature = "debug")]
+            Self::Debug(l) => l.load(),
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn load_cef_library(
+    app: &mut App,
+    custom_framework_binary: Option<&std::path::Path>,
+) -> Result<(), CefStartupError> {
     macos::install_cef_app_protocol();
-    #[cfg(all(target_os = "macos", feature = "debug"))]
-    let loader = DebugLibraryLoader::new();
-    #[cfg(all(target_os = "macos", not(feature = "debug")))]
-    let loader = {
-        let exe = std::env::current_exe().map_err(|_| CefStartupError::LibraryLoad)?;
-        cef::library_loader::LibraryLoader::new(&exe, false)
+
+    let loader = if let Some(bin) = custom_framework_binary {
+        MacLibraryLoader::Custom(CustomLibraryLoader::new(bin.to_path_buf()))
+    } else {
+        #[cfg(all(target_os = "macos", feature = "debug"))]
+        {
+            MacLibraryLoader::Debug(DebugLibraryLoader::new())
+        }
+        #[cfg(all(target_os = "macos", not(feature = "debug")))]
+        {
+            let exe = std::env::current_exe().map_err(|_| CefStartupError::LibraryLoad)?;
+            MacLibraryLoader::Default(cef::library_loader::LibraryLoader::new(&exe, false))
+        }
     };
+
     if !loader.load() {
         return Err(CefStartupError::LibraryLoad);
     }
@@ -271,18 +311,33 @@ fn cef_initialize(
     args: &Args,
     cef_app: &mut cef::App,
     root_cache_path: Option<&str>,
+    custom_framework_dir: Option<&std::path::Path>,
+    custom_subprocess: Option<&std::path::Path>,
     no_sandbox: bool,
 ) -> Result<(), CefStartupError> {
     ensure_root_cache_dir(root_cache_path)?;
 
+    #[cfg(feature = "debug")]
+    let default_fw_dir = debug_chromium_embedded_framework_dir_path();
+    #[cfg(not(feature = "debug"))]
+    let default_fw_dir = std::path::PathBuf::new();
+
+    #[cfg(feature = "debug")]
+    let default_subprocess = debug_render_process_path();
+    #[cfg(not(feature = "debug"))]
+    let default_subprocess = std::path::PathBuf::new();
+
+    let fw_dir_str = custom_framework_dir
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|| default_fw_dir.to_string_lossy().to_string());
+
+    let subprocess_str = custom_subprocess
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|| default_subprocess.to_string_lossy().to_string());
+
     let settings = Settings {
-        #[cfg(feature = "debug")]
-        framework_dir_path: debug_chromium_embedded_framework_dir_path()
-            .to_str()
-            .unwrap()
-            .into(),
-        #[cfg(feature = "debug")]
-        browser_subprocess_path: debug_render_process_path().to_str().unwrap().into(),
+        framework_dir_path: fw_dir_str.as_str().into(),
+        browser_subprocess_path: subprocess_str.as_str().into(),
         no_sandbox: no_sandbox as _,
         root_cache_path: root_cache_path.unwrap_or_default().into(),
         windowless_rendering_enabled: true as _,

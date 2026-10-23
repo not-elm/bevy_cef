@@ -6,6 +6,22 @@
 use bevy_cef_core::prelude::*;
 use cef::{args::Args, *};
 
+#[cfg(target_os = "macos")]
+enum RenderProcessLoader {
+    Custom(CustomLibraryLoader),
+    Default(library_loader::LibraryLoader),
+}
+
+#[cfg(target_os = "macos")]
+impl RenderProcessLoader {
+    fn load(&self) -> bool {
+        match self {
+            Self::Custom(l) => l.load(),
+            Self::Default(l) => l.load(),
+        }
+    }
+}
+
 fn main() {
     let args = Args::new();
 
@@ -17,7 +33,21 @@ fn main() {
     };
     #[cfg(target_os = "macos")]
     let _loader = {
-        let loader = library_loader::LibraryLoader::new(&std::env::current_exe().unwrap(), true);
+        let exe = std::env::current_exe().unwrap();
+        let (_, framework_binary, _) = resolve_custom_cef_paths(None, None);
+
+        let sibling = exe
+            .parent()
+            .unwrap()
+            .join("Chromium Embedded Framework.framework/Chromium Embedded Framework");
+
+        let loader = if let Some(bin) = framework_binary.filter(|b| b.exists()) {
+            RenderProcessLoader::Custom(CustomLibraryLoader::new(bin))
+        } else if sibling.exists() {
+            RenderProcessLoader::Custom(CustomLibraryLoader::new(sibling))
+        } else {
+            RenderProcessLoader::Default(library_loader::LibraryLoader::new(&exe, true))
+        };
         assert!(loader.load());
         loader
     };
