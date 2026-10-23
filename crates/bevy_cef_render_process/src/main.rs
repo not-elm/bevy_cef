@@ -27,9 +27,21 @@ fn main() {
 
     #[cfg(target_os = "macos")]
     let _sandbox = {
-        let mut sandbox = cef::sandbox::Sandbox::new();
-        sandbox.initialize(args.as_main_args());
-        sandbox
+        let exe = std::env::current_exe().ok();
+        let expected_sandbox = exe
+            .as_ref()
+            .and_then(|e| e.parent())
+            .map(|p| p.join("../../../Chromium Embedded Framework.framework/Libraries/libcef_sandbox.dylib"));
+
+        if expected_sandbox.as_ref().map_or(false, |p| p.exists()) {
+            std::panic::catch_unwind(|| {
+                let mut sandbox = cef::sandbox::Sandbox::new();
+                sandbox.initialize(args.as_main_args());
+                sandbox
+            }).ok()
+        } else {
+            None
+        }
     };
     #[cfg(target_os = "macos")]
     let _loader = {
