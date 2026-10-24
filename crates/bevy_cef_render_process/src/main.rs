@@ -26,6 +26,12 @@ fn main() {
     let args = Args::new();
 
     #[cfg(target_os = "macos")]
+    let (_, framework_binary) = {
+        let (dir, bin, _) = resolve_custom_cef_paths(None, None);
+        (dir, bin)
+    };
+
+    #[cfg(target_os = "macos")]
     let _sandbox = {
         let exe = std::env::current_exe().ok();
         let expected_sandbox = exe.as_ref().and_then(|e| e.parent()).map(|p| {
@@ -46,7 +52,6 @@ fn main() {
     #[cfg(target_os = "macos")]
     let _loader = {
         let exe = std::env::current_exe().unwrap();
-        let (_, framework_binary, _) = resolve_custom_cef_paths(None, None);
 
         let sibling = exe
             .parent()

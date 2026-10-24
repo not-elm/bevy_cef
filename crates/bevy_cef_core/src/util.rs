@@ -52,14 +52,36 @@ pub fn debug_render_process_path() -> PathBuf {
     debug_chromium_libraries_path().join("bevy_cef_debug_render_process")
 }
 
+fn parse_cli_arg(prefix: &str) -> Option<PathBuf> {
+    let mut args = std::env::args_os();
+    while let Some(arg) = args.next() {
+        let arg_str = arg.to_string_lossy();
+        if let Some(val) = arg_str.strip_prefix(prefix) {
+            if let Some(val) = val.strip_prefix('=') {
+                if !val.is_empty() {
+                    return Some(PathBuf::from(val));
+                }
+            } else if val.is_empty()
+                && let Some(next_arg) = args.next()
+            {
+                return Some(PathBuf::from(next_arg));
+            }
+        }
+    }
+    None
+}
+
 /// Resolves custom CEF paths: (framework_dir, framework_binary, subprocess_path)
-/// Checks explicit arguments, then `CEF_FRAMEWORK_DIR` or `CEF_PATH`, then `CEF_SUBPROCESS_PATH`.
+/// Checks explicit arguments, command-line flags (`--framework-dir-path`, `--cef-path`),
+/// environment variables (`CEF_FRAMEWORK_DIR`, `CEF_PATH`), and subprocess equivalents.
 pub fn resolve_custom_cef_paths(
     custom_cef_path: Option<&std::path::Path>,
     custom_subprocess_path: Option<&std::path::Path>,
 ) -> (Option<PathBuf>, Option<PathBuf>, Option<PathBuf>) {
     let cef_path = custom_cef_path
         .map(PathBuf::from)
+        .or_else(|| parse_cli_arg("--framework-dir-path"))
+        .or_else(|| parse_cli_arg("--cef-path"))
         .or_else(|| std::env::var("CEF_FRAMEWORK_DIR").ok().map(PathBuf::from))
         .or_else(|| std::env::var("CEF_PATH").ok().map(PathBuf::from));
 
@@ -105,6 +127,8 @@ pub fn resolve_custom_cef_paths(
 
     let subprocess_path = custom_subprocess_path
         .map(PathBuf::from)
+        .or_else(|| parse_cli_arg("--browser-subprocess-path"))
+        .or_else(|| parse_cli_arg("--subprocess-path"))
         .or_else(|| std::env::var("CEF_SUBPROCESS_PATH").ok().map(PathBuf::from))
         .or_else(|| {
             if let Some(ref path) = cef_path {
