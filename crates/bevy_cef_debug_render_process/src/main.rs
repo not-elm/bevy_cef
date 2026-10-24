@@ -6,12 +6,34 @@
 use bevy_cef_core::prelude::*;
 use cef::{args::Args, *};
 
+#[cfg(target_os = "macos")]
+enum DebugRenderProcessLoader {
+    Custom(CustomLibraryLoader),
+    Debug(DebugLibraryLoader),
+}
+
+#[cfg(target_os = "macos")]
+impl DebugRenderProcessLoader {
+    fn load(&self) -> bool {
+        match self {
+            Self::Custom(l) => l.load(),
+            Self::Debug(l) => l.load(),
+        }
+    }
+}
+
 fn main() {
     let args = Args::new();
 
     #[cfg(target_os = "macos")]
     let _loader = {
-        let loader = DebugLibraryLoader::new();
+        let (_, framework_binary, _) = resolve_custom_cef_paths(None, None);
+
+        let loader = if let Some(bin) = framework_binary.filter(|b| b.exists()) {
+            DebugRenderProcessLoader::Custom(CustomLibraryLoader::new(bin))
+        } else {
+            DebugRenderProcessLoader::Debug(DebugLibraryLoader::new())
+        };
         assert!(loader.load());
         loader
     };
