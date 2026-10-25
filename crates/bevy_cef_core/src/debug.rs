@@ -51,3 +51,34 @@ impl Drop for DebugLibraryLoader {
         }
     }
 }
+
+/// A loader that can load the Chromium Embedded Framework from a custom specified path.
+pub struct CustomLibraryLoader {
+    path: std::path::PathBuf,
+}
+
+impl CustomLibraryLoader {
+    pub fn new(path: std::path::PathBuf) -> Self {
+        Self { path }
+    }
+
+    pub fn load(&self) -> bool {
+        use std::os::unix::ffi::OsStrExt;
+        let Ok(name) = std::ffi::CString::new(self.path.as_os_str().as_bytes()) else {
+            return false;
+        };
+        unsafe { load_library(Some(&*name.as_ptr().cast())) == 1 }
+    }
+
+    pub fn path(&self) -> &std::path::Path {
+        &self.path
+    }
+}
+
+impl Drop for CustomLibraryLoader {
+    fn drop(&mut self) {
+        if unload_library() != 1 {
+            cef_error!("cannot unload framework {}", self.path.display());
+        }
+    }
+}
