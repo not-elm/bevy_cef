@@ -79,7 +79,7 @@ fn ui_pointer_pos(node: UiNode, images: &Assets<Image>) -> Option<Vec2> {
 
 /// Resolves the DIP pointer position for a UI webview node on macOS, where the
 /// real alpha is read on demand from the retained IOSurface (`WebviewIoSurface`)
-/// rather than `Image.data` (which is a black placeholder on the GPU OSR path).
+/// rather than `Image.data` (which is a placeholder on the GPU OSR path).
 ///
 /// Falls back to the Image path when `webview_iosurface` is `None` (i.e. before
 /// the first accelerated-paint frame has been received).
