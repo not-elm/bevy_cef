@@ -36,7 +36,7 @@ pub(crate) fn is_pixel_transparent(image: &Image, webview_size: Vec2, pos_dip: V
 /// `false` (opaque) for a zero-area viewport, out-of-range pixel, or lock failure —
 /// so a not-yet-painted surface forwards events instead of swallowing them.
 ///
-/// macOS GPU path only: `Image.data` is a black placeholder there, so the real
+/// macOS GPU path only: `Image.data` is a placeholder there, so the real
 /// alpha lives in the IOSurface behind `WebviewIoSurface`.
 #[cfg(target_os = "macos")]
 pub(crate) fn is_pixel_transparent_surface(

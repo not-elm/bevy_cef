@@ -164,7 +164,7 @@ impl Plugin for WebviewGpuInjectPlugin {
                 (extract_webview_iosurfaces, extract_live_webview_surface_ids),
             )
             // NOTE: Injection must run after `prepare_assets::<GpuImage>`, so that its insert
-            // overwrites the black placeholder `GpuImage` for the same `AssetId`, and before
+            // overwrites the placeholder `GpuImage` for the same `AssetId`, and before
             // each webview material's bind-group build, so that the rebuilt bind group
             // captures the injected view. Custom mesh materials (`WebviewExtendedMaterial<E>`)
             // have no `.before()` edge: their rebind path touches only the material, never the
@@ -265,17 +265,31 @@ struct WebviewGpuSurfaces(HashMap<AssetId<Image>, WebviewGpuSurface>);
 #[derive(Resource, Default)]
 struct LiveWebviewSurfaceIds(HashSet<AssetId<Image>>);
 
-/// Black, fully-opaque BGRA placeholder for a webview surface `Image`. The real
-/// pixels are injected directly into `RenderAssets<GpuImage>` in the render
-/// world.
+/// Fully transparent 1×1 BGRA placeholder for a mesh or UI webview surface
+/// `Image`. The real pixels are injected directly into `RenderAssets<GpuImage>`
+/// in the render world.
 ///
-/// Mesh/UI surfaces use a 1×1 placeholder: its pixels are never sampled after
-/// the first injection, and the pre-first-frame alpha fallback treats any black
-/// pixel as opaque regardless of dimensions — so there is no reason to pin a
-/// multi-megabyte CPU copy per webview. Sprites pass their `WebviewSize`: the
-/// sprite picking backend maps cursor positions against the main-world image
-/// dimensions, so the placeholder must agree with the rendered quad.
-fn placeholder_surface_image(size: UVec2) -> Image {
+/// The webview draws nothing until CEF paints its first frame, instead of an
+/// opaque black quad, and the pre-first-frame alpha fallback lets pointer
+/// events pass through it. Its pixels are never sampled after the first
+/// injection, so 1×1 avoids pinning a multi-megabyte CPU copy per webview.
+fn transparent_surface_placeholder() -> Image {
+    surface_placeholder(UVec2::ONE, [0, 0, 0, 0])
+}
+
+/// Black, fully-opaque BGRA placeholder for a sprite or headless-target surface
+/// `Image` of `size` pixels.
+///
+/// These images may be alpha-tested on the main world, where they keep these
+/// pixels for good: Bevy's sprite picking backend drops hits below its alpha
+/// threshold, so a transparent sprite placeholder would make the sprite
+/// unclickable. Sprites pass their `WebviewSize`, because the picking backend
+/// maps cursor positions against the main-world image dimensions.
+fn opaque_surface_placeholder(size: UVec2) -> Image {
+    surface_placeholder(size, [0, 0, 0, 255])
+}
+
+fn surface_placeholder(size: UVec2, pixel: [u8; 4]) -> Image {
     Image::new_fill(
         Extent3d {
             width: size.x.max(1),
@@ -283,7 +297,7 @@ fn placeholder_surface_image(size: UVec2) -> Image {
             depth_or_array_layers: 1,
         },
         bevy::render::render_resource::TextureDimension::D2,
-        &[0, 0, 0, 255],
+        &pixel,
         TextureFormat::Bgra8UnormSrgb,
         RenderAssetUsages::all(),
     )
@@ -322,7 +336,7 @@ pub(crate) fn allocate_webview_surfaces_for<M: WebviewSurfaceSlot>(
                 }
             }
             (None, None) => {
-                let handle = images.add(placeholder_surface_image(UVec2::ONE));
+                let handle = images.add(transparent_surface_placeholder());
                 if let Some(mut material) = materials.get_mut(material_handle.id()) {
                     *material.webview_surface_slot_mut() = Some(handle.clone());
                 }
@@ -363,7 +377,7 @@ fn allocate_target_webview_surfaces(
         }
         let id = target.0.id();
         if existing.is_none_or(|surface| surface.0.id() != id) {
-            if let Err(err) = images.insert(id, placeholder_surface_image(UVec2::ONE)) {
+            if let Err(err) = images.insert(id, opaque_surface_placeholder(UVec2::ONE)) {
                 if warned.insert(id) {
                     warn!(
                         "[bevy_cef] WebviewTextureTarget handle is stale; surface not \
@@ -406,7 +420,7 @@ fn allocate_target_webview_surfaces(
 /// `AssetId<Image>`. Webviews without an allocated surface are NOT drained —
 /// their frame stays in the browser-side latest-wins slot until the surface
 /// exists (CEF never repaints an undamaged page, so dropping the only frame
-/// would leave a static page black forever).
+/// would leave a static page showing the placeholder forever).
 ///
 /// Also detects the events that require a bind-group rebuild — first frame,
 /// IOSurface size change, surface re-key — and tags the entity with
@@ -638,7 +652,7 @@ fn inject_webview_gpu_images(
 /// Main-world system: touch a mesh webview material of type `M` on rebind frames
 /// (see [`WebviewSurfaceRebind`]) so Bevy re-extracts and rebuilds its bind
 /// group, capturing the freshly injected owned-texture view rather than the
-/// black placeholder. On steady-state frames no entity carries the marker, so
+/// placeholder. On steady-state frames no entity carries the marker, so
 /// the query matches zero archetypes.
 pub(crate) fn mark_webview_materials_changed_for<M: WebviewSurfaceSlot>(
     mut materials: ResMut<Assets<M>>,
@@ -685,7 +699,7 @@ fn allocate_ui_webview_surfaces(
                 }
             }
             (None, None) => {
-                let handle = images.add(placeholder_surface_image(UVec2::ONE));
+                let handle = images.add(transparent_surface_placeholder());
                 if let Some(mut material) = materials.get_mut(material_handle.id()) {
                     material.surface = Some(handle.clone());
                 }
@@ -697,7 +711,7 @@ fn allocate_ui_webview_surfaces(
 
 /// Main-world system: touch a UI webview material on rebind frames so Bevy
 /// rebuilds the `PreparedUiMaterial` bind group (capturing the injected
-/// owned-texture view rather than the black placeholder).
+/// owned-texture view rather than the placeholder).
 fn mark_webview_ui_materials_changed(
     webviews: Query<
         &MaterialNode<WebviewUiMaterial>,
@@ -737,7 +751,7 @@ fn allocate_sprite_webview_surfaces(
     >,
 ) {
     for (entity, mut sprite, size) in webviews.iter_mut() {
-        let placeholder = placeholder_surface_image(size.0.as_uvec2());
+        let placeholder = opaque_surface_placeholder(size.0.as_uvec2());
         let handle = if sprite.image != Handle::default() && images.get(sprite.image.id()).is_some()
         {
             let _ = images.insert(sprite.image.id(), placeholder);
@@ -821,5 +835,124 @@ pub(crate) fn mark_target_materials_changed_for<M: WebviewTextureSlot>(
         .collect();
     for id in to_touch {
         touch_asset(&mut materials, id);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn surface_app() -> App {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default()))
+            .init_asset::<Image>()
+            .init_asset::<WebviewExtendStandardMaterial>()
+            .init_asset::<WebviewUiMaterial>()
+            .add_systems(
+                Update,
+                (
+                    allocate_webview_surfaces_for::<WebviewExtendStandardMaterial>,
+                    allocate_ui_webview_surfaces,
+                    allocate_sprite_webview_surfaces,
+                ),
+            );
+        app
+    }
+
+    fn surface_alphas(app: &App, webview: Entity) -> Vec<u8> {
+        let surface = app
+            .world()
+            .get::<WebviewSurface>(webview)
+            .expect("the webview has a surface");
+        let image = app
+            .world()
+            .resource::<Assets<Image>>()
+            .get(surface.0.id())
+            .expect("the surface image exists");
+        image
+            .data
+            .as_ref()
+            .expect("the surface image keeps its pixels")
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|pixel| pixel[3])
+            .collect()
+    }
+
+    /// Asserts that a mesh webview's surface is fully transparent until CEF
+    /// paints its first frame.
+    ///
+    /// Case: an app spawns a mesh webview, and the page has not been painted
+    /// yet when the mesh is first drawn.
+    #[test]
+    fn mesh_webview_placeholder_is_transparent() {
+        let mut app = surface_app();
+        let material = app
+            .world_mut()
+            .resource_mut::<Assets<WebviewExtendStandardMaterial>>()
+            .add(WebviewExtendStandardMaterial::default());
+        let webview = app
+            .world_mut()
+            .spawn((WebviewSource::new("about:blank"), MeshMaterial3d(material)))
+            .id();
+
+        app.update();
+
+        assert!(
+            surface_alphas(&app, webview)
+                .iter()
+                .all(|&alpha| alpha == 0)
+        );
+    }
+
+    /// Asserts that a `bevy_ui` webview's surface is fully transparent until
+    /// CEF paints its first frame.
+    ///
+    /// Case: an app adds a webview node to its UI, and the page has not been
+    /// painted yet when the node is first drawn.
+    #[test]
+    fn ui_webview_placeholder_is_transparent() {
+        let mut app = surface_app();
+        let material = app
+            .world_mut()
+            .resource_mut::<Assets<WebviewUiMaterial>>()
+            .add(WebviewUiMaterial::default());
+        let webview = app
+            .world_mut()
+            .spawn((WebviewSource::new("about:blank"), MaterialNode(material)))
+            .id();
+
+        app.update();
+
+        assert!(
+            surface_alphas(&app, webview)
+                .iter()
+                .all(|&alpha| alpha == 0)
+        );
+    }
+
+    /// Asserts that a sprite webview's surface stays opaque and covers the
+    /// whole viewport, rather than becoming transparent like mesh and UI
+    /// surfaces.
+    ///
+    /// Case: an app spawns a sprite webview and the user clicks it; Bevy's
+    /// sprite picking tests the alpha of this image, which never receives the
+    /// page's pixels on macOS.
+    #[test]
+    fn sprite_webview_placeholder_stays_opaque() {
+        let mut app = surface_app();
+        let webview = app
+            .world_mut()
+            .spawn((
+                WebviewSource::new("about:blank"),
+                Sprite::default(),
+                WebviewSize(Vec2::new(4.0, 2.0)),
+            ))
+            .id();
+
+        app.update();
+
+        assert_eq!(surface_alphas(&app, webview), vec![255; 8]);
     }
 }

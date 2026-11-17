@@ -20,7 +20,7 @@ pub struct WebviewPointer<'w, 's, C: Component = Camera3d> {
     surfaces: Query<'w, 's, &'static WebviewSurface>,
     images: Res<'w, Assets<Image>>,
     /// [macOS GPU OSR] Per-webview retained IOSurface for on-demand transparent
-    /// hit-testing. On macOS the `Image` in `WebviewSurface` is a black
+    /// hit-testing. On macOS the `Image` in `WebviewSurface` is a
     /// placeholder; the real alpha is read on demand from this surface.
     #[cfg(target_os = "macos")]
     webview_iosurface: Query<'w, 's, &'static WebviewIoSurface>,
@@ -91,7 +91,7 @@ impl<C: Component> WebviewPointer<'_, '_, C> {
             return false;
         };
 
-        // On macOS the `Image` is a black placeholder; the real alpha lives in
+        // On macOS the `Image` is a placeholder; the real alpha lives in
         // the retained IOSurface. Fall through to the Image path only before the
         // first accelerated-paint frame.
         #[cfg(target_os = "macos")]
